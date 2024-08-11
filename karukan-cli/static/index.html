@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karukan Engine - Japanese Input Method</title>
+    <link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Karukan Engine</h1>
+            <p class="subtitle">Japanese Input Method</p>
+        </header>
+
+        <main>
+            <div class="converter-section">
+                <!-- Model Selection and Parameters -->
+                <div class="model-section">
+                    <div class="model-row">
+                        <label for="model-select">Model:</label>
+                        <select id="model-select" class="model-select">
+                            <option value="">Loading...</option>
+                        </select>
+                        <span id="model-status" class="model-status"></span>
+                    </div>
+                    <div class="param-row">
+                        <label for="num-candidates-input">候補数:</label>
+                        <input type="number" id="num-candidates-input" class="param-input" min="1" max="10" value="1" placeholder="1">
+                        <span class="param-hint">(beam size)</span>
+                    </div>
+                    <div class="param-row beam-search-row">
+                        <label for="beam-search-type">Beam:</label>
+                        <select id="beam-search-type" class="beam-search-select">
+                            <option value="true">True Beam Search (累積確率追跡)</option>
+                            <option value="d1_greedy">D1+Greedy (深さ1選択後greedy)</option>
+                        </select>
+                    </div>
+                    <div class="param-row">
+                        <label for="context-input">左文脈:</label>
+                        <input type="text" id="context-input" class="context-input" placeholder="例: 今日は良い">
+                        <span class="param-hint">(変換済みテキスト / left context)</span>
+                    </div>
+                </div>
+
+                <!-- Input Mode Toggle -->
+                <div class="mode-toggle">
+                    <button id="romaji-mode-btn" class="mode-btn active">Romaji</button>
+                    <button id="hiragana-mode-btn" class="mode-btn">Hiragana</button>
+                </div>
+
+                <!-- Romaji Input (default mode) -->
+                <div id="romaji-section" class="input-section">
+                    <div class="input-group">
+                        <label for="romaji-input">Type Romaji: <span id="romaji-char-count" class="char-count"></span></label>
+                        <input
+                            type="text"
+                            id="romaji-input"
+                            placeholder="konnichiha"
+                            autocomplete="off"
+                            spellcheck="false"
+                        >
+                    </div>
+                    <div class="output-group">
+                        <label>Hiragana: <span id="hiragana-char-count" class="char-count"></span></label>
+                        <div class="output-display hiragana-display">
+                            <span id="hiragana-output" class="output-text"></span>
+                            <span id="buffer-display" class="buffer-text"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Direct Hiragana Input -->
+                <div id="hiragana-section" class="input-section hidden">
+                    <div class="input-group">
+                        <label for="direct-hiragana-input">Type Hiragana: <span id="direct-hiragana-char-count" class="char-count"></span></label>
+                        <input
+                            type="text"
+                            id="direct-hiragana-input"
+                            placeholder="こんにちは"
+                            autocomplete="off"
+                            spellcheck="false"
+                        >
+                    </div>
+                </div>
+
+                <!-- Kanji Candidates -->
+                <div class="output-group">
+                    <div class="kanji-header">
+                        <label>Kanji Candidates: <span id="kanji-char-count" class="char-count"></span></label>
+                        <span id="inference-time" class="inference-time"></span>
+                    </div>
+                    <div id="kanji-candidates" class="candidates-display">
+                        <p class="placeholder-text">Type to see kanji candidates</p>
+                    </div>
+                </div>
+
+                <!-- Token Visualization -->
+                <div class="output-group token-section">
+                    <div class="token-header">
+                        <label>Token Visualization:</label>
+                        <span id="token-count" class="token-count"></span>
+                    </div>
+                    <div id="token-display" class="token-display">
+                        <p class="placeholder-text">Tokens will appear here</p>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button id="clear-btn" class="btn-secondary">Clear</button>
+                </div>
+
+                <div class="examples">
+                    <h3>Examples:</h3>
+                    <div class="example-buttons">
+                        <button class="example-btn" data-text="konnnichiha">こんにちは</button>
+                        <button class="example-btn" data-text="nyu-rarukanakanjihenkann">ニューラルかな漢字変換</button>
+                        <button class="example-btn" data-text="kimetunoyaiba">鬼滅の刃</button>
+                        <button class="example-btn" data-text="jujutukaisenn">呪術廻戦</button>
+                    </div>
+                    <h3>With Context (左文脈):</h3>
+                    <div class="example-buttons">
+                        <button class="example-btn-ctx" data-text="はいしゃ" data-context="歯が痛いので">はいしゃ (歯が痛いので) → 歯医者</button>
+                        <button class="example-btn-ctx" data-text="はいしゃ" data-context="車が壊れたので">はいしゃ (車が壊れたので) → 廃車</button>
+                        <button class="example-btn-ctx" data-text="のる" data-context="雑誌に">のる (雑誌に) → 載る</button>
+                        <button class="example-btn-ctx" data-text="のる" data-context="車に">のる (車に) → 乗る</button>
+
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Rust + Candle | <a href="https://github.com/togatoga/karukan" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script src="app.js?v=4"></script>
+</body>
+</html>

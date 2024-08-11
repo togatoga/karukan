@@ -1,0 +1,19 @@
+default_model = "jinen-v1-small-q5"
+
+[models.jinen-v1-xsmall]
+repo_id = "togatogah/jinen-v1-xsmall.gguf"
+display_name = "jinen-v1-xsmall (GPT-2 XSmall, 26M)"
+
+[models.jinen-v1-xsmall.variants.q5]
+id = "jinen-v1-xsmall-q5"
+filename = "jinen-v1-xsmall-Q5_K_M.gguf"
+display_name = "jinen-v1-xsmall (Q5_K_M)"
+
+[models.jinen-v1-small]
+repo_id = "togatogah/jinen-v1-small.gguf"
+display_name = "jinen-v1-small (GPT-2 Small, 90M)"
+
+[models.jinen-v1-small.variants.q5]
+id = "jinen-v1-small-q5"
+filename = "jinen-v1-small-Q5_K_M.gguf"
+display_name = "jinen-v1-small (Q5_K_M)"

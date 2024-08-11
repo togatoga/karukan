@@ -1,0 +1,31 @@
+# Karukan IME デフォルト設定
+# このファイルは ~/.config/karukan-im/config.toml にコピーして使用してください
+
+[conversion]
+# 変換ストラテジー: adaptive（動的切替）, light（軽量モデルのみ）, main（メインモデルのみ）
+strategy = "adaptive"
+# 変換候補数（Space押下時）
+num_candidates = 9
+# 周辺テキスト（カーソル左側の確定済みテキスト）を変換時のコンテキストとして使用する
+use_context = true
+# 変換API に渡す周辺テキストの最大文字数
+max_context_length = 20
+# ビームサーチを使うトークン数の上限（それ以上はgreedy）
+short_input_threshold = 10
+# 短い入力のビーム幅
+beam_width = 3
+# メインモデルの推論がこの時間(ms)を超えたらlight_modelに自動切替(0で無効)
+max_latency_ms = 80
+# Model variant id or GGUF path (uses registry default if unset)
+model = "jinen-v1-small-q5"
+# Beam search model for Space conversion (uses default model only if unset)
+light_model = "jinen-v1-xsmall-q5"
+# 推論スレッド数（0 = 全コア使用）
+n_threads = 4
+# ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
+
+[learning]
+# 変換学習を有効にする
+enabled = true
+# 学習エントリの最大数
+max_entries = 10000

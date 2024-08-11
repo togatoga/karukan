@@ -1,0 +1,44 @@
+[package]
+name = "karukan-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+karukan-engine.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+clap = { version = "4", features = ["derive"] }
+
+# server, dict_viewer 用
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+http-body-util = "0.1"
+
+# sudachi-dict 用
+indicatif = "0.17"
+rayon = "1.11.0"
+
+[[bin]]
+name = "karukan-dict"
+path = "src/bin/dict.rs"
+
+[[bin]]
+name = "sudachi-dict"
+path = "src/bin/sudachi_dict.rs"
+
+[[bin]]
+name = "ajimee-bench"
+path = "src/bin/ajimee_bench.rs"
+
+[[bin]]
+name = "karukan-server"
+path = "src/bin/server.rs"

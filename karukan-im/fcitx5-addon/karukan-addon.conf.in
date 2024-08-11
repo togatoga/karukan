@@ -1,0 +1,8 @@
+[Addon]
+Name=Karukan
+Category=InputMethod
+Library=karukan
+Type=SharedLibrary
+OnDemand=True
+Configurable=True
+Version=0.1.0

@@ -1,0 +1,46 @@
+[package]
+name = "karukan-engine"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors = ["karukan contributors"]
+license.workspace = true
+description = "Japanese input engine: romaji-to-hiragana conversion and neural kana-kanji conversion via llama.cpp"
+repository.workspace = true
+homepage.workspace = true
+keywords = ["japanese", "ime", "romaji", "kana-kanji", "llama-cpp"]
+categories = ["text-processing", "internationalization"]
+
+[lib]
+name = "karukan_engine"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+toml.workspace = true
+
+# llama.cpp bindings for GGUF inference
+llama-cpp-2 = "0.1"
+yada = "0.5"
+
+# HuggingFace model download
+hf-hub = "0.4"
+
+# Unicode normalization (NFKC) for models whose tokenizer doesn't support full-width ASCII
+unicode-normalization = "0.1"
+
+# HuggingFace tokenizers for external BPE tokenization (bypasses llama.cpp's built-in tokenizer)
+tokenizers = "0.21"
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile.workspace = true
+
+[[bench]]
+name = "inference_bench"
+harness = false

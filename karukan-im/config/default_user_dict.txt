@@ -1,0 +1,4 @@
+# karukan ユーザー辞書 (Mozc/Google IME TSV形式)
+# ヨミ	表層形	品詞	コメント
+あずーきー	azooKey
+かるかん	Karukan

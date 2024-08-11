@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component type="addon">
+  <id>org.fcitx.Fcitx5.Addon.Karukan</id>
+  <extends>org.fcitx.Fcitx5</extends>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Karukan for Fcitx 5</name>
+  <summary>Japanese input method powered by neural kana-kanji conversion</summary>
+  <developer id="com.github.togatoga">
+    <name>togatoga</name>
+  </developer>
+  <url type="homepage">https://github.com/togatoga/karukan</url>
+  <url type="bugtracker">https://github.com/togatoga/karukan/issues</url>
+  <url type="vcs-browser">https://github.com/togatoga/karukan</url>
+  <releases>
+    <release version="0.1.0" date="2025-01-01"></release>
+  </releases>
+</component>

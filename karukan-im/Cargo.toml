@@ -1,0 +1,39 @@
+[package]
+name = "karukan-im"
+version = "0.1.0"
+edition.workspace = true
+description = "A Japanese Input Method Engine for Linux"
+license.workspace = true
+authors = ["togatoga"]
+repository.workspace = true
+homepage.workspace = true
+keywords = ["japanese", "ime", "fcitx5", "input-method"]
+categories = ["text-processing", "internationalization"]
+
+[lib]
+name = "karukan_im"
+path = "src/lib.rs"
+crate-type = ["lib", "cdylib"]  # Build both rlib and shared library
+
+[dependencies]
+# Core engine
+karukan-engine.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Configuration
+serde.workspace = true
+toml.workspace = true
+directories = "5"
+
+# Error handling
+anyhow.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile.workspace = true
+
+[features]
+default = []
