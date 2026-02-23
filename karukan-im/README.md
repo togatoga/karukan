@@ -39,6 +39,7 @@ fcitx5 -r
 `~/.local` にインストールします。sudo 不要です。ビルド・インストール・設定ファイルのコピー・`FCITX_ADDON_DIRS` の設定をまとめて行います。
 
 ```bash
+cd karukan-im
 ./install-local.sh
 ```
 
