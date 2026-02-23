@@ -16,9 +16,9 @@
 
 | クレート | 説明 |
 |---------|------|
+| [karukan-im](karukan-im/) | karukan-engineを利用したfcitx5向け日本語入力システム |
 | [karukan-engine](karukan-engine/) | コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換 |
 | [karukan-cli](karukan-cli/) | CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー |
-| [karukan-im](karukan-im/) | fcitx5向け日本語IME。karukan-engineを利用した入力メソッド実装 |
 
 ## 特徴
 
