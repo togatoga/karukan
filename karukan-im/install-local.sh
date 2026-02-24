@@ -23,15 +23,35 @@ cmake --install "$ADDON_DIR/build"
 ENV_DIR="$HOME/.config/environment.d"
 ENV_FILE="$ENV_DIR/fcitx5-karukan.conf"
 mkdir -p "$ENV_DIR"
-if [ ! -f "$ENV_FILE" ]; then
-    cat > "$ENV_FILE" << 'EOF'
-FCITX_ADDON_DIRS=${HOME}/.local/lib/fcitx5
-EOF
-    echo "==> Created $ENV_FILE"
-else
-    echo "==> $ENV_FILE already exists, skipping"
+
+# Detect the system fcitx5 addon directory so that standard addons remain
+# accessible after setting FCITX_ADDON_DIRS.
+SYSTEM_FCITX5_ADDON_DIR="$(pkg-config --variable=addondir fcitx5 2>/dev/null || true)"
+if [ -z "$SYSTEM_FCITX5_ADDON_DIR" ]; then
+    for candidate_dir in /usr/lib/x86_64-linux-gnu/fcitx5 /usr/lib/fcitx5 /usr/lib64/fcitx5; do
+        if [ -d "$candidate_dir" ]; then
+            SYSTEM_FCITX5_ADDON_DIR="$candidate_dir"
+            break
+        fi
+    done
 fi
-export FCITX_ADDON_DIRS="$HOME/.local/lib/fcitx5"
+
+if [ -n "$SYSTEM_FCITX5_ADDON_DIR" ]; then
+    # \${HOME} is intentionally escaped so that the literal "${HOME}" is written
+    # to the file; systemd expands it at session start.  $SYSTEM_FCITX5_ADDON_DIR
+    # is expanded now (at install time) to record the detected system path.
+    FCITX5_ADDON_DIRS_VALUE="\${HOME}/.local/lib/fcitx5:$SYSTEM_FCITX5_ADDON_DIR"
+else
+    FCITX5_ADDON_DIRS_VALUE="\${HOME}/.local/lib/fcitx5"
+fi
+
+cat > "$ENV_FILE" << EOF
+FCITX_ADDON_DIRS=$FCITX5_ADDON_DIRS_VALUE
+EOF
+echo "==> Wrote $ENV_FILE"
+
+# Update the current shell session without losing any pre-existing value.
+export FCITX_ADDON_DIRS="$HOME/.local/lib/fcitx5${SYSTEM_FCITX5_ADDON_DIR:+:$SYSTEM_FCITX5_ADDON_DIR}${FCITX_ADDON_DIRS:+:$FCITX_ADDON_DIRS}"
 
 # --- Config ---
 KARUKAN_CONFIG_DIR="$HOME/.config/karukan-im"
