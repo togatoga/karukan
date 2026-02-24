@@ -49,7 +49,12 @@ cmake --install build
 
 ```bash
 export FCITX_ADDON_DIRS=$HOME/.local/lib/fcitx5:$(pkg-config --variable=libdir Fcitx5Core)/fcitx5
+echo $FCITX_ADDON_DIRS
+# 以下のようにローカルとシステムの両方のパスが表示されればOK
+/home/togatoga/.local/lib/fcitx5:/usr/lib/x86_64-linux-gnu/fcitx5
+
 ```
+
 
 上記をシェルのプロファイル（`~/.bashrc`、`~/.zshrc` 等）に追加してください。
 
