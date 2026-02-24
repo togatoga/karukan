@@ -89,7 +89,17 @@ I2026-02-24 22:57:54.252982 addonmanager.cpp:195] Loaded addon karukan
 
 ![Karukanを追加した状態](images/fcitx5-karukan-added.png)
 
-> **Note**: 初回起動時にHuggingFaceからGGUFモデルを自動ダウンロードするため、起動に数分かかる場合があります。2回目以降はキャッシュ済みのモデルが使われます。
+> **Note**: 初回起動時にHuggingFaceからGGUFモデル（GGUF + tokenizer）を自動ダウンロードするため、起動に数分かかる場合があります。ダウンロード中はfcitx5のログに以下のような進捗が表示されます:
+>
+> ```
+> I2026-02-24 23:12:12.651828 addonmanager.cpp:195] Loaded addon karukan
+> jinen-v1-small-Q5_K_M.gguf [00:00:05] [████████████████████████] 84.39 MiB/84.39 MiB 7.89 MiB/s (0s)
+> tokenizer.json [00:00:00] [████████████████████████████████] 1.95 MiB/1.95 MiB 6.45 MiB/s (0s)
+> jinen-v1-xsmall-Q5_K_M.gguf [00:00:02] [████████████████████████] 29.73 MiB/29.73 MiB 9.15 MiB/s (0s)
+> tokenizer.json [00:00:00] [████████████████████████████████] 1.95 MiB/1.95 MiB 8.12 MiB/s (0s)
+> ```
+>
+> ダウンロードが完了するまで変換機能は使用できません。2回目以降はキャッシュ済みのモデルが使われるため、すぐに起動します。
 
 ## Key Bindings
 
