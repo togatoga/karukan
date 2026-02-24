@@ -36,22 +36,52 @@ fcitx5 -r
 
 ### Build & Install (ユーザーローカル)
 
-> [!WARNING]
-> 環境変数 `FCITX_ADDON_DIRS` がローカルパスのみに上書きがされてしまい正しくfcitx5が動作しなくなる可能性があります。こちら修正中のため、現状ではシステムインストールもしくは手動で `FCITX_ADDON_DIRS` を設定する方法を推奨します。
-> https://github.com/togatoga/karukan/issues/6
-
-`~/.local` にインストールします。sudo 不要です。ビルド・インストール・設定ファイルのコピー・`FCITX_ADDON_DIRS` の設定をまとめて行います。
+`~/.local` にインストールします。sudo 不要ですが、`FCITX_ADDON_DIRS` の手動設定が必要です。
 
 ```bash
-./install-local.sh
+cd karukan-im/fcitx5-addon
+cmake -B build -DCMAKE_INSTALL_PREFIX=$HOME/.local
+cmake --build build -j
+cmake --install build
 ```
 
-スクリプトは以下を行います:
-- `~/.local` に fcitx5 アドオンをビルド・インストール
-- `~/.config/environment.d/fcitx5-karukan.conf` を作成（`FCITX_ADDON_DIRS` の設定）
-- `~/.config/karukan-im/config.toml` にデフォルト設定をコピー（既存の場合はスキップ）
-- `~/.local/share/karukan-im/user_dicts/` にデフォルトユーザー辞書をコピー（既存の場合はスキップ）
-- fcitx5 を再起動
+ローカルインストールの場合、fcitx5 がアドオンを見つけられるように `FCITX_ADDON_DIRS` を設定する必要があります:
+
+```bash
+export FCITX_ADDON_DIRS=$HOME/.local/lib/fcitx5:$(pkg-config --variable=libdir Fcitx5Core)/fcitx5
+echo $FCITX_ADDON_DIRS
+# 以下のようにローカルとシステムの両方のパスが表示されればOK
+/home/togatoga/.local/lib/fcitx5:/usr/lib/x86_64-linux-gnu/fcitx5
+
+```
+
+
+上記をシェルのプロファイル（`~/.bashrc`、`~/.zshrc` 等）に追加してください。
+
+```bash
+fcitx5 -r -d
+```
+
+ログに `Loaded addon karukan` が表示されることを確認してください:
+
+```
+I2026-02-24 22:57:54.252982 addonmanager.cpp:195] Loaded addon karukan
+```
+
+> [!WARNING]
+> 以前のバージョンで `install-local.sh` を使用した場合、`~/.config/environment.d/fcitx5-karukan.conf` にシステムパスを含まない `FCITX_ADDON_DIRS`（例: `FCITX_ADDON_DIRS=/home/user/.local/lib/fcitx5`）が設定されている可能性があります。このファイルが残っていると fcitx5 のシステムアドオンが見つからなくなり、以下のようなエラーが発生します:
+>
+> ```
+> fcitx5 -rd 
+> E addonloader.cpp:32] Could not locate library libwayland.so for addon wayland.
+> E addonloader.cpp:32] Could not locate library libclassicui.so for addon classicui.
+> ```
+>
+> この場合はファイルを削除した上でログアウト（または再起動）してください:
+>
+> ```bash
+> rm ~/.config/environment.d/fcitx5-karukan.conf
+> ```
 
 インストール後、fcitx5-configtool（Fcitx Configuration）を開き、右側の「Available Input Method」で「karukan」を検索して「Karukan」を左側に追加してください。
 
@@ -59,7 +89,18 @@ fcitx5 -r
 
 ![Karukanを追加した状態](images/fcitx5-karukan-added.png)
 
-> **Note**: 初回起動時にHuggingFaceからGGUFモデルを自動ダウンロードするため、起動に数分かかる場合があります。2回目以降はキャッシュ済みのモデルが使われます。
+> [!NOTE]
+> 初回起動時にHuggingFaceからGGUFモデル（GGUF + tokenizer）を自動ダウンロードするため、起動に数分かかる場合があります。ダウンロード中はfcitx5のログに以下のような進捗が表示されます:
+>
+> ```
+> I2026-02-24 23:12:12.651828 addonmanager.cpp:195] Loaded addon karukan
+> jinen-v1-small-Q5_K_M.gguf [00:00:05] [████████████████████████] 84.39 MiB/84.39 MiB 7.89 MiB/s (0s)
+> tokenizer.json [00:00:00] [████████████████████████████████] 1.95 MiB/1.95 MiB 6.45 MiB/s (0s)
+> jinen-v1-xsmall-Q5_K_M.gguf [00:00:02] [████████████████████████] 29.73 MiB/29.73 MiB 9.15 MiB/s (0s)
+> tokenizer.json [00:00:00] [████████████████████████████████] 1.95 MiB/1.95 MiB 8.12 MiB/s (0s)
+> ```
+>
+> ダウンロードが完了するまで変換機能は使用できません。2回目以降はキャッシュ済みのモデルが使われるため、すぐに起動します。
 
 ## Key Bindings
 
