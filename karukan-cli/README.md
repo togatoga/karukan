@@ -83,7 +83,7 @@ cargo run --release --bin karukan-dict -- view dict.bin --all
 
 Sudachi辞書CSVファイルからJSON辞書を生成します。デフォルトではSudachiの正規コストをそのまま使用し、`--model-scores` を指定するとjinenモデルのNLLスコアリングで候補を順序付けします。
 
-入力となるSudachi辞書CSVは[SudachiDict](https://d2ej7fkh96fzlu.cloudfront.net/sudachidict/)からダウンロードできます。
+入力となるSudachi辞書CSVは[SudachiDict](http://sudachi.s3-website-ap-northeast-1.amazonaws.com/sudachidict-raw/)からダウンロードできます。
 
 ```bash
 # 基本的な使い方（Sudachiコストを使用）
