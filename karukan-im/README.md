@@ -204,7 +204,10 @@ yada double-array trieベースのシステム辞書で、モデル推論に加�
 ビルド済みの辞書を以下からダウンロードして配置できます:
 
 ```bash
-curl -L https://github.com/togatoga/karukan/releases/download/v0.1.0/dict.bin.tgz | tar xz -C ~/.local/share/karukan-im/
+wget https://github.com/togatoga/karukan/releases/download/v0.1.0/dict.tgz
+tar xzf dict.tgz
+mkdir -p ~/.local/share/karukan-im
+cp dict.bin ~/.local/share/karukan-im/
 ```
 
 自分でビルドする場合は [karukan-cli の README](../karukan-cli/README.md) を参照してください。
