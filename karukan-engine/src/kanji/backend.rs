@@ -184,7 +184,7 @@ mod tests {
     use super::*;
 
     #[test]
-
+    #[ignore = "requires model download from Hugging Face"]
     fn test_default_model_conversion() {
         let backend =
             Backend::from_variant_id("jinen-v1-small-q5").expect("Failed to load default model");
@@ -205,7 +205,7 @@ mod tests {
     }
 
     #[test]
-
+    #[ignore = "requires model download from Hugging Face"]
     fn test_xsmall_special_tokens() {
         use super::super::hf_download::{get_path_by_id, get_tokenizer_path_by_id};
         use super::super::{CONTEXT_TOKEN, INPUT_START_TOKEN, OUTPUT_START_TOKEN};
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[test]
-
+    #[ignore = "requires model download from Hugging Face"]
     fn test_xsmall_conversion() {
         let backend =
             Backend::from_variant_id("jinen-v1-xsmall-q5").expect("Failed to download GGUF");

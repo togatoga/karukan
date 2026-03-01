@@ -938,6 +938,7 @@ fn test_zenninn_crash() {
 }
 
 #[test]
+#[ignore = "requires model download from Hugging Face"]
 fn test_zenninn_kanji_conversion() {
     use karukan_engine::{Backend, KanaKanjiConverter};
     let mut conv = RomajiConverter::new();
