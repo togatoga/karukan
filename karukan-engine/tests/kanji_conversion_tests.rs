@@ -2,7 +2,12 @@
 //!
 //! These tests verify that the kanji conversion functionality works correctly.
 //!
-//! Note: These tests require downloading models from HuggingFace on first run.
+//! Note: Most tests in this file require downloading models from HuggingFace
+//! and are marked with `#[ignore]`. To run them:
+//!
+//! ```sh
+//! cargo test -p karukan-engine -- --ignored
+//! ```
 
 use karukan_engine::kanji::ConversionConfig;
 
@@ -62,6 +67,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_tokenization() {
         let model = load_model().expect("Failed to load");
         let tokens = model.tokenize("コンニチハ").expect("Tokenize failed");
@@ -69,6 +75,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_generation() {
         let model = load_model().expect("Failed to load");
         let prompt = build_prompt("ワセダ");
@@ -88,6 +95,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_expected_conversions() {
         let model = load_model().expect("Failed to load");
         let test_cases = [
@@ -117,6 +125,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_beam_search_basic() {
         let model = load_model().expect("Failed to load");
         let prompt = build_prompt("ヘンカン");
@@ -146,6 +155,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_beam_search_multiple_inputs() {
         let model = load_model().expect("Failed to load");
         let test_cases = [
@@ -183,6 +193,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_beam_search_score_ordering() {
         let model = load_model().expect("Failed to load");
         let prompt = build_prompt("ヘンカン");
@@ -207,6 +218,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_conversion_with_context() {
         let model = load_model().expect("Failed to load");
 
@@ -245,6 +257,7 @@ mod llamacpp_tests {
     }
 
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_context_variations() {
         let model = load_model().expect("Failed to load");
 
@@ -277,6 +290,7 @@ mod llamacpp_tests {
     /// Test that context significantly changes conversion results
     /// Same reading "こうえん" should produce different kanji based on context
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_context_disambiguation() {
         let model = load_model().expect("Failed to load");
 
@@ -329,6 +343,7 @@ mod llamacpp_tests {
 
     /// Test "zenninn" -> "ゼンイン" conversion (reported crash)
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_zenninn_llamacpp() {
         let model = load_model().expect("Failed to load");
 
@@ -360,6 +375,7 @@ mod llamacpp_tests {
 
     /// Test beam search with multiple candidates (this was causing decode errors)
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_zenninn_beam_search() {
         let model = load_model().expect("Failed to load");
 
@@ -395,6 +411,7 @@ mod llamacpp_tests {
 
     /// Test that long context inputs work within n_ctx=256 limit
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_long_context_input() {
         let model = load_model().expect("Failed to load");
 
@@ -427,6 +444,7 @@ mod llamacpp_tests {
     /// half-width equivalents by the tokenizer's NFKC normalizer, producing the
     /// same token ids as the half-width input.
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_tokenizer_nfkc_normalization() {
         let model = load_model().expect("Failed to load");
 
@@ -465,6 +483,7 @@ mod llamacpp_tests {
 
     /// Test token counts for various input lengths
     #[test]
+    #[ignore = "requires model download from Hugging Face"]
     fn test_token_counts() {
         let model = load_model().expect("Failed to load");
 
