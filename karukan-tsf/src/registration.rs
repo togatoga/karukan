@@ -4,7 +4,7 @@
 //! Called from DllRegisterServer/DllUnregisterServer.
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{BOOL, HMODULE};
+use windows::Win32::Foundation::BOOL;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::LibraryLoader::GetModuleFileNameW;
 #[cfg(target_os = "windows")]
