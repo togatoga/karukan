@@ -14,6 +14,7 @@ use crate::tsf::edit_session::ActionEditSession;
 use crate::tsf::lang_bar::KarukanLangBarButton;
 use crate::tsf::text_input_processor::KarukanTextService_Impl;
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
     /// Called when focus changes.
     fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
@@ -64,16 +65,17 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
         let mut inner = self.inner.borrow_mut();
 
         if let Some(result) = inner.cached_result.take() {
-            if result.consumed && !result.actions.is_empty() {
-                if let Some(context) = pic {
-                    drop(inner); // Release borrow before edit session
-                    apply_engine_actions(self, context, &result.actions)?;
+            if result.consumed
+                && !result.actions.is_empty()
+                && let Some(context) = pic
+            {
+                drop(inner); // Release borrow before edit session
+                apply_engine_actions(self, context, &result.actions)?;
 
-                    // Check for mode changes and update language bar
-                    update_lang_bar_if_mode_changed(self);
+                // Check for mode changes and update language bar
+                update_lang_bar_if_mode_changed(self);
 
-                    return Ok(TRUE);
-                }
+                return Ok(TRUE);
             }
             Ok(BOOL::from(result.consumed))
         } else {

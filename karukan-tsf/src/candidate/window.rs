@@ -21,19 +21,10 @@ const WINDOW_CLASS_NAME: PCWSTR = w!("KarukanCandidateWindow");
 
 /// Render data shared between the candidate window and the WNDPROC.
 #[cfg(target_os = "windows")]
+#[derive(Default)]
 struct CandidateRenderData {
     candidates: Vec<String>,
     selected: usize,
-}
-
-#[cfg(target_os = "windows")]
-impl Default for CandidateRenderData {
-    fn default() -> Self {
-        Self {
-            candidates: Vec::new(),
-            selected: 0,
-        }
-    }
 }
 
 /// Candidate window for displaying conversion candidates.
@@ -43,6 +34,7 @@ pub struct CandidateWindow {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::new_without_default)]
 impl CandidateWindow {
     /// Create a new candidate window (hidden by default).
     ///

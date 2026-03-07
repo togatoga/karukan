@@ -34,6 +34,7 @@ struct LangBarInner {
     toggle_callback: Option<Box<dyn Fn()>>,
 }
 
+#[allow(clippy::new_without_default)]
 impl KarukanLangBarButton {
     pub fn new() -> Self {
         Self {
@@ -97,6 +98,7 @@ impl KarukanLangBarButton {
 }
 
 // ITfLangBarItem implementation
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
     fn GetInfo(&self, pinfo: *mut TF_LANGBARITEMINFO) -> Result<()> {
         unsafe {
@@ -113,7 +115,7 @@ impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
             let desc_wide: Vec<u16> = desc.encode_utf16().collect();
             let len = desc_wide.len().min(info.szDescription.len() - 1);
             info.szDescription[..len]
-                .copy_from_slice(&desc_wide[..len].iter().map(|&c| c).collect::<Vec<u16>>());
+                .copy_from_slice(&desc_wide[..len].iter().copied().collect::<Vec<u16>>());
             info.szDescription[len] = 0;
         }
         Ok(())
@@ -164,6 +166,7 @@ impl ITfLangBarItemButton_Impl for KarukanLangBarButton_Impl {
 }
 
 // ITfSource implementation — manages ITfLangBarItemSink
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl ITfSource_Impl for KarukanLangBarButton_Impl {
     fn AdviseSink(&self, riid: *const GUID, punk: Option<&windows::core::IUnknown>) -> Result<u32> {
         unsafe {

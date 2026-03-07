@@ -27,13 +27,8 @@ pub fn get_openclose_state(thread_mgr: &ITfThreadMgr, client_id: u32) -> Result<
     unsafe {
         let value = compartment.GetValue()?;
         // VT_I4 with value 0 = closed, nonzero = open
-        match value.as_raw().Anonymous.Anonymous.vt {
-            // VT_I4 = 3
-            _ => {
-                let i = i32::try_from(&value).unwrap_or(0);
-                Ok(i != 0)
-            }
-        }
+        let i = i32::try_from(&value).unwrap_or(0);
+        Ok(i != 0)
     }
 }
 

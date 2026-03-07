@@ -9,6 +9,7 @@ use windows::core::*;
 use crate::globals::*;
 use crate::tsf::text_input_processor::KarukanTextService_Impl;
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl ITfDisplayAttributeProvider_Impl for KarukanTextService_Impl {
     /// Return an enumerator of display attributes.
     fn EnumDisplayAttributeInfo(&self) -> Result<IEnumTfDisplayAttributeInfo> {

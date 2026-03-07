@@ -60,6 +60,7 @@ pub(crate) struct KarukanTextServiceInner {
     pub(crate) prev_input_mode: karukan_im::InputMode,
 }
 
+#[allow(clippy::new_without_default)]
 impl KarukanTextService {
     pub fn new() -> Self {
         dll_add_ref();
@@ -155,13 +156,13 @@ impl ITfTextInputProcessor_Impl for KarukanTextService_Impl {
         }
 
         // Remove language bar item
-        if let Some(lang_bar_item) = inner.lang_bar_item.take() {
-            if let Some(ref thread_mgr) = inner.thread_mgr {
-                unsafe {
-                    let lang_bar_mgr: Result<ITfLangBarItemMgr> = thread_mgr.cast();
-                    if let Ok(mgr) = lang_bar_mgr {
-                        let _ = mgr.RemoveItem(&lang_bar_item);
-                    }
+        if let Some(lang_bar_item) = inner.lang_bar_item.take()
+            && let Some(ref thread_mgr) = inner.thread_mgr
+        {
+            unsafe {
+                let lang_bar_mgr: Result<ITfLangBarItemMgr> = thread_mgr.cast();
+                if let Ok(mgr) = lang_bar_mgr {
+                    let _ = mgr.RemoveItem(&lang_bar_item);
                 }
             }
         }
@@ -299,6 +300,7 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
 }
 
 // ITfCompartmentEventSink implementation — syncs keyboard open/close state
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl ITfCompartmentEventSink_Impl for KarukanTextService_Impl {
     fn OnChange(&self, rguid: *const GUID) -> Result<()> {
         unsafe {

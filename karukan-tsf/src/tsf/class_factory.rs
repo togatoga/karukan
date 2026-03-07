@@ -11,6 +11,7 @@ use crate::tsf::text_input_processor::KarukanTextService;
 #[implement(IClassFactory)]
 pub struct KarukanClassFactory;
 
+#[allow(clippy::new_without_default)]
 impl KarukanClassFactory {
     pub fn new() -> Self {
         dll_add_ref();
@@ -24,6 +25,7 @@ impl Drop for KarukanClassFactory {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl IClassFactory_Impl for KarukanClassFactory_Impl {
     fn CreateInstance(
         &self,

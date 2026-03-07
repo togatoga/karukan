@@ -50,6 +50,7 @@ pub struct ActionEditSession {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::too_many_arguments)]
 impl ActionEditSession {
     pub fn new(
         context: ITfContext,
