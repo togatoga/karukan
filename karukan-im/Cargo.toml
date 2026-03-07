@@ -13,7 +13,7 @@ categories = ["text-processing", "internationalization"]
 [lib]
 name = "karukan_im"
 path = "src/lib.rs"
-crate-type = ["lib", "cdylib"]  # rlib for Rust dependents (karukan-tsf), cdylib for fcitx5 .so
+crate-type = ["lib"]  # rlib for Rust dependents (karukan-tsf); cdylib for fcitx5 built via `cargo rustc --crate-type cdylib`
 
 [dependencies]
 # Core engine

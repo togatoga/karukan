@@ -114,7 +114,7 @@ pub fn register_server() -> windows::core::Result<()> {
             HKL::default(), // HKL (none)
             0,              // description (none)
             BOOL(0),        // flags
-            BOOL(0),        // enable
+            0,              // enable
         )?;
 
         // Register category

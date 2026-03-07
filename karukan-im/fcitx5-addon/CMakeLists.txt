@@ -29,7 +29,7 @@ set(KARUKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 # Build Rust library as a custom target
 find_program(CARGO cargo REQUIRED)
 add_custom_target(karukan_rust_lib ALL
-    COMMAND ${CARGO} build --release -p karukan-im
+    COMMAND ${CARGO} rustc --release -p karukan-im --crate-type cdylib
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
     COMMENT "Building karukan-im Rust library"
     BYPRODUCTS "${KARUKAN_RUST_LIB}"
