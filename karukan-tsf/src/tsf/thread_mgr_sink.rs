@@ -3,7 +3,7 @@
 use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 
-use crate::tsf::text_input_processor::KarukanTextService;
+use crate::tsf::text_input_processor::KarukanTextService_Impl;
 
 impl ITfThreadMgrEventSink_Impl for KarukanTextService_Impl {
     /// Called when a document (context) gets focus.

@@ -35,16 +35,10 @@ pub fn register_server() -> windows::core::Result<()> {
     let key_path = format!("CLSID\\{}", clsid_str);
     unsafe {
         let mut hkey = HKEY::default();
-        RegCreateKeyExW(
+        RegCreateKeyW(
             HKEY_CLASSES_ROOT,
             &windows::core::HSTRING::from(&key_path),
-            0,
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            None,
             &mut hkey,
-            None,
         )?;
         let desc = w!("karukan Japanese Input Method");
         RegSetValueExW(
@@ -62,16 +56,10 @@ pub fn register_server() -> windows::core::Result<()> {
         // InProcServer32
         let inproc_path = format!("{}\\InProcServer32", key_path);
         let mut hkey_inproc = HKEY::default();
-        RegCreateKeyExW(
+        RegCreateKeyW(
             HKEY_CLASSES_ROOT,
             &windows::core::HSTRING::from(&inproc_path),
-            0,
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            None,
             &mut hkey_inproc,
-            None,
         )?;
 
         let dll_path_wide: Vec<u16> = dll_path.encode_utf16().chain(std::iter::once(0)).collect();

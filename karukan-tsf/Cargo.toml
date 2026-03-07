@@ -35,6 +35,7 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_DirectWrite",
     "Win32_UI_WindowsAndMessaging",
 ] }
+windows-core = "0.58"
 
 # Global state
 once_cell = "1"

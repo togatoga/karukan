@@ -7,7 +7,13 @@ use std::cell::RefCell;
 
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
+use windows::Win32::UI::WindowsAndMessaging::HICON;
 use windows::core::*;
+
+// OLE connection point error codes (not exported in windows 0.58)
+const CONNECT_E_NOCONNECTION: HRESULT = HRESULT(0x80040200_u32 as i32);
+const CONNECT_E_ADVISELIMIT: HRESULT = HRESULT(0x80040201_u32 as i32);
+const CONNECT_E_CANNOTCONNECT: HRESULT = HRESULT(0x80040202_u32 as i32);
 
 use karukan_im::InputMode;
 

@@ -10,8 +10,8 @@ use windows::core::*;
 use crate::candidate::window::CandidateWindow;
 use crate::engine_bridge::EngineBridge;
 use crate::globals::{
-    CLSID_KARUKAN_TEXT_SERVICE, GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT,
-    GUID_KARUKAN_PROFILE, GUID_PRESERVED_KEY_ONOFF, LANGID_JAPANESE, dll_add_ref, dll_release,
+    GUID_DISPLAY_ATTRIBUTE_CONVERTED, GUID_DISPLAY_ATTRIBUTE_INPUT, GUID_PRESERVED_KEY_ONOFF,
+    dll_add_ref, dll_release,
 };
 use crate::tsf::compartment;
 use crate::tsf::lang_bar::KarukanLangBarButton;

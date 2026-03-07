@@ -7,7 +7,7 @@ use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 
 use crate::globals::*;
-use crate::tsf::text_input_processor::KarukanTextService;
+use crate::tsf::text_input_processor::KarukanTextService_Impl;
 
 impl ITfDisplayAttributeProvider_Impl for KarukanTextService_Impl {
     /// Return an enumerator of display attributes.

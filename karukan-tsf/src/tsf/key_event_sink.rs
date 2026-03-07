@@ -12,7 +12,7 @@ use karukan_im::EngineAction;
 use crate::globals::GUID_PRESERVED_KEY_ONOFF;
 use crate::tsf::edit_session::ActionEditSession;
 use crate::tsf::lang_bar::KarukanLangBarButton;
-use crate::tsf::text_input_processor::KarukanTextService;
+use crate::tsf::text_input_processor::KarukanTextService_Impl;
 
 impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
     /// Called before OnKeyDown — determines if the key will be consumed.
