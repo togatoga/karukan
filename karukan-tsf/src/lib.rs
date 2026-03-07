@@ -74,10 +74,7 @@ mod dll_exports {
             }
 
             let factory: IUnknown = KarukanClassFactory::new().into();
-            match factory.query(&*riid, ppv) {
-                Ok(()) => S_OK,
-                Err(e) => e.code(),
-            }
+            factory.query(&*riid, ppv)
         }
     }
 

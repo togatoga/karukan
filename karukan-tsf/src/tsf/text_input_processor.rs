@@ -197,17 +197,10 @@ impl ITfTextInputProcessorEx_Impl for KarukanTextService_Impl {
                 None,
                 windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
             ) {
-                let mut atom_input = 0u32;
-                if cat_mgr
-                    .RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_INPUT, &mut atom_input)
-                    .is_ok()
-                {
+                if let Ok(atom_input) = cat_mgr.RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_INPUT) {
                     inner.display_attr_atom_input = atom_input;
                 }
-                let mut atom_converted = 0u32;
-                if cat_mgr
-                    .RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_CONVERTED, &mut atom_converted)
-                    .is_ok()
+                if let Ok(atom_converted) = cat_mgr.RegisterGUID(&GUID_DISPLAY_ATTRIBUTE_CONVERTED)
                 {
                     inner.display_attr_atom_converted = atom_converted;
                 }
@@ -328,11 +321,8 @@ impl ITfCompartmentEventSink_Impl for KarukanTextService_Impl {
 
                     // Update language bar
                     if let Some(ref item) = inner.lang_bar_item {
-                        let button: Result<&KarukanLangBarButton> =
-                            windows::core::AsImpl::as_impl(item);
-                        if let Ok(button) = button {
-                            button.update_mode(inner.engine.input_mode(), inner.enabled);
-                        }
+                        let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
+                        button.update_mode(inner.engine.input_mode(), inner.enabled);
                     }
 
                     tracing::debug!("Compartment OnChange: enabled={}", inner.enabled);

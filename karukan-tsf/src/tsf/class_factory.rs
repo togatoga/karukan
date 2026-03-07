@@ -43,7 +43,7 @@ impl IClassFactory_Impl for KarukanClassFactory_Impl {
             }
 
             let service: IUnknown = KarukanTextService::new().into();
-            service.query(&*riid, ppvobject)
+            service.query(&*riid, ppvobject).ok()
         }
     }
 

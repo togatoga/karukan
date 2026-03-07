@@ -26,7 +26,6 @@ use crate::globals::*;
 #[cfg(target_os = "windows")]
 pub fn register_server() -> windows::core::Result<()> {
     use windows::Win32::UI::TextServices::*;
-    use windows::core::Interface;
 
     let dll_path = get_dll_path()?;
     let clsid_str = format!("{{{:?}}}", CLSID_KARUKAN_TEXT_SERVICE);
@@ -39,7 +38,8 @@ pub fn register_server() -> windows::core::Result<()> {
             HKEY_CLASSES_ROOT,
             &windows::core::HSTRING::from(&key_path),
             &mut hkey,
-        )?;
+        )
+        .ok()?;
         let desc = w!("karukan Japanese Input Method");
         RegSetValueExW(
             hkey,
@@ -50,8 +50,9 @@ pub fn register_server() -> windows::core::Result<()> {
                 desc.as_ptr() as *const u8,
                 (desc.len() + 1) * 2,
             )),
-        )?;
-        RegCloseKey(hkey)?;
+        )
+        .ok()?;
+        RegCloseKey(hkey).ok()?;
 
         // InProcServer32
         let inproc_path = format!("{}\\InProcServer32", key_path);
@@ -60,7 +61,8 @@ pub fn register_server() -> windows::core::Result<()> {
             HKEY_CLASSES_ROOT,
             &windows::core::HSTRING::from(&inproc_path),
             &mut hkey_inproc,
-        )?;
+        )
+        .ok()?;
 
         let dll_path_wide: Vec<u16> = dll_path.encode_utf16().chain(std::iter::once(0)).collect();
         RegSetValueExW(
@@ -72,7 +74,8 @@ pub fn register_server() -> windows::core::Result<()> {
                 dll_path_wide.as_ptr() as *const u8,
                 dll_path_wide.len() * 2,
             )),
-        )?;
+        )
+        .ok()?;
 
         let threading = w!("Apartment");
         RegSetValueExW(
@@ -84,12 +87,15 @@ pub fn register_server() -> windows::core::Result<()> {
                 threading.as_ptr() as *const u8,
                 (threading.len() + 1) * 2,
             )),
-        )?;
-        RegCloseKey(hkey_inproc)?;
+        )
+        .ok()?;
+        RegCloseKey(hkey_inproc).ok()?;
     }
 
     // Register TSF profile
     unsafe {
+        use windows::Win32::UI::Input::KeyboardAndMouse::HKL;
+
         let profile_mgr: ITfInputProcessorProfileMgr =
             windows::Win32::System::Com::CoCreateInstance(
                 &CLSID_TF_InputProcessorProfiles,
@@ -97,17 +103,18 @@ pub fn register_server() -> windows::core::Result<()> {
                 windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
             )?;
 
+        let desc_wide: Vec<u16> = "karukan".encode_utf16().collect();
         profile_mgr.RegisterProfile(
             &CLSID_KARUKAN_TEXT_SERVICE,
             LANGID_JAPANESE,
             &GUID_KARUKAN_PROFILE,
-            &windows::core::HSTRING::from("karukan"),
-            std::ptr::null(), // icon file (none)
-            0,                // icon index
-            std::ptr::null(), // HKL (none)
-            0,                // description (none)
-            0,                // flags
-            true,             // enable
+            &desc_wide,
+            &[],            // icon file (none)
+            0,              // icon index
+            HKL::default(), // HKL (none)
+            0,              // description (none)
+            FALSE,          // flags
+            0,              // enable
         )?;
 
         // Register category
@@ -197,7 +204,7 @@ fn get_dll_path() -> windows::core::Result<String> {
         .map(|s| s.0)
         .unwrap_or(HMODULE::default());
     let mut buf = [0u16; 260];
-    let len = unsafe { GetModuleFileNameW(Some(hmodule), &mut buf) } as usize;
+    let len = unsafe { GetModuleFileNameW(hmodule, &mut buf) } as usize;
     Ok(String::from_utf16_lossy(&buf[..len]))
 }
 

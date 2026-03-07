@@ -69,9 +69,9 @@ pub fn vk_to_keysym(vk: u32, unicode_char: Option<char>) -> Keysym {
 
         // Alphanumeric fallback (when unicode_char is not available)
         // VK codes for 'A'-'Z' are 0x41-0x5A, map to lowercase keysym
-        vk @ 0x41..=0x5A => Keysym((vk - 0x41 + 0x61) as u32), // 'a'-'z'
+        vk @ 0x41..=0x5A => Keysym(vk - 0x41 + 0x61), // 'a'-'z'
         // VK codes for '0'-'9' are 0x30-0x39
-        vk @ 0x30..=0x39 => Keysym(vk as u32),
+        vk @ 0x30..=0x39 => Keysym(vk),
 
         // IME-specific keys
         0x15 => Keysym(0xff2a), // VK_KANJI / Hankaku/Zenkaku — mapped to Kanji keysym

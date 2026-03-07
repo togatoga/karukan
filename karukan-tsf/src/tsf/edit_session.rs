@@ -117,7 +117,7 @@ impl ActionEditSession {
         unsafe {
             // Get the insertion point range
             let insert_at_sel: ITfInsertAtSelection = self.context.cast()?;
-            let range = insert_at_sel.InsertTextAtSelection(ec, TF_IAS_QUERYONLY.0 as u32, &[])?;
+            let range = insert_at_sel.InsertTextAtSelection(ec, TF_IAS_QUERYONLY, &[])?;
 
             // Start a new composition at the insertion point
             let ctx_comp: ITfContextComposition = self.context.cast()?;
@@ -224,7 +224,7 @@ impl ActionEditSession {
             return Ok(());
         }
 
-        let prop: ITfProperty = self.context.GetProperty(&GUID_PROP_ATTRIBUTE)?;
+        let prop: ITfProperty = unsafe { self.context.GetProperty(&GUID_PROP_ATTRIBUTE)? };
 
         for attr in preedit.attributes() {
             let atom = match attr.attr_type {
@@ -242,19 +242,21 @@ impl ActionEditSession {
             }
 
             // Create a sub-range for this attribute
-            let attr_range = composition_range.Clone()?;
+            let attr_range = unsafe { composition_range.Clone()? };
             let mut shifted = 0i32;
 
             // Collapse to the start of the composition
-            attr_range.Collapse(ec, TF_ANCHOR_START)?;
+            unsafe { attr_range.Collapse(ec, TF_ANCHOR_START)? };
 
             // Expand to cover [attr.start, attr.end)
-            attr_range.ShiftEnd(ec, attr.end as i32, &mut shifted, std::ptr::null())?;
-            attr_range.ShiftStart(ec, attr.start as i32, &mut shifted, std::ptr::null())?;
+            unsafe { attr_range.ShiftEnd(ec, attr.end as i32, &mut shifted, std::ptr::null())? };
+            unsafe {
+                attr_range.ShiftStart(ec, attr.start as i32, &mut shifted, std::ptr::null())?
+            };
 
             // Set the display attribute property
             let variant = VARIANT::from(atom as i32);
-            prop.SetValue(ec, &attr_range, &variant)?;
+            unsafe { prop.SetValue(ec, &attr_range, &variant)? };
         }
 
         Ok(())

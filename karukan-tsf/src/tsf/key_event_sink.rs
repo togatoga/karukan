@@ -15,6 +15,11 @@ use crate::tsf::lang_bar::KarukanLangBarButton;
 use crate::tsf::text_input_processor::KarukanTextService_Impl;
 
 impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
+    /// Called when focus changes.
+    fn OnSetFocus(&self, _fforeground: BOOL) -> Result<()> {
+        Ok(())
+    }
+
     /// Called before OnKeyDown — determines if the key will be consumed.
     ///
     /// We process the key through the engine here and cache the result.
@@ -24,36 +29,27 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
         _pic: Option<&ITfContext>,
         wparam: WPARAM,
         _lparam: LPARAM,
-        pfeaten: *mut BOOL,
-    ) -> Result<()> {
-        unsafe {
-            if pfeaten.is_null() {
-                return Err(E_POINTER.into());
-            }
-
-            // If IME is disabled, don't consume any keys
-            let inner = self.inner.borrow();
-            if !inner.enabled {
-                *pfeaten = FALSE;
-                return Ok(());
-            }
-            drop(inner);
-
-            let vk = wparam.0 as u32;
-            let (shift, control, alt, win) = get_modifier_state();
-            let unicode_char = vk_to_unicode(vk, shift);
-
-            let mut inner = self.inner.borrow_mut();
-            let result = inner
-                .engine
-                .process_key(vk, unicode_char, shift, control, alt, win, true);
-
-            let consumed = result.consumed;
-            inner.cached_result = Some(result);
-
-            *pfeaten = BOOL::from(consumed);
-            Ok(())
+    ) -> Result<BOOL> {
+        // If IME is disabled, don't consume any keys
+        let inner = self.inner.borrow();
+        if !inner.enabled {
+            return Ok(FALSE);
         }
+        drop(inner);
+
+        let vk = wparam.0 as u32;
+        let (shift, control, alt, win) = get_modifier_state();
+        let unicode_char = vk_to_unicode(vk, shift);
+
+        let mut inner = self.inner.borrow_mut();
+        let result = inner
+            .engine
+            .process_key(vk, unicode_char, shift, control, alt, win, true);
+
+        let consumed = result.consumed;
+        inner.cached_result = Some(result);
+
+        Ok(BOOL::from(consumed))
     }
 
     /// Called when a key is pressed and OnTestKeyDown returned TRUE.
@@ -62,37 +58,27 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
     fn OnKeyDown(
         &self,
         pic: Option<&ITfContext>,
-        wparam: WPARAM,
+        _wparam: WPARAM,
         _lparam: LPARAM,
-        pfeaten: *mut BOOL,
-    ) -> Result<()> {
-        unsafe {
-            if pfeaten.is_null() {
-                return Err(E_POINTER.into());
-            }
+    ) -> Result<BOOL> {
+        let mut inner = self.inner.borrow_mut();
 
-            let mut inner = self.inner.borrow_mut();
+        if let Some(result) = inner.cached_result.take() {
+            if result.consumed && !result.actions.is_empty() {
+                if let Some(context) = pic {
+                    drop(inner); // Release borrow before edit session
+                    apply_engine_actions(self, context, &result.actions)?;
 
-            if let Some(result) = inner.cached_result.take() {
-                if result.consumed && !result.actions.is_empty() {
-                    if let Some(context) = pic {
-                        drop(inner); // Release borrow before edit session
-                        apply_engine_actions(self, context, &result.actions)?;
+                    // Check for mode changes and update language bar
+                    update_lang_bar_if_mode_changed(self);
 
-                        // Check for mode changes and update language bar
-                        update_lang_bar_if_mode_changed(self);
-
-                        *pfeaten = TRUE;
-                        return Ok(());
-                    }
+                    return Ok(TRUE);
                 }
-                *pfeaten = BOOL::from(result.consumed);
-            } else {
-                // No cached result — should not happen, but handle gracefully
-                *pfeaten = FALSE;
             }
-
-            Ok(())
+            Ok(BOOL::from(result.consumed))
+        } else {
+            // No cached result — should not happen, but handle gracefully
+            Ok(FALSE)
         }
     }
 
@@ -102,46 +88,20 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
         _pic: Option<&ITfContext>,
         _wparam: WPARAM,
         _lparam: LPARAM,
-        pfeaten: *mut BOOL,
-    ) -> Result<()> {
-        unsafe {
-            if !pfeaten.is_null() {
-                *pfeaten = FALSE;
-            }
-            Ok(())
-        }
+    ) -> Result<BOOL> {
+        Ok(FALSE)
     }
 
     /// Called when a key is released — we generally don't consume key-up events.
-    fn OnKeyUp(
-        &self,
-        _pic: Option<&ITfContext>,
-        _wparam: WPARAM,
-        _lparam: LPARAM,
-        pfeaten: *mut BOOL,
-    ) -> Result<()> {
-        unsafe {
-            if !pfeaten.is_null() {
-                *pfeaten = FALSE;
-            }
-            Ok(())
-        }
+    fn OnKeyUp(&self, _pic: Option<&ITfContext>, _wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+        Ok(FALSE)
     }
 
     /// Called for preserved keys (e.g., Hankaku/Zenkaku toggle).
-    fn OnPreservedKey(
-        &self,
-        _pic: Option<&ITfContext>,
-        rguid: *const GUID,
-        pfeaten: *mut BOOL,
-    ) -> Result<()> {
+    fn OnPreservedKey(&self, _pic: Option<&ITfContext>, rguid: *const GUID) -> Result<BOOL> {
         unsafe {
-            if pfeaten.is_null() {
-                return Err(E_POINTER.into());
-            }
             if rguid.is_null() {
-                *pfeaten = FALSE;
-                return Ok(());
+                return Ok(FALSE);
             }
 
             if *rguid == GUID_PRESERVED_KEY_ONOFF {
@@ -169,20 +129,15 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
 
                 // Update language bar
                 if let Some(ref item) = inner.lang_bar_item {
-                    let button: Result<&KarukanLangBarButton> =
-                        windows::core::AsImpl::as_impl(item);
-                    if let Ok(button) = button {
-                        button.update_mode(inner.engine.input_mode(), inner.enabled);
-                    }
+                    let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
+                    button.update_mode(inner.engine.input_mode(), inner.enabled);
                 }
 
                 tracing::debug!("IME toggle: enabled={}", inner.enabled);
-                *pfeaten = TRUE;
+                Ok(TRUE)
             } else {
-                *pfeaten = FALSE;
+                Ok(FALSE)
             }
-
-            Ok(())
         }
     }
 }
@@ -241,6 +196,8 @@ fn apply_engine_actions(
     context: &ITfContext,
     actions: &[EngineAction],
 ) -> Result<()> {
+    use windows::core::Interface;
+
     // Extract needed values from inner state
     let (composition_snapshot, client_id, candidate_window, atom_input, atom_converted) = {
         let inner = service.inner.borrow();
@@ -257,7 +214,8 @@ fn apply_engine_actions(
     let composition_cell = Rc::new(RefCell::new(composition_snapshot));
 
     // Get the ITfCompositionSink from our service (for StartComposition)
-    let composition_sink: ITfCompositionSink = service.cast()?;
+    let service_unknown: IUnknown = service.into();
+    let composition_sink: ITfCompositionSink = service_unknown.cast()?;
 
     let session = ActionEditSession::new(
         context.clone(),
@@ -272,14 +230,9 @@ fn apply_engine_actions(
 
     // Request synchronous read-write edit session
     let edit_session: ITfEditSession = session.into();
-    let mut hr = HRESULT::default();
     unsafe {
-        context.RequestEditSession(
-            client_id,
-            &edit_session,
-            TF_ES_SYNC | TF_ES_READWRITE,
-            &mut hr,
-        )?;
+        let hr =
+            context.RequestEditSession(client_id, &edit_session, TF_ES_SYNC | TF_ES_READWRITE)?;
         // Check the edit session result
         if hr.is_err() {
             tracing::warn!("Edit session failed: {:?}", hr);
@@ -302,10 +255,8 @@ fn update_lang_bar_if_mode_changed(service: &KarukanTextService_Impl) {
     if current_mode != inner.prev_input_mode {
         inner.prev_input_mode = current_mode;
         if let Some(ref item) = inner.lang_bar_item {
-            let button: Result<&KarukanLangBarButton> = windows::core::AsImpl::as_impl(item);
-            if let Ok(button) = button {
-                button.update_mode(current_mode, inner.enabled);
-            }
+            let button: &KarukanLangBarButton = windows::core::AsImpl::as_impl(item);
+            button.update_mode(current_mode, inner.enabled);
         }
     }
 }

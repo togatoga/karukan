@@ -88,17 +88,17 @@ pub fn read_context(context: &ITfContext, client_id: u32) -> (String, String) {
     let session = ContextReadSession::new(context.clone(), result.clone());
 
     let edit_session: ITfEditSession = session.into();
-    let mut hr = HRESULT::default();
     unsafe {
-        let request_result =
-            context.RequestEditSession(client_id, &edit_session, TF_ES_SYNC | TF_ES_READ, &mut hr);
-        if request_result.is_err() || hr.is_err() {
-            tracing::debug!(
-                "Context read session failed: request={:?} hr={:?}",
-                request_result,
-                hr
-            );
-            return (String::new(), String::new());
+        match context.RequestEditSession(client_id, &edit_session, TF_ES_SYNC | TF_ES_READ) {
+            Ok(hr) if hr.is_err() => {
+                tracing::debug!("Context read session failed: hr={:?}", hr);
+                return (String::new(), String::new());
+            }
+            Err(e) => {
+                tracing::debug!("Context read session request failed: {:?}", e);
+                return (String::new(), String::new());
+            }
+            _ => {}
         }
     }
 

@@ -1,2 +1,2 @@
 [env]
-CMAKE_MSVC_RUNTIME_LIBRARY = { value = "MultiThreaded", force = false }
+CMAKE_MSVC_RUNTIME_LIBRARY = { value = "MultiThreaded", force = true }

@@ -218,50 +218,52 @@ unsafe extern "system" fn candidate_wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_PAINT => {
-            paint_candidates(hwnd);
+            unsafe { paint_candidates(hwnd) };
             LRESULT(0)
         }
-        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
 }
 
 #[cfg(target_os = "windows")]
 unsafe fn paint_candidates(hwnd: HWND) {
-    let mut ps = PAINTSTRUCT::default();
-    let hdc = BeginPaint(hwnd, &mut ps);
+    unsafe {
+        let mut ps = PAINTSTRUCT::default();
+        let hdc = BeginPaint(hwnd, &mut ps);
 
-    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateRenderData;
-    if !ptr.is_null() {
-        let data = &*ptr;
-        let _ = SetBkMode(hdc, TRANSPARENT);
+        let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const CandidateRenderData;
+        if !ptr.is_null() {
+            let data = &*ptr;
+            let _ = SetBkMode(hdc, TRANSPARENT);
 
-        // Highlight color for selected item
-        let highlight_brush = CreateSolidBrush(COLORREF(0x00D77800));
+            // Highlight color for selected item
+            let highlight_brush = CreateSolidBrush(COLORREF(0x00D77800));
 
-        for (i, candidate) in data.candidates.iter().enumerate() {
-            let y = CANDIDATE_PADDING + i as i32 * CANDIDATE_ITEM_HEIGHT;
+            for (i, candidate) in data.candidates.iter().enumerate() {
+                let y = CANDIDATE_PADDING + i as i32 * CANDIDATE_ITEM_HEIGHT;
 
-            if i == data.selected {
-                let rect = RECT {
-                    left: 0,
-                    top: y,
-                    right: ps.rcPaint.right,
-                    bottom: y + CANDIDATE_ITEM_HEIGHT,
-                };
-                FillRect(hdc, &rect, highlight_brush);
-                SetTextColor(hdc, COLORREF(0x00FFFFFF));
-            } else {
-                SetTextColor(hdc, COLORREF(0x00000000));
+                if i == data.selected {
+                    let rect = RECT {
+                        left: 0,
+                        top: y,
+                        right: ps.rcPaint.right,
+                        bottom: y + CANDIDATE_ITEM_HEIGHT,
+                    };
+                    FillRect(hdc, &rect, highlight_brush);
+                    SetTextColor(hdc, COLORREF(0x00FFFFFF));
+                } else {
+                    SetTextColor(hdc, COLORREF(0x00000000));
+                }
+
+                // Draw "N. candidate" label
+                let label = format!("{}. {}", i + 1, candidate);
+                let label_wide: Vec<u16> = label.encode_utf16().collect();
+                TextOutW(hdc, CANDIDATE_PADDING, y + 3, &label_wide);
             }
 
-            // Draw "N. candidate" label
-            let label = format!("{}. {}", i + 1, candidate);
-            let label_wide: Vec<u16> = label.encode_utf16().collect();
-            TextOutW(hdc, CANDIDATE_PADDING, y + 3, &label_wide);
+            let _ = DeleteObject(highlight_brush);
         }
 
-        let _ = DeleteObject(highlight_brush);
+        let _ = EndPaint(hwnd, &ps);
     }
-
-    let _ = EndPaint(hwnd, &ps);
 }

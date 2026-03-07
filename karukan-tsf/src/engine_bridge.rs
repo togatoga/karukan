@@ -114,6 +114,7 @@ impl EngineBridge {
     ///
     /// Converts Windows VK code + modifiers to karukan KeyEvent, then delegates
     /// to InputMethodEngine::process_key.
+    #[allow(clippy::too_many_arguments)]
     pub fn process_key(
         &mut self,
         vk: u32,

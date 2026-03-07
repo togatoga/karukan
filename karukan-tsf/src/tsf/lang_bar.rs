@@ -106,7 +106,7 @@ impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
             let info = &mut *pinfo;
             info.clsidService = crate::globals::CLSID_KARUKAN_TEXT_SERVICE;
             info.guidItem = GUID_LANGBAR_ITEM_BUTTON;
-            info.dwStyle = TF_LBI_STYLE_BTN_BUTTON.0 | TF_LBI_STYLE_SHOWNINTRAY.0;
+            info.dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
             info.ulSort = 0;
 
             let desc = "karukan";
@@ -129,7 +129,7 @@ impl ITfLangBarItem_Impl for KarukanLangBarButton_Impl {
 
     fn GetTooltipString(&self) -> Result<BSTR> {
         let inner = self.inner.borrow();
-        let text = Self::tooltip_text(inner.mode, inner.enabled);
+        let text = KarukanLangBarButton::tooltip_text(inner.mode, inner.enabled);
         Ok(BSTR::from(text))
     }
 }
@@ -158,7 +158,7 @@ impl ITfLangBarItemButton_Impl for KarukanLangBarButton_Impl {
 
     fn GetText(&self) -> Result<BSTR> {
         let inner = self.inner.borrow();
-        let text = Self::display_text(inner.mode, inner.enabled);
+        let text = KarukanLangBarButton::display_text(inner.mode, inner.enabled);
         Ok(BSTR::from(text))
     }
 }
