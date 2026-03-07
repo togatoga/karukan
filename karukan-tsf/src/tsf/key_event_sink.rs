@@ -255,8 +255,7 @@ fn update_lang_bar_if_mode_changed(service: &KarukanTextService_Impl) {
     if current_mode != inner.prev_input_mode {
         inner.prev_input_mode = current_mode;
         if let Some(ref item) = inner.lang_bar_item {
-            let button: &KarukanLangBarButton =
-                unsafe { windows::core::AsImpl::as_impl(item) };
+            let button: &KarukanLangBarButton = unsafe { windows::core::AsImpl::as_impl(item) };
             button.update_mode(current_mode, inner.enabled);
         }
     }
