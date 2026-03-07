@@ -2,6 +2,8 @@
 
 use karukan_engine::ConversionEvent;
 
+use crate::config::settings::KeybindingProfile;
+
 use super::*;
 
 /// Append candidates to `target`, skipping duplicates and updating indices.
@@ -130,7 +132,10 @@ impl InputMethodEngine {
             let is_shift_alpha =
                 ch.is_ascii_uppercase() || (shift_active && ch.is_ascii_alphabetic());
 
-            if is_shift_alpha && self.input_mode != InputMode::Alphabet {
+            if self.config.keybinding_profile != KeybindingProfile::Skk
+                && is_shift_alpha
+                && self.input_mode != InputMode::Alphabet
+            {
                 self.input_mode = InputMode::Alphabet;
             }
             let ch = if self.input_mode == InputMode::Alphabet && is_shift_alpha {
@@ -244,7 +249,10 @@ impl InputMethodEngine {
                     let is_shift_alpha =
                         ch.is_ascii_uppercase() || (shift_active && ch.is_ascii_alphabetic());
 
-                    if is_shift_alpha && self.input_mode != InputMode::Alphabet {
+                    if self.config.keybinding_profile != KeybindingProfile::Skk
+                        && is_shift_alpha
+                        && self.input_mode != InputMode::Alphabet
+                    {
                         // Bake katakana before switching so preedit doesn't revert
                         if self.input_mode == InputMode::Katakana {
                             self.bake_katakana();

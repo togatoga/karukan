@@ -28,12 +28,34 @@ impl InputMethodEngine {
             return Some(self.skk_enter_hiragana());
         }
 
+        // Shift+Ctrl+q → convert to half-width katakana and commit (must be before Ctrl+q)
+        if key.modifiers.control_key
+            && key.modifiers.shift_key
+            && (key.keysym == Keysym::KEY_Q || key.keysym == Keysym::KEY_Q_UPPER)
+            && matches!(self.state, InputState::Composing { .. })
+        {
+            return Some(self.skk_commit_as_halfwidth_katakana());
+        }
+
         // Ctrl+q → enter half-width katakana mode
         if key.modifiers.control_key
             && !key.modifiers.shift_key
             && (key.keysym == Keysym::KEY_Q || key.keysym == Keysym::KEY_Q_UPPER)
         {
             return Some(self.skk_enter_halfwidth_katakana());
+        }
+
+        // Shift+q (in kana mode, composing) → convert to katakana and commit
+        if key.modifiers.shift_key
+            && !key.modifiers.control_key
+            && (key.keysym == Keysym::KEY_Q || key.keysym == Keysym::KEY_Q_UPPER)
+            && matches!(
+                self.input_mode,
+                InputMode::Hiragana | InputMode::Katakana | InputMode::HalfWidthKatakana
+            )
+            && matches!(self.state, InputState::Composing { .. })
+        {
+            return Some(self.skk_commit_as_katakana());
         }
 
         // l (no modifiers, in kana mode) → enter alphabet mode
@@ -137,6 +159,42 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(aux));
         }
         EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
+    }
+
+    /// Shift+q: convert composing text to katakana and commit immediately
+    fn skk_commit_as_katakana(&mut self) -> EngineResult {
+        self.flush_romaji_to_composed();
+        let reading = self.input_buf.text.clone();
+        let text = Self::hiragana_to_katakana(&reading);
+
+        self.converters.romaji.reset();
+        self.input_buf.clear();
+        self.live.text.clear();
+        self.state = InputState::Empty;
+        self.input_mode = InputMode::Hiragana;
+
+        EngineResult::consumed()
+            .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+            .with_action(EngineAction::Commit(text))
+            .with_action(EngineAction::HideAuxText)
+    }
+
+    /// Shift+Ctrl+q: convert composing text to half-width katakana and commit immediately
+    fn skk_commit_as_halfwidth_katakana(&mut self) -> EngineResult {
+        self.flush_romaji_to_composed();
+        let reading = self.input_buf.text.clone();
+        let text = karukan_engine::kana::hiragana_to_halfwidth_katakana(&reading);
+
+        self.converters.romaji.reset();
+        self.input_buf.clear();
+        self.live.text.clear();
+        self.state = InputState::Empty;
+        self.input_mode = InputMode::Hiragana;
+
+        EngineResult::consumed()
+            .with_action(EngineAction::UpdatePreedit(Preedit::new()))
+            .with_action(EngineAction::Commit(text))
+            .with_action(EngineAction::HideAuxText)
     }
 
     /// Ctrl+q: enter half-width katakana mode

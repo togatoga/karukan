@@ -25,8 +25,8 @@ fn test_skk_l_in_empty_alphabet_passes_through() {
     engine.input_mode = InputMode::Alphabet;
 
     let result = engine.process_key(&press('l'));
-    // In Alphabet mode, 'l' is not intercepted by SKK — it enters composing normally
-    assert!(result.consumed);
+    // In SKK alphabet mode, all keys pass through to the application
+    assert!(!result.consumed);
     assert_eq!(engine.input_mode, InputMode::Alphabet);
 }
 

@@ -28,7 +28,7 @@ use super::candidate::{Candidate, CandidateList};
 use super::keycode::{KeyEvent, Keysym};
 use super::preedit::{AttributeType, Preedit, PreeditAttribute, PreeditSegment};
 use super::state::InputState;
-use crate::config::settings::Settings;
+use crate::config::settings::{KeybindingProfile, Settings};
 
 /// Source of a conversion candidate
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -385,6 +385,14 @@ impl InputMethodEngine {
         // SKK keybinding pre-processing
         if let Some(result) = self.handle_skk_keybind(key) {
             return result;
+        }
+
+        // SKK alphabet mode: pass all keys through to the application
+        // (Ctrl+j is already handled above by handle_skk_keybind)
+        if self.config.keybinding_profile == KeybindingProfile::Skk
+            && self.input_mode == InputMode::Alphabet
+        {
+            return EngineResult::not_consumed();
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)
