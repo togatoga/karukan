@@ -124,12 +124,75 @@ fn test_skk_l_in_composing_switches_to_alphabet() {
     assert!(matches!(engine.state(), InputState::Composing { .. }));
     assert_eq!(engine.input_mode, InputMode::Hiragana);
 
-    // Press 'l' to switch to alphabet
+    // Press 'l' to switch to alphabet — composing text should be committed
     let result = engine.process_key(&press('l'));
     assert!(result.consumed);
     assert_eq!(engine.input_mode, InputMode::Alphabet);
-    // Preedit should be preserved (not committed)
+    // State should be Empty after commit
+    assert!(matches!(engine.state(), InputState::Empty));
+    // Should have a Commit action with the composed text
+    assert!(result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::Commit(t) if t == "あ")));
+}
+
+#[test]
+fn test_skk_alphabet_mode_keys_pass_through() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Alphabet;
+
+    // q should pass through in alphabet mode
+    let result = engine.process_key(&press('q'));
+    assert!(!result.consumed);
+
+    // Ctrl+q should pass through in alphabet mode
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_Q));
+    assert!(!result.consumed);
+
+    // Only Ctrl+j should be consumed
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+}
+
+#[test]
+fn test_skk_q_in_composing_commits_katakana() {
+    let mut engine = make_skk_engine();
+
+    // Type "a" to get "あ" in composing state
+    engine.process_key(&press('a'));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    // Press 'q' — should commit as katakana and return to hiragana
+    let result = engine.process_key(&press('q'));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+    assert!(result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::Commit(t) if t == "ア")));
+}
+
+#[test]
+fn test_skk_l_in_composing_katakana_commits_katakana() {
+    let mut engine = make_skk_engine();
+    engine.input_mode = InputMode::Katakana;
+
+    // Type "a" to get composing state (hiragana internally)
+    engine.process_key(&press('a'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    // Press 'l' — should commit as katakana then switch to alphabet
+    let result = engine.process_key(&press('l'));
+    assert!(result.consumed);
+    assert_eq!(engine.input_mode, InputMode::Alphabet);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::Commit(t) if t == "ア")));
 }
 
 #[test]
