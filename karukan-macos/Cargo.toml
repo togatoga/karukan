@@ -1,0 +1,31 @@
+[package]
+name = "karukan-macos"
+version = "0.1.0"
+edition.workspace = true
+description = "macOS Input Method Kit (IMKit) addon for karukan"
+license.workspace = true
+authors = ["togatoga"]
+repository.workspace = true
+homepage.workspace = true
+keywords = ["japanese", "ime", "macos", "input-method", "imkit"]
+categories = ["text-processing", "internationalization"]
+
+[lib]
+name = "karukan_macos"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+# Core engine (reuse karukan-im's InputMethodEngine directly)
+karukan-im = { path = "../karukan-im" }
+karukan-engine.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

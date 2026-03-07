@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.karukan.inputmethod.Karukan</string>
+    <key>CFBundleName</key>
+    <string>Karukan</string>
+    <key>CFBundleDisplayName</key>
+    <string>Karukan</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>KarukanInputMethod</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
+    <key>InputMethodConnectionName</key>
+    <string>Karukan_Connection</string>
+    <key>InputMethodServerControllerClass</key>
+    <string>KarukanInputController</string>
+    <key>tsInputMethodCharacterRepertoireKey</key>
+    <array>
+        <string>Jpan</string>
+    </array>
+    <key>tsInputMethodIconFileKey</key>
+    <string>AppIcon</string>
+</dict>
+</plist>

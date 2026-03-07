@@ -1375,6 +1375,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "karukan-macos"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "karukan-engine",
+ "karukan-im",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "karukan-tsf"
 version = "0.1.0"
 dependencies = [
