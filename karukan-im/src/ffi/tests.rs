@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::settings::KeybindingProfile;
 use input::*;
 use lifecycle::*;
 use query::*;
@@ -23,6 +24,14 @@ impl TestEngine {
     fn new() -> Self {
         let ptr = karukan_engine_new();
         assert!(!ptr.is_null());
+        Self(ptr)
+    }
+
+    fn new_skk() -> Self {
+        let ptr = karukan_engine_new();
+        assert!(!ptr.is_null());
+        let engine = unsafe { &mut *ptr };
+        engine.engine.set_keybinding_profile(KeybindingProfile::Skk);
         Self(ptr)
     }
 
@@ -416,7 +425,7 @@ fn test_surrounding_text_char_offset_middle() {
 
 #[test]
 fn test_ffi_shift_a_produces_hiragana() {
-    let e = TestEngine::new();
+    let e = TestEngine::new_skk();
 
     // Shift_L press
     e.press(XKB_KEY_SHIFT_L);
@@ -434,7 +443,7 @@ fn test_ffi_shift_a_produces_hiragana() {
 
 #[test]
 fn test_ffi_shift_a_after_hiragana() {
-    let e = TestEngine::new();
+    let e = TestEngine::new_skk();
 
     // Type "あ"
     e.press(XKB_KEY_A);
@@ -456,7 +465,7 @@ fn test_ffi_shift_a_after_hiragana() {
 fn test_ffi_uppercase_keysym_without_shift_flag() {
     // fcitx5 may send uppercase keysym 'A' (0x41) without the shift flag
     // when Shift is consumed during keysym resolution.
-    let e = TestEngine::new();
+    let e = TestEngine::new_skk();
 
     // Send uppercase 'A' keysym (0x41) without shift modifier
     const XKB_KEY_A_UPPER: u32 = 0x41;

@@ -138,6 +138,11 @@ impl InputMethodEngine {
         }
     }
 
+    /// Set the keybinding profile
+    pub fn set_keybinding_profile(&mut self, profile: KeybindingProfile) {
+        self.config.keybinding_profile = profile;
+    }
+
     /// Get last conversion time in milliseconds (inference only)
     pub fn last_conversion_ms(&self) -> u64 {
         self.metrics.conversion_ms
