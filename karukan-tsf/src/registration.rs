@@ -199,10 +199,7 @@ pub fn unregister_server() -> windows::core::Result<()> {
 /// Get the full path of the current DLL module.
 #[cfg(target_os = "windows")]
 fn get_dll_path() -> windows::core::Result<String> {
-    let hmodule = DLL_INSTANCE
-        .get()
-        .map(|s| s.0)
-        .unwrap_or_default();
+    let hmodule = DLL_INSTANCE.get().map(|s| s.0).unwrap_or_default();
     let mut buf = [0u16; 260];
     let len = unsafe { GetModuleFileNameW(hmodule, &mut buf) } as usize;
     Ok(String::from_utf16_lossy(&buf[..len]))
