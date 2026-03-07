@@ -1,0 +1,96 @@
+name: karukan-tsf CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'karukan-tsf/**'
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/karukan-tsf-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'karukan-tsf/**'
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/karukan-tsf-ci.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check-windows:
+    name: Check (Windows)
+    runs-on: windows-latest
+    env:
+      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Run cargo check
+        run: cargo check -p karukan-tsf --all-targets
+
+  clippy-windows:
+    name: Clippy (Windows)
+    runs-on: windows-latest
+    env:
+      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Run cargo clippy
+        run: cargo clippy -p karukan-tsf --all-targets -- -D warnings
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Run cargo fmt
+        run: cargo fmt -p karukan-tsf -- --check
+
+  test-linux:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Run tests
+        run: cargo test -p karukan-tsf
+
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    env:
+      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Build release
+        run: cargo build -p karukan-tsf --release

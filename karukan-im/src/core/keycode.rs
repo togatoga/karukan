@@ -68,8 +68,16 @@ impl Keysym {
     pub const KEY_N_UPPER: Keysym = Keysym(0x004e); // uppercase 'N'
     pub const KEY_L: Keysym = Keysym(0x006c); // lowercase 'l'
     pub const KEY_L_UPPER: Keysym = Keysym(0x004c); // uppercase 'L'
+    pub const KEY_J: Keysym = Keysym(0x006a); // lowercase 'j'
+    pub const KEY_J_UPPER: Keysym = Keysym(0x004a); // uppercase 'J'
     pub const KEY_P: Keysym = Keysym(0x0070); // lowercase 'p'
     pub const KEY_P_UPPER: Keysym = Keysym(0x0050); // uppercase 'P'
+    pub const KEY_Q: Keysym = Keysym(0x0071); // lowercase 'q'
+    pub const KEY_Q_UPPER: Keysym = Keysym(0x0051); // uppercase 'Q'
+
+    // Japanese IME keys
+    pub const MUHENKAN: Keysym = Keysym(0xff22); // 無変換
+    pub const HENKAN: Keysym = Keysym(0xff23); // 変換
 
     // Function keys
     pub const F1: Keysym = Keysym(0xffbe);

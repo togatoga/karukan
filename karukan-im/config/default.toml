@@ -24,6 +24,10 @@ light_model = "jinen-v1-xsmall-q5"
 n_threads = 4
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
 
+[keybinding]
+# キーバインドプロファイル: default, skk
+profile = "default"
+
 [learning]
 # 変換学習を有効にする
 enabled = true

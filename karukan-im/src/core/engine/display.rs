@@ -21,16 +21,19 @@ impl InputMethodEngine {
             .collect();
         let buffer = self.converters.romaji.buffer();
 
-        let katakana = self.input_mode == InputMode::Katakana;
-        let display_before = if katakana {
-            Self::hiragana_to_katakana(&before)
-        } else {
-            before
+        let display_before = match self.input_mode {
+            InputMode::Katakana => Self::hiragana_to_katakana(&before),
+            InputMode::HalfWidthKatakana => {
+                karukan_engine::kana::hiragana_to_halfwidth_katakana(&before)
+            }
+            _ => before,
         };
-        let display_after = if katakana {
-            Self::hiragana_to_katakana(&after)
-        } else {
-            after
+        let display_after = match self.input_mode {
+            InputMode::Katakana => Self::hiragana_to_katakana(&after),
+            InputMode::HalfWidthKatakana => {
+                karukan_engine::kana::hiragana_to_halfwidth_katakana(&after)
+            }
+            _ => after,
         };
 
         format!("{}{}{}", display_before, buffer, display_after)
@@ -101,6 +104,7 @@ impl InputMethodEngine {
         let base = match self.input_mode {
             InputMode::Alphabet => "[A]",
             InputMode::Katakana => "[カ]",
+            InputMode::HalfWidthKatakana => "[ｶ]",
             InputMode::Hiragana => "[あ]",
         };
         if self.live.enabled {

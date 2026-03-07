@@ -40,6 +40,112 @@ pub fn katakana_to_hiragana(text: &str) -> String {
         .collect()
 }
 
+/// Convert hiragana to half-width katakana (半角カタカナ)
+///
+/// Dakuten (゛) and handakuten (゜) are decomposed into two code points.
+/// For example: が → ｶﾞ (U+FF76 + U+FF9E)
+pub fn hiragana_to_halfwidth_katakana(text: &str) -> String {
+    let mut result = String::with_capacity(text.len() * 2);
+    for c in text.chars() {
+        match c {
+            'あ' => result.push('ｱ'),
+            'い' => result.push('ｲ'),
+            'う' => result.push('ｳ'),
+            'え' => result.push('ｴ'),
+            'お' => result.push('ｵ'),
+            'か' => result.push('ｶ'),
+            'き' => result.push('ｷ'),
+            'く' => result.push('ｸ'),
+            'け' => result.push('ｹ'),
+            'こ' => result.push('ｺ'),
+            'さ' => result.push('ｻ'),
+            'し' => result.push('ｼ'),
+            'す' => result.push('ｽ'),
+            'せ' => result.push('ｾ'),
+            'そ' => result.push('ｿ'),
+            'た' => result.push('ﾀ'),
+            'ち' => result.push('ﾁ'),
+            'つ' => result.push('ﾂ'),
+            'て' => result.push('ﾃ'),
+            'と' => result.push('ﾄ'),
+            'な' => result.push('ﾅ'),
+            'に' => result.push('ﾆ'),
+            'ぬ' => result.push('ﾇ'),
+            'ね' => result.push('ﾈ'),
+            'の' => result.push('ﾉ'),
+            'は' => result.push('ﾊ'),
+            'ひ' => result.push('ﾋ'),
+            'ふ' => result.push('ﾌ'),
+            'へ' => result.push('ﾍ'),
+            'ほ' => result.push('ﾎ'),
+            'ま' => result.push('ﾏ'),
+            'み' => result.push('ﾐ'),
+            'む' => result.push('ﾑ'),
+            'め' => result.push('ﾒ'),
+            'も' => result.push('ﾓ'),
+            'や' => result.push('ﾔ'),
+            'ゆ' => result.push('ﾕ'),
+            'よ' => result.push('ﾖ'),
+            'ら' => result.push('ﾗ'),
+            'り' => result.push('ﾘ'),
+            'る' => result.push('ﾙ'),
+            'れ' => result.push('ﾚ'),
+            'ろ' => result.push('ﾛ'),
+            'わ' => result.push('ﾜ'),
+            'を' => result.push('ｦ'),
+            'ん' => result.push('ﾝ'),
+            // Dakuten (voiced) kana → base + ﾞ
+            'が' => result.push_str("ｶﾞ"),
+            'ぎ' => result.push_str("ｷﾞ"),
+            'ぐ' => result.push_str("ｸﾞ"),
+            'げ' => result.push_str("ｹﾞ"),
+            'ご' => result.push_str("ｺﾞ"),
+            'ざ' => result.push_str("ｻﾞ"),
+            'じ' => result.push_str("ｼﾞ"),
+            'ず' => result.push_str("ｽﾞ"),
+            'ぜ' => result.push_str("ｾﾞ"),
+            'ぞ' => result.push_str("ｿﾞ"),
+            'だ' => result.push_str("ﾀﾞ"),
+            'ぢ' => result.push_str("ﾁﾞ"),
+            'づ' => result.push_str("ﾂﾞ"),
+            'で' => result.push_str("ﾃﾞ"),
+            'ど' => result.push_str("ﾄﾞ"),
+            'ば' => result.push_str("ﾊﾞ"),
+            'び' => result.push_str("ﾋﾞ"),
+            'ぶ' => result.push_str("ﾌﾞ"),
+            'べ' => result.push_str("ﾍﾞ"),
+            'ぼ' => result.push_str("ﾎﾞ"),
+            'ゔ' => result.push_str("ｳﾞ"),
+            // Handakuten (semi-voiced) kana → base + ﾟ
+            'ぱ' => result.push_str("ﾊﾟ"),
+            'ぴ' => result.push_str("ﾋﾟ"),
+            'ぷ' => result.push_str("ﾌﾟ"),
+            'ぺ' => result.push_str("ﾍﾟ"),
+            'ぽ' => result.push_str("ﾎﾟ"),
+            // Small kana
+            'ぁ' => result.push('ｧ'),
+            'ぃ' => result.push('ｨ'),
+            'ぅ' => result.push('ｩ'),
+            'ぇ' => result.push('ｪ'),
+            'ぉ' => result.push('ｫ'),
+            'っ' => result.push('ｯ'),
+            'ゃ' => result.push('ｬ'),
+            'ゅ' => result.push('ｭ'),
+            'ょ' => result.push('ｮ'),
+            // Punctuation
+            '。' => result.push('｡'),
+            '、' => result.push('､'),
+            '・' => result.push('･'),
+            'ー' => result.push('ｰ'),
+            '「' => result.push('｢'),
+            '」' => result.push('｣'),
+            // Pass through anything else
+            _ => result.push(c),
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,6 +176,31 @@ mod tests {
         let katakana = hiragana_to_katakana(original);
         let back = katakana_to_hiragana(&katakana);
         assert_eq!(original, back);
+    }
+
+    #[test]
+    fn test_hiragana_to_halfwidth_katakana() {
+        // Basic vowels
+        assert_eq!(hiragana_to_halfwidth_katakana("あいうえお"), "ｱｲｳｴｵ");
+        // Basic consonants
+        assert_eq!(hiragana_to_halfwidth_katakana("かきくけこ"), "ｶｷｸｹｺ");
+        // Dakuten (voiced) — two code points each
+        assert_eq!(hiragana_to_halfwidth_katakana("がぎぐげご"), "ｶﾞｷﾞｸﾞｹﾞｺﾞ");
+        // Handakuten (semi-voiced)
+        assert_eq!(hiragana_to_halfwidth_katakana("ぱぴぷぺぽ"), "ﾊﾟﾋﾟﾌﾟﾍﾟﾎﾟ");
+        // Small kana
+        assert_eq!(
+            hiragana_to_halfwidth_katakana("ぁぃぅぇぉっゃゅょ"),
+            "ｧｨｩｪｫｯｬｭｮ"
+        );
+        // Special
+        assert_eq!(hiragana_to_halfwidth_katakana("ん"), "ﾝ");
+        assert_eq!(hiragana_to_halfwidth_katakana("ー"), "ｰ");
+        // Mixed text passes through non-hiragana
+        assert_eq!(hiragana_to_halfwidth_katakana("abc123"), "abc123");
+        assert_eq!(hiragana_to_halfwidth_katakana("あいうabc"), "ｱｲｳabc");
+        // Punctuation
+        assert_eq!(hiragana_to_halfwidth_katakana("。、"), "｡､");
     }
 
     #[test]

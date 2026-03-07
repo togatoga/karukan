@@ -14,6 +14,25 @@ use tracing::{debug, warn};
 /// Default configuration TOML embedded from config/default.toml
 const DEFAULT_CONFIG_TOML: &str = include_str!("../../config/default.toml");
 
+/// Keybinding profile
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeybindingProfile {
+    /// Default keybindings
+    #[default]
+    Default,
+    /// SKK-style keybindings
+    Skk,
+}
+
+/// Keybinding settings
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct KeybindingSettings {
+    /// Keybinding profile (default or skk)
+    #[serde(default)]
+    pub profile: KeybindingProfile,
+}
+
 /// Configuration settings for the IME
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -21,6 +40,9 @@ pub struct Settings {
     pub conversion: ConversionSettings,
     /// Learning cache settings
     pub learning: LearningSettings,
+    /// Keybinding settings
+    #[serde(default)]
+    pub keybinding: KeybindingSettings,
 }
 
 /// Conversion strategy mode

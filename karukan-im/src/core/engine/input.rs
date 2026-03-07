@@ -2,6 +2,8 @@
 
 use karukan_engine::ConversionEvent;
 
+use crate::config::settings::KeybindingProfile;
+
 use super::*;
 
 /// Append candidates to `target`, skipping duplicates and updating indices.
@@ -23,19 +25,21 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Run auto-suggest (skip in alphabet mode — no hiragana to convert)
-        let candidates =
-            if self.input_mode != InputMode::Alphabet && !self.input_buf.text.is_empty() {
-                let reading = self.input_buf.text.clone();
-                let result = self.run_auto_suggest(&reading, 1);
-                if !result.is_empty() && result[0] != self.input_buf.text {
-                    Some((result, reading))
-                } else {
-                    None
-                }
+        // Run auto-suggest (skip in alphabet/halfwidth-katakana modes — no hiragana to convert)
+        let candidates = if self.input_mode != InputMode::Alphabet
+            && self.input_mode != InputMode::HalfWidthKatakana
+            && !self.input_buf.text.is_empty()
+        {
+            let reading = self.input_buf.text.clone();
+            let result = self.run_auto_suggest(&reading, 1);
+            if !result.is_empty() && result[0] != self.input_buf.text {
+                Some((result, reading))
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         let Some((candidates, reading)) = candidates else {
             // No useful AI suggestion — still show learning + dictionary candidates
@@ -59,7 +63,10 @@ impl InputMethodEngine {
         };
 
         // Live conversion mode: show converted text in preedit
-        if self.live.enabled && self.input_mode != InputMode::Katakana {
+        if self.live.enabled
+            && self.input_mode != InputMode::Katakana
+            && self.input_mode != InputMode::HalfWidthKatakana
+        {
             self.live.text = candidates[0].clone();
             let preedit = self.set_composing_state();
             let mut result =
@@ -125,7 +132,10 @@ impl InputMethodEngine {
             let is_shift_alpha =
                 ch.is_ascii_uppercase() || (shift_active && ch.is_ascii_alphabetic());
 
-            if is_shift_alpha && self.input_mode != InputMode::Alphabet {
+            if self.config.keybinding_profile != KeybindingProfile::Skk
+                && is_shift_alpha
+                && self.input_mode != InputMode::Alphabet
+            {
                 self.input_mode = InputMode::Alphabet;
             }
             let ch = if self.input_mode == InputMode::Alphabet && is_shift_alpha {
@@ -223,8 +233,9 @@ impl InputMethodEngine {
             Keysym::ESCAPE => self.cancel_composing(),
             Keysym::BACKSPACE => self.backspace_composing(),
             Keysym::DELETE => self.delete_composing(),
+            Keysym::MUHENKAN => self.commit_composing(),
             Keysym::SPACE if self.input_mode == InputMode::Alphabet => self.input_char(' '),
-            Keysym::SPACE | Keysym::DOWN | Keysym::TAB => self.start_conversion(),
+            Keysym::SPACE | Keysym::DOWN | Keysym::TAB | Keysym::HENKAN => self.start_conversion(),
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
             Keysym::HOME => self.move_caret_home(),
@@ -239,7 +250,10 @@ impl InputMethodEngine {
                     let is_shift_alpha =
                         ch.is_ascii_uppercase() || (shift_active && ch.is_ascii_alphabetic());
 
-                    if is_shift_alpha && self.input_mode != InputMode::Alphabet {
+                    if self.config.keybinding_profile != KeybindingProfile::Skk
+                        && is_shift_alpha
+                        && self.input_mode != InputMode::Alphabet
+                    {
                         // Bake katakana before switching so preedit doesn't revert
                         if self.input_mode == InputMode::Katakana {
                             self.bake_katakana();
@@ -330,6 +344,9 @@ impl InputMethodEngine {
         let text = if self.input_mode == InputMode::Katakana {
             // Katakana mode always commits katakana, ignoring live conversion
             Self::hiragana_to_katakana(&reading)
+        } else if self.input_mode == InputMode::HalfWidthKatakana {
+            // Half-width katakana mode always commits half-width katakana
+            karukan_engine::kana::hiragana_to_halfwidth_katakana(&reading)
         } else if !self.live.text.is_empty() {
             // Live conversion active: commit converted text
             self.live.text.clone()

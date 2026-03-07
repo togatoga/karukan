@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-karukan is a Linux Japanese Input Method system consisting of three Rust crates:
+karukan is a cross-platform Japanese Input Method system consisting of four Rust crates:
 
 - **karukan-engine**: Core library — romaji-to-hiragana conversion, neural kana-kanji conversion via llama.cpp, system dictionary, learning cache
 - **karukan-cli**: CLI tools and server — dictionary builder, Sudachi converter, dict viewer, AJIMEE-Bench, HTTP API server
 - **karukan-im**: fcitx5 IME addon using karukan-engine for Japanese input on Linux
+- **karukan-tsf**: Windows TSF (Text Services Framework) IME addon using karukan-engine for Japanese input on Windows
 
 ## Build and Development Commands
 
@@ -69,6 +70,18 @@ cmake --build build -j
 cmake --install build
 ```
 
+### karukan-tsf (Windows)
+
+```bash
+# Cross-compile from Linux (requires mingw-w64 toolchain)
+cargo build -p karukan-tsf --release --target x86_64-pc-windows-gnu
+
+# Native build on Windows (MSVC)
+# Set CMAKE_MSVC_RUNTIME_LIBRARY to align llama.cpp (CMake) with Rust's default static CRT
+set CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+cargo build -p karukan-tsf --release
+```
+
 ### Code Quality
 
 ```bash
@@ -124,6 +137,29 @@ cargo clippy --workspace  # Lint all crates
 - `config/settings.rs` — User settings (`~/.config/karukan-im/config.toml`)
 - `ffi.rs` — C FFI for fcitx5 C++ addon
 - `fcitx5-addon/src/karukan.cpp` — C++ fcitx5 wrapper
+
+### karukan-tsf (`karukan-tsf/src/`)
+
+- `lib.rs` — DLL entry point (COM DllGetClassObject / DllCanUnloadNow)
+- `globals.rs` — Global state (CLSID, profile GUID)
+- `engine_bridge.rs` — Bridge between TSF and karukan-im's InputMethodEngine
+- `keymap.rs` — Windows virtual key → karukan Keysym mapping
+- `registration.rs` — COM/TSF server registration
+- `candidate/` — Candidate window
+  - `mod.rs` — Candidate list management
+  - `window.rs` — Candidate window rendering (Direct2D/DirectWrite)
+- `tsf/` — Windows TSF COM implementations
+  - `mod.rs` — Module declarations
+  - `text_input_processor.rs` — ITfTextInputProcessorEx implementation
+  - `key_event_sink.rs` — ITfKeyEventSink (key input handling)
+  - `edit_session.rs` — ITfEditSession (preedit/commit text operations)
+  - `composition_sink.rs` — ITfCompositionSink
+  - `thread_mgr_sink.rs` — ITfThreadMgrEventSink
+  - `class_factory.rs` — IClassFactory for COM registration
+  - `display_attribute.rs` — ITfDisplayAttributeProvider (preedit styling)
+  - `lang_bar.rs` — Language bar item (input mode indicator)
+  - `compartment.rs` — TSF compartment utilities
+  - `context_reader.rs` — Surrounding text reader
 
 ## Key Design Patterns
 

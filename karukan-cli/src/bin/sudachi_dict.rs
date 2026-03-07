@@ -247,7 +247,11 @@ fn score_with_model(
 
     // Sort candidates by score within each entry
     for entry in &mut json_entries {
-        entry.candidates.sort_by(|a, b| a.score.total_cmp(&b.score).then_with(|| a.surface.cmp(&b.surface)));
+        entry.candidates.sort_by(|a, b| {
+            a.score
+                .total_cmp(&b.score)
+                .then_with(|| a.surface.cmp(&b.surface))
+        });
     }
 
     Ok(json_entries)

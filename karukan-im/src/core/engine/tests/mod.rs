@@ -12,6 +12,7 @@ mod katakana;
 mod live_conversion;
 mod mode_toggle;
 mod passthrough;
+mod skk_keybind;
 mod strategy;
 mod surrounding;
 

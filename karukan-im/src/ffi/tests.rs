@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::settings::KeybindingProfile;
 use input::*;
 use lifecycle::*;
 use query::*;
@@ -23,6 +24,14 @@ impl TestEngine {
     fn new() -> Self {
         let ptr = karukan_engine_new();
         assert!(!ptr.is_null());
+        Self(ptr)
+    }
+
+    fn new_skk() -> Self {
+        let ptr = karukan_engine_new();
+        assert!(!ptr.is_null());
+        let engine = unsafe { &mut *ptr };
+        engine.engine.set_keybinding_profile(KeybindingProfile::Skk);
         Self(ptr)
     }
 
@@ -411,30 +420,30 @@ fn test_surrounding_text_char_offset_middle() {
     );
 }
 
-// --- Shift+letter alphabet mode FFI tests ---
+// --- Shift+letter FFI tests ---
+// Shift switch to alphabet mode is disabled; Shift+A produces hiragana.
 
 #[test]
-fn test_ffi_shift_a_produces_uppercase_a() {
-    let e = TestEngine::new();
+fn test_ffi_shift_a_produces_hiragana() {
+    let e = TestEngine::new_skk();
 
     // Shift_L press
     e.press(XKB_KEY_SHIFT_L);
 
-    // 'a' press with ShiftMask (fcitx5 sends lowercase keysym + shift state)
+    // 'a' press with ShiftMask — Shift switch disabled, so hiragana is produced
     assert!(e.press_with(XKB_KEY_A, SHIFT_MASK));
 
-    // Preedit should be uppercase "A", not "あ"
     assert!(e.has_preedit());
     assert_eq!(
         e.preedit(),
-        "A",
-        "Shift+A should produce 'A' in preedit, not hiragana"
+        "あ",
+        "Shift+A should produce hiragana (Shift switch disabled)"
     );
 }
 
 #[test]
 fn test_ffi_shift_a_after_hiragana() {
-    let e = TestEngine::new();
+    let e = TestEngine::new_skk();
 
     // Type "あ"
     e.press(XKB_KEY_A);
@@ -443,12 +452,12 @@ fn test_ffi_shift_a_after_hiragana() {
     // Shift_L press
     e.press(XKB_KEY_SHIFT_L);
 
-    // 'a' with ShiftMask → should enter alphabet mode and add 'A'
+    // 'a' with ShiftMask → Shift switch disabled, stays in hiragana
     e.press_with(XKB_KEY_A, SHIFT_MASK);
     assert_eq!(
         e.preedit(),
-        "あA",
-        "Shift+A after hiragana should append 'A'"
+        "ああ",
+        "Shift+A after hiragana should append hiragana (Shift switch disabled)"
     );
 }
 
@@ -456,7 +465,7 @@ fn test_ffi_shift_a_after_hiragana() {
 fn test_ffi_uppercase_keysym_without_shift_flag() {
     // fcitx5 may send uppercase keysym 'A' (0x41) without the shift flag
     // when Shift is consumed during keysym resolution.
-    let e = TestEngine::new();
+    let e = TestEngine::new_skk();
 
     // Send uppercase 'A' keysym (0x41) without shift modifier
     const XKB_KEY_A_UPPER: u32 = 0x41;
@@ -465,8 +474,8 @@ fn test_ffi_uppercase_keysym_without_shift_flag() {
     assert!(e.has_preedit());
     assert_eq!(
         e.preedit(),
-        "A",
-        "Uppercase keysym without shift flag should produce 'A', not hiragana"
+        "あ",
+        "Uppercase keysym without shift flag should produce hiragana (Shift switch disabled)"
     );
 }
 

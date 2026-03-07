@@ -145,6 +145,22 @@ I2026-02-24 22:57:54.252982 addonmanager.cpp:195] Loaded addon karukan
 
 例: `わたしはLinuxが` → 変換 → `私はLinuxが`
 
+### SKK風キーバインド
+
+SKK風のモード切り替えキーバインドを使用できます。設定ファイルで有効にしてください:
+
+```toml
+[keybinding]
+profile = "skk"
+```
+
+| キー | 動作 |
+|------|------|
+| Ctrl+j | ひらがなモードに切り替え（どのモードからでも） |
+| l | アルファベットモードに切り替え（かなモード時） |
+| q | ひらがな ↔ カタカナをトグル（かなモード時） |
+| Ctrl+q | 半角カタカナモードに切り替え |
+
 ## Configuration
 
 設定ファイル: `~/.config/karukan-im/config.toml`
@@ -166,6 +182,9 @@ dict_path = "/path/to/dict.bin" # システム辞書パス（省略時: ~/.local
 [learning]
 enabled = true                 # 変換学習の有効/無効
 max_entries = 10000            # 学習エントリの最大数
+
+[keybinding]
+profile = "default"            # キーバインドプロファイル（default / skk）
 ```
 
 ### Conversion Strategy

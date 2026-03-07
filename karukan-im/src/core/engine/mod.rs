@@ -9,6 +9,7 @@ mod display;
 mod init;
 mod input;
 mod input_buffer;
+mod keybind;
 mod mode;
 mod strategy;
 mod types;
@@ -27,7 +28,7 @@ use super::candidate::{Candidate, CandidateList};
 use super::keycode::{KeyEvent, Keysym};
 use super::preedit::{AttributeType, Preedit, PreeditAttribute, PreeditSegment};
 use super::state::InputState;
-use crate::config::settings::Settings;
+use crate::config::settings::{KeybindingProfile, Settings};
 
 /// Source of a conversion candidate
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +138,11 @@ impl InputMethodEngine {
         }
     }
 
+    /// Set the keybinding profile
+    pub fn set_keybinding_profile(&mut self, profile: KeybindingProfile) {
+        self.config.keybinding_profile = profile;
+    }
+
     /// Get last conversion time in milliseconds (inference only)
     pub fn last_conversion_ms(&self) -> u64 {
         self.metrics.conversion_ms
@@ -164,6 +170,11 @@ impl InputMethodEngine {
             (Some(m), None) => m.to_string(),
             _ => "unknown".to_string(),
         }
+    }
+
+    /// Get the current input mode (Hiragana, Katakana, Alphabet, etc.)
+    pub fn input_mode(&self) -> InputMode {
+        self.input_mode
     }
 
     /// Get the current state
@@ -229,6 +240,15 @@ impl InputMethodEngine {
     fn bake_katakana(&mut self) {
         if !self.input_buf.text.is_empty() {
             self.input_buf.text = karukan_engine::kana::hiragana_to_katakana(&self.input_buf.text);
+        }
+    }
+
+    /// Convert hiragana in input_buf to half-width katakana permanently.
+    /// Called when leaving HalfWidthKatakana mode so the preedit doesn't revert.
+    fn bake_halfwidth_katakana(&mut self) {
+        if !self.input_buf.text.is_empty() {
+            self.input_buf.text =
+                karukan_engine::kana::hiragana_to_halfwidth_katakana(&self.input_buf.text);
         }
     }
 
@@ -320,6 +340,9 @@ impl InputMethodEngine {
             if self.input_mode == InputMode::Katakana {
                 self.bake_katakana();
             }
+            if self.input_mode == InputMode::HalfWidthKatakana {
+                self.bake_halfwidth_katakana();
+            }
             self.input_mode = InputMode::Hiragana;
             self.flush_romaji_to_composed();
             let aux = self.format_aux_composing();
@@ -367,6 +390,19 @@ impl InputMethodEngine {
             && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
         {
             return self.toggle_live_conversion();
+        }
+
+        // SKK keybinding pre-processing
+        if let Some(result) = self.handle_skk_keybind(key) {
+            return result;
+        }
+
+        // SKK alphabet mode: pass all keys through to the application
+        // (Ctrl+j is already handled above by handle_skk_keybind)
+        if self.config.keybinding_profile == KeybindingProfile::Skk
+            && self.input_mode == InputMode::Alphabet
+        {
+            return EngineResult::not_consumed();
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)

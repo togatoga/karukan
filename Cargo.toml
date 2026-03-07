@@ -1,5 +1,5 @@
 [workspace]
-members = ["karukan-engine", "karukan-cli", "karukan-im"]
+members = ["karukan-engine", "karukan-cli", "karukan-im", "karukan-tsf"]
 resolver = "3"
 
 [workspace.package]

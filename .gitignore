@@ -33,3 +33,7 @@ build
 data/
 *.json
 *.cache
+
+# Arch Linux packages
+*.pkg.tar.zst
+pkg/
