@@ -30,6 +30,7 @@ jobs:
     runs-on: windows-latest
     env:
       CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -44,6 +45,7 @@ jobs:
     runs-on: windows-latest
     env:
       CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -83,6 +85,7 @@ jobs:
     runs-on: windows-latest
     env:
       CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      LLAMA_STATIC_CRT: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
