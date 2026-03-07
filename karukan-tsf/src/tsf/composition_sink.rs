@@ -27,6 +27,11 @@ impl ITfCompositionSink_Impl for KarukanTextService_Impl {
         // Clear the composition reference
         inner.composition = None;
 
+        // Hide candidate window
+        if let Some(ref cw) = inner.candidate_window {
+            cw.borrow_mut().hide();
+        }
+
         Ok(())
     }
 }

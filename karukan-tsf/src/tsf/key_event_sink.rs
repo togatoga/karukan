@@ -1,9 +1,16 @@
 //! ITfKeyEventSink implementation — handles keyboard input for TSF.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::TextServices::*;
 use windows::core::*;
 
+use karukan_im::EngineAction;
+
+use crate::globals::GUID_PRESERVED_KEY_ONOFF;
+use crate::tsf::edit_session::ActionEditSession;
 use crate::tsf::text_input_processor::KarukanTextService;
 
 impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
@@ -23,14 +30,23 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
                 return Err(E_POINTER.into());
             }
 
+            // If IME is disabled, don't consume any keys
+            let inner = self.inner.borrow();
+            if !inner.enabled {
+                *pfeaten = FALSE;
+                return Ok(());
+            }
+            drop(inner);
+
             let vk = wparam.0 as u32;
             let (shift, control, alt, win) = get_modifier_state();
             let unicode_char = vk_to_unicode(vk, shift);
 
             let mut inner = self.inner.borrow_mut();
-            let result = inner.engine.process_key(
-                vk, unicode_char, shift, control, alt, win, true,
-            );
+            let result =
+                inner
+                    .engine
+                    .process_key(vk, unicode_char, shift, control, alt, win, true);
 
             let consumed = result.consumed;
             inner.cached_result = Some(result);
@@ -59,7 +75,6 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
 
             if let Some(result) = inner.cached_result.take() {
                 if result.consumed && !result.actions.is_empty() {
-                    // Apply actions via EditSession
                     if let Some(context) = pic {
                         drop(inner); // Release borrow before edit session
                         apply_engine_actions(self, context, &result.actions)?;
@@ -113,14 +128,37 @@ impl ITfKeyEventSink_Impl for KarukanTextService_Impl {
     fn OnPreservedKey(
         &self,
         _pic: Option<&ITfContext>,
-        _rguid: *const GUID,
+        rguid: *const GUID,
         pfeaten: *mut BOOL,
     ) -> Result<()> {
         unsafe {
-            if !pfeaten.is_null() {
-                // TODO: Handle IME toggle (Hankaku/Zenkaku key)
+            if pfeaten.is_null() {
+                return Err(E_POINTER.into());
+            }
+            if rguid.is_null() {
+                *pfeaten = FALSE;
+                return Ok(());
+            }
+
+            if *rguid == GUID_PRESERVED_KEY_ONOFF {
+                let mut inner = self.inner.borrow_mut();
+                inner.enabled = !inner.enabled;
+                if !inner.enabled {
+                    // Commit pending text and reset when turning IME off
+                    let _committed = inner.engine.commit();
+                    inner.engine.reset();
+                    inner.composition = None;
+                    // Hide candidate window
+                    if let Some(ref cw) = inner.candidate_window {
+                        cw.borrow_mut().hide();
+                    }
+                }
+                tracing::debug!("IME toggle: enabled={}", inner.enabled);
+                *pfeaten = TRUE;
+            } else {
                 *pfeaten = FALSE;
             }
+
             Ok(())
         }
     }
@@ -170,18 +208,76 @@ fn vk_to_unicode(_vk: u32, _shift: bool) -> Option<char> {
     None
 }
 
-/// Apply engine actions to the TSF context via an EditSession.
+/// Apply engine actions to the TSF context via a synchronous EditSession.
 ///
-/// This is a placeholder — the actual implementation will be in edit_session.rs.
+/// Creates an `ActionEditSession`, requests a synchronous edit session from TSF,
+/// and updates the composition reference in the service after completion.
+#[cfg(target_os = "windows")]
+fn apply_engine_actions(
+    service: &KarukanTextService_Impl,
+    context: &ITfContext,
+    actions: &[EngineAction],
+) -> Result<()> {
+    // Extract needed values from inner state
+    let (composition_snapshot, client_id, candidate_window, atom_input, atom_converted) = {
+        let inner = service.inner.borrow();
+        (
+            inner.composition.clone(),
+            inner.client_id,
+            inner.candidate_window.clone(),
+            inner.display_attr_atom_input,
+            inner.display_attr_atom_converted,
+        )
+    };
+
+    // Shared cell for composition lifecycle tracking across the edit session
+    let composition_cell = Rc::new(RefCell::new(composition_snapshot));
+
+    // Get the ITfCompositionSink from our service (for StartComposition)
+    let composition_sink: ITfCompositionSink = service.cast()?;
+
+    let session = ActionEditSession::new(
+        context.clone(),
+        actions.to_vec(),
+        composition_cell.clone(),
+        client_id,
+        composition_sink,
+        candidate_window,
+        atom_input,
+        atom_converted,
+    );
+
+    // Request synchronous read-write edit session
+    let edit_session: ITfEditSession = session.into();
+    let mut hr = HRESULT::default();
+    unsafe {
+        context.RequestEditSession(
+            client_id,
+            &edit_session,
+            TF_ES_SYNC | TF_ES_READWRITE,
+            &mut hr,
+        )?;
+        // Check the edit session result
+        if hr.is_err() {
+            tracing::warn!("Edit session failed: {:?}", hr);
+        }
+    }
+
+    // Update composition in inner state after the edit session completes
+    let mut inner = service.inner.borrow_mut();
+    inner.composition = composition_cell.borrow().clone();
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
 fn apply_engine_actions(
     _service: &KarukanTextService_Impl,
     _context: &ITfContext,
-    actions: &[karukan_im::EngineAction],
+    actions: &[EngineAction],
 ) -> Result<()> {
-    // TODO: Implement EditSession-based action application
-    // For now, log the actions for debugging
     for action in actions {
-        tracing::debug!("TSF action: {:?}", action);
+        tracing::debug!("TSF action (stub): {:?}", action);
     }
     Ok(())
 }

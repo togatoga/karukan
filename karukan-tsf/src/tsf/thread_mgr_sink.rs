@@ -28,10 +28,22 @@ impl ITfThreadMgrEventSink_Impl for KarukanTextService_Impl {
         _pdimfocus: Option<&ITfDocumentMgr>,
         _pdimprevfocus: Option<&ITfDocumentMgr>,
     ) -> Result<()> {
-        // Reset engine state when focus changes to avoid stale state
         let mut inner = self.inner.borrow_mut();
+
+        // Reset engine state when focus changes to avoid stale state
         inner.engine.reset();
         inner.cached_result = None;
+        inner.composition = None;
+
+        // Clear surrounding context (actual text reading requires an edit session;
+        // for now we just clear it to avoid stale context from the previous document)
+        inner.engine.set_surrounding_context("", "");
+
+        // Hide candidate window
+        if let Some(ref cw) = inner.candidate_window {
+            cw.borrow_mut().hide();
+        }
+
         Ok(())
     }
 

@@ -39,6 +39,14 @@ pub const GUID_DISPLAY_ATTRIBUTE_CONVERTED: GUID = GUID::from_u128(
     0xDAB6_E4F5_7FBC_4051_AD4E_9A6B_8CAF_BD23,
 );
 
+/// GUID for the PreservedKey ON/OFF toggle (Hankaku/Zenkaku).
+///
+/// Generated UUID: {EBC7F5A6-8D1E-4F51-BE3D-AF6C9DAE0B34}
+#[cfg(target_os = "windows")]
+pub const GUID_PRESERVED_KEY_ONOFF: GUID = GUID::from_u128(
+    0xEBC7_F5A6_8D1E_4F51_BE3D_AF6C_9DAE_0B34,
+);
+
 /// Japanese language ID (LANGID 0x0411 = Japanese)
 pub const LANGID_JAPANESE: u16 = 0x0411;
 
