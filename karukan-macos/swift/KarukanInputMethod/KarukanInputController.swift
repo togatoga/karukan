@@ -153,8 +153,18 @@ class KarukanInputController: IMKInputController {
 
                 // Get cursor position for candidate window placement
                 var lineRect = NSRect.zero
-                let cursorIndex = client.selectedRange().location
-                client.attributes(forCharacterIndex: cursorIndex, lineHeightRectangle: &lineRect)
+                var charIndex = client.markedRange().location
+                if charIndex == NSNotFound {
+                    charIndex = client.selectedRange().location
+                }
+                if charIndex != NSNotFound {
+                    client.attributes(forCharacterIndex: charIndex, lineHeightRectangle: &lineRect)
+                }
+                // Fallback to mouse location if lineRect is invalid
+                if lineRect == NSRect.zero {
+                    let mouseLocation = NSEvent.mouseLocation
+                    lineRect = NSRect(x: mouseLocation.x, y: mouseLocation.y, width: 0, height: 20)
+                }
 
                 candidateWindow?.show(
                     candidates: candidates,

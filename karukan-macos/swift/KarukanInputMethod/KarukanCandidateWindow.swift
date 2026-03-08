@@ -32,10 +32,19 @@ class KarukanCandidateWindow {
         panel.contentView = contentView
 
         // Position the window below the cursor
-        let origin = NSPoint(
+        var origin = NSPoint(
             x: nearRect.origin.x,
             y: nearRect.origin.y - contentView.frame.height
         )
+
+        // Clamp to screen bounds
+        if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            origin.x = min(origin.x, screenFrame.maxX - contentView.frame.width)
+            origin.x = max(origin.x, screenFrame.minX)
+            origin.y = max(origin.y, screenFrame.minY)
+        }
+
         panel.setFrameOrigin(origin)
         panel.setContentSize(contentView.frame.size)
         panel.orderFront(nil)
