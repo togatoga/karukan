@@ -63,6 +63,7 @@ mkdir -p "$APP_DIR/Contents/Resources"
 
 cp "$BUILD_DIR/KarukanInputMethod" "$APP_DIR/Contents/MacOS/"
 cp "$SWIFT_DIR/Info.plist" "$APP_DIR/Contents/"
+echo -n "APPL????" > "$APP_DIR/Contents/PkgInfo"
 
 # Ad-hoc code sign
 echo "==> Code signing (ad-hoc)..."

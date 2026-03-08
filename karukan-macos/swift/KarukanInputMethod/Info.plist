@@ -18,13 +18,43 @@
     <string>KarukanInputMethod</string>
     <key>LSBackgroundOnly</key>
     <true/>
+    <key>TISInputSourceID</key>
+    <string>com.karukan.inputmethod.Karukan</string>
+    <key>TISIntendedLanguage</key>
+    <string>ja</string>
     <key>InputMethodConnectionName</key>
     <string>Karukan_Connection</string>
     <key>InputMethodServerControllerClass</key>
     <string>KarukanInputController</string>
+    <key>ComponentInputModeDict</key>
+    <dict>
+        <key>tsInputModeListKey</key>
+        <dict>
+            <key>com.karukan.inputmethod.Karukan.Japanese</key>
+            <dict>
+                <key>TISInputSourceID</key>
+                <string>com.karukan.inputmethod.Karukan.Japanese</string>
+                <key>TISIntendedLanguage</key>
+                <string>ja</string>
+                <key>tsInputModeDefaultStateKey</key>
+                <true/>
+                <key>tsInputModeIsVisibleKey</key>
+                <true/>
+                <key>tsInputModePrimaryInScriptKey</key>
+                <true/>
+                <key>tsInputModeScriptKey</key>
+                <string>smJapanese</string>
+            </dict>
+        </dict>
+        <key>tsVisibleInputModeOrderedArrayKey</key>
+        <array>
+            <string>com.karukan.inputmethod.Karukan.Japanese</string>
+        </array>
+    </dict>
     <key>tsInputMethodCharacterRepertoireKey</key>
     <array>
-        <string>Jpan</string>
+        <string>Hira</string>
+        <string>Kana</string>
     </array>
     <key>tsInputMethodIconFileKey</key>
     <string>AppIcon</string>
