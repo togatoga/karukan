@@ -51,12 +51,11 @@ jobs:
       - name: Build release DLL
         run: cargo build -p karukan-tsf --release
       - name: Install NSIS
-        run: choco install nsis -y
-        shell: cmd
+        uses: negrutiu/nsis-install@v2
       - name: Build NSIS installer
         run: |
           copy target\release\karukan_tsf.dll karukan-tsf\installer\
-          "%ProgramFiles(x86)%\NSIS\makensis.exe" /DVERSION=${{ github.ref_name }} karukan-tsf\installer\karukan-installer.nsi
+          makensis /DVERSION=${{ github.ref_name }} karukan-tsf\installer\karukan-installer.nsi
         shell: cmd
       - uses: actions/upload-artifact@v4
         with:
