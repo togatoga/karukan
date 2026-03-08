@@ -66,7 +66,7 @@ cp "$SWIFT_DIR/Info.plist" "$APP_DIR/Contents/"
 
 # Ad-hoc code sign
 echo "==> Code signing (ad-hoc)..."
-codesign --force --sign - "$APP_DIR"
+codesign --force --sign - --entitlements "$SWIFT_DIR/Entitlements.plist" "$APP_DIR"
 
 echo "==> Build complete: $APP_DIR"
 echo "    Run scripts/install.sh to install."

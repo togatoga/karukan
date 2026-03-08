@@ -89,7 +89,7 @@ jobs:
           bash scripts/build.sh arm64
       - name: Verify .app bundle
         run: |
-          test -d karukan-macos/build/Karukan.app/Contents/MacOS/KarukanInputMethod
+          test -f karukan-macos/build/Karukan.app/Contents/MacOS/KarukanInputMethod
           test -f karukan-macos/build/Karukan.app/Contents/Info.plist
           codesign --verify karukan-macos/build/Karukan.app
       - name: Package .app for upload
