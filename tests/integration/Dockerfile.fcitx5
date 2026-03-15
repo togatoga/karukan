@@ -1,0 +1,58 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    # Rust build dependencies
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libxkbcommon-dev \
+    clang \
+    libclang-dev \
+    llvm-dev \
+    # fcitx5 development dependencies
+    fcitx5 \
+    fcitx5-modules-dev \
+    libfcitx5core-dev \
+    libfcitx5config-dev \
+    libfcitx5utils-dev \
+    extra-cmake-modules \
+    cmake \
+    # D-Bus (required by fcitx5)
+    dbus \
+    dbus-x11 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust via rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Copy source code
+WORKDIR /karukan
+COPY . .
+
+# Build karukan-im (Rust shared library)
+RUN cargo build --release -p karukan-im
+
+# Build and install fcitx5 addon (system install)
+WORKDIR /karukan/karukan-im/fcitx5-addon
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr \
+    && cmake --build build -j"$(nproc)" \
+    && cmake --install build
+
+# Configure fcitx5 profile to include karukan input method
+# This is required because karukan addon has OnDemand=True,
+# so fcitx5 only loads it when an input method group references it
+RUN mkdir -p /root/.config/fcitx5 && \
+    printf '[Groups/0]\nName=Default\nDefault Layout=us\nDefaultIM=karukan\n\n[Groups/0/Items/0]\nName=keyboard-us\nLayout=\n\n[Groups/0/Items/1]\nName=karukan\nLayout=\n\n[GroupOrder]\n0=Default\n' \
+    > /root/.config/fcitx5/profile
+
+# Copy test script
+COPY tests/integration/test_fcitx5_addon.sh /test_fcitx5_addon.sh
+RUN chmod +x /test_fcitx5_addon.sh
+
+WORKDIR /karukan
+CMD ["/test_fcitx5_addon.sh"]

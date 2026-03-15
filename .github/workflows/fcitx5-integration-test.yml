@@ -1,0 +1,35 @@
+name: fcitx5 Integration Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tests/integration/**'
+      - '.github/workflows/fcitx5-integration-test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tests/integration/**'
+      - '.github/workflows/fcitx5-integration-test.yml'
+  workflow_dispatch:
+
+jobs:
+  fcitx5-integration:
+    name: fcitx5 Addon Integration Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -f tests/integration/Dockerfile.fcitx5 -t karukan-fcitx5-test .
+
+      - name: Run integration tests
+        run: docker run --rm karukan-fcitx5-test
