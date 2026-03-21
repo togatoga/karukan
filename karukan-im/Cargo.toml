@@ -13,7 +13,7 @@ categories = ["text-processing", "internationalization"]
 [lib]
 name = "karukan_im"
 path = "src/lib.rs"
-crate-type = ["lib", "cdylib"]  # Build both rlib and shared library
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 # Core engine

@@ -6,6 +6,8 @@
 pub mod config;
 pub mod core;
 pub mod ffi;
+#[cfg(target_os = "macos")]
+pub mod ffi_mac;
 
 pub use core::engine::{EngineAction, EngineResult, InputMethodEngine};
 pub use core::keycode::{KeyEvent, KeyModifiers, Keysym};
