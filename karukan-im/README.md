@@ -115,6 +115,25 @@ cp -R karukan-mac-app/Karukan.app ~/Library/Input\ Methods/
 > [!WARNING]
 > macOS 版は現在開発中です。ローマ字→ひらがな変換（preedit表示）まで動作します。かな漢字変換・候補選択などの機能は今後のリリースで対応予定です。
 
+#### ログの確認
+
+macOS は IME プロセスの NSLog/os_log をフィルタするため、ログはファイルに出力されます。
+
+```bash
+# リアルタイムでログを確認
+tail -f ~/Library/Logs/Karukan.log
+
+# ログをクリア
+> ~/Library/Logs/Karukan.log
+```
+
+IME プロセスの再起動：
+
+```bash
+killall Karukan
+# macOS が自動的に再起動します
+```
+
 ![Available Input Methodで「karukan」を検索](images/fcitx5-search-karukan.png)
 
 ![Karukanを追加した状態](images/fcitx5-karukan-added.png)

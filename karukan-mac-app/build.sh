@@ -48,8 +48,22 @@ echo ""
 echo "=== Build complete ==="
 echo "App bundle: $APP_BUNDLE"
 echo ""
-echo "To install:"
-echo "  cp -R \"$APP_BUNDLE\" ~/Library/Input\\ Methods/"
-echo ""
-echo "Then log out and log back in (or run: killall SystemUIServer)"
-echo "Add Karukan in System Settings > Keyboard > Input Sources > Japanese"
+
+# Install if requested
+INSTALL_DIR="$HOME/Library/Input Methods"
+if [[ "${1:-}" == "--install" ]]; then
+    echo "Installing to $INSTALL_DIR ..."
+    killall Karukan 2>/dev/null || true
+    sleep 1
+    rm -rf "$INSTALL_DIR/$APP_NAME.app"
+    cp -R "$APP_BUNDLE" "$INSTALL_DIR/"
+    echo "  -> Installed"
+    echo ""
+    echo "Log out and log back in, then add Karukan in System Settings > Keyboard > Input Sources > Japanese"
+else
+    echo "To install:"
+    echo "  $0 --install"
+    echo ""
+    echo "Or manually:"
+    echo "  killall Karukan; rm -rf \"$INSTALL_DIR/$APP_NAME.app\" && cp -R \"$APP_BUNDLE\" \"$INSTALL_DIR/\""
+fi
