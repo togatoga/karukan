@@ -25,6 +25,9 @@ target/
 *.swp
 *.swo
 
+# macOS app bundle (build artifact)
+karukan-mac-app/Karukan.app/
+
 # Claude Code
 .claude/
 
