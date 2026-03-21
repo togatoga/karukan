@@ -21,14 +21,37 @@ static INIT_LOGGING: Once = Once::new();
 
 fn init_logging() {
     INIT_LOGGING.call_once(|| {
-        // Use try_init to avoid panicking if another module already initialized logging
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-            )
-            .with_writer(std::io::stderr)
-            .try_init();
+        // macOS IME processes don't have stderr visible, so log to a file
+        let log_path = format!(
+            "{}/Library/Logs/Karukan-rust.log",
+            std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
+        );
+        let log_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path);
+
+        match log_file {
+            Ok(file) => {
+                let _ = tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+                    )
+                    .with_writer(std::sync::Mutex::new(file))
+                    .with_ansi(false)
+                    .try_init();
+            }
+            Err(_) => {
+                let _ = tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+                    )
+                    .with_writer(std::io::stderr)
+                    .try_init();
+            }
+        }
     });
 }
 
