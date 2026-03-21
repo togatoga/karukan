@@ -85,6 +85,36 @@ I2026-02-24 22:57:54.252982 addonmanager.cpp:195] Loaded addon karukan
 
 インストール後、fcitx5-configtool（Fcitx Configuration）を開き、右側の「Available Input Method」で「karukan」を検索して「Karukan」を左側に追加してください。
 
+### macOS (InputMethodKit)
+
+#### Prerequisites
+
+- Rust 1.92+
+- Xcode Command Line Tools (`xcode-select --install`)
+
+#### Build & Install
+
+```bash
+cd karukan-mac-app
+./build.sh
+```
+
+ビルドが完了すると `karukan-mac-app/Karukan.app` が生成されます。`~/Library/Input Methods/` にコピーしてインストールします:
+
+```bash
+cp -R karukan-mac-app/Karukan.app ~/Library/Input\ Methods/
+```
+
+インストール後、ログアウト→ログインして、**システム設定 > キーボード > 入力ソース > 日本語** から「Karukan」を追加してください。
+
+> [!NOTE]
+> macOS では IME にコード署名が必要です。`build.sh` では ad-hoc 署名（`codesign --force --sign -`）を使用しています。
+>
+> 初回起動時に HuggingFace からモデル（約100MB）をダウンロードするため、最初の変換開始まで時間がかかります。
+
+> [!WARNING]
+> macOS 版は現在開発中です。ローマ字→ひらがな変換（preedit表示）まで動作します。かな漢字変換・候補選択などの機能は今後のリリースで対応予定です。
+
 ![Available Input Methodで「karukan」を検索](images/fcitx5-search-karukan.png)
 
 ![Karukanを追加した状態](images/fcitx5-karukan-added.png)
