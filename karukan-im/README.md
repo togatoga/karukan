@@ -10,13 +10,14 @@ Linux向け日本語IME。fcitx5上で動作し、GPT-2ベースのモデルで�
 - Surrounding Textによる文脈を考慮した変換
 - システム辞書・ユーザー辞書による候補補完
 
-> **Note**: モデル推論だけでは語彙が限られるため、システム辞書の併用を強く推奨します。システム辞書はIMEに同梱されていないため、別途インストールが必要です。詳しくは [Dictionary](#dictionary) を参照してください。
+> [!NOTE]
+> モデル推論だけでは語彙が限られるため、システム辞書の併用を強く推奨します。システム辞書はIMEに同梱されていないため、別途インストールが必要です。詳しくは [Dictionary](#dictionary) を参照してください。
 
 ## Install
 
 ### Prerequisites
 
-[Rust](https://www.rust-lang.org/tools/install)
+- [Rust](https://www.rust-lang.org/tools/install)
 
 ```bash
 sudo apt install fcitx5 fcitx5-modules-dev libfcitx5core-dev \
@@ -259,5 +260,6 @@ cp dict.bin ~/.local/share/karukan-im/
 
 Surrounding Textはfcitx5のAPI経由で提供されますが、**多くのLinuxアプリケーションでは未対応です**（参考: [csslayer's blog](https://www.csslayer.info/wordpress/fcitx-dev/why-surrounding-text-is-the-worst-feature-in-the-linux-input-method-world/)）。
 
-> **Note**: Surrounding Text周りの挙動は現在調査中です。正しく動作しない場合があります。
+> [!NOTE]
+> Surrounding Text周りの挙動は現在調査中です。正しく動作しない場合があります。
 
