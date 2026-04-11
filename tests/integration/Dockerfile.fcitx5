@@ -34,10 +34,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /karukan
 COPY . .
 
-# Build karukan-im (Rust shared library)
-RUN cargo build --release -p karukan-im
-
 # Build and install fcitx5 addon (system install)
+# Note: CMake's karukan_rust_lib target runs `cargo build --release -p karukan-im`
 WORKDIR /karukan/karukan-im/fcitx5-addon
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr \
     && cmake --build build -j"$(nproc)" \
