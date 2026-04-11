@@ -56,18 +56,19 @@ cmake --build build -j
 cmake --install build
 ```
 
-ローカルインストールの場合、fcitx5 がアドオンを見つけられるように `FCITX_ADDON_DIRS` を設定する必要があります:
+ローカルインストールの場合、fcitx5 がアドオンを見つけられるように `FCITX_ADDON_DIRS` を設定する必要があります。fcitx5 はログインセッション開始時に起動されるため、シェルプロファイルではなく `~/.config/environment.d/` に設定してください:
 
 ```bash
-export FCITX_ADDON_DIRS=$HOME/.local/lib/fcitx5:$(pkg-config --variable=libdir Fcitx5Core)/fcitx5
-echo $FCITX_ADDON_DIRS
-# 以下のようにローカルとシステムの両方のパスが表示されればOK
-/home/togatoga/.local/lib/fcitx5:/usr/lib/x86_64-linux-gnu/fcitx5
-
+mkdir -p ~/.config/environment.d
+SYSTEM_FCITX5_DIR=$(pkg-config --variable=libdir Fcitx5Core)/fcitx5
+echo "FCITX_ADDON_DIRS=$HOME/.local/lib/fcitx5:$SYSTEM_FCITX5_DIR" \
+    > ~/.config/environment.d/fcitx5-karukan.conf
 ```
 
+> [!IMPORTANT]
+> `FCITX_ADDON_DIRS` にはローカルパスとシステムパスの両方を含める必要があります。システムパスが欠けると fcitx5 の標準アドオン（wayland、classicui 等）が見つからなくなります。
 
-上記をシェルのプロファイル（`~/.bashrc`、`~/.zshrc` 等）に追加してください。
+設定後、ログアウトして再ログインしてください。再ログイン後、fcitx5 のログに `Loaded addon karukan` が表示されることを確認してください:
 
 ```bash
 fcitx5 -r -d
