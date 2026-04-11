@@ -4,15 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
-    # Rust build dependencies
+    # Rust installer
     curl \
-    build-essential \
-    pkg-config \
-    libssl-dev \
-    libxkbcommon-dev \
-    clang \
-    libclang-dev \
-    llvm-dev \
     # fcitx5 development dependencies
     fcitx5 \
     fcitx5-modules-dev \
@@ -21,6 +14,18 @@ RUN apt-get update && apt-get install -y \
     libfcitx5utils-dev \
     extra-cmake-modules \
     cmake \
+    # C/C++ build tools
+    make \
+    gcc \
+    g++ \
+    pkg-config \
+    # bindgen FFI binding generation
+    clang \
+    libclang-dev \
+    # HTTPS (model download etc.)
+    libssl-dev \
+    # Keyboard handling
+    libxkbcommon-dev \
     # D-Bus (required by fcitx5)
     dbus \
     dbus-x11 \
