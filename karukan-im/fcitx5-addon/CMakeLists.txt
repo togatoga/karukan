@@ -22,24 +22,32 @@ include(ECMUninstallTarget)
 # Use fcitx5 compiler settings
 include("${FCITX_INSTALL_CMAKECONFIG_DIR}/Fcitx5Utils/Fcitx5CompilerSettings.cmake")
 
-# Path to the Rust library
-set(KARUKAN_RUST_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../target/release/libkarukan_im.so")
-set(KARUKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+# Path to the Rust library (overridable via -D for Flatpak builds)
+if(NOT DEFINED KARUKAN_RUST_LIB)
+    set(KARUKAN_RUST_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../target/release/libkarukan_im.so")
+endif()
+if(NOT DEFINED KARUKAN_INCLUDE_DIR)
+    set(KARUKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+endif()
 
-# Build Rust library as a custom target
-find_program(CARGO cargo REQUIRED)
-add_custom_target(karukan_rust_lib ALL
-    COMMAND ${CARGO} build --release -p karukan-im
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-    COMMENT "Building karukan-im Rust library"
-    BYPRODUCTS "${KARUKAN_RUST_LIB}"
-)
+# Build Rust library as a custom target (skipped when KARUKAN_SKIP_CARGO is set)
+if(NOT KARUKAN_SKIP_CARGO)
+    find_program(CARGO cargo REQUIRED)
+    add_custom_target(karukan_rust_lib ALL
+        COMMAND ${CARGO} build --release -p karukan-im
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+        COMMENT "Building karukan-im Rust library"
+        BYPRODUCTS "${KARUKAN_RUST_LIB}"
+    )
+endif()
 
 # Add the addon
 add_library(karukan MODULE
     src/karukan.cpp
 )
-add_dependencies(karukan karukan_rust_lib)
+if(NOT KARUKAN_SKIP_CARGO)
+    add_dependencies(karukan karukan_rust_lib)
+endif()
 
 target_include_directories(karukan PRIVATE
     ${KARUKAN_INCLUDE_DIR}
