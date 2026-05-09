@@ -1,34 +1,10 @@
 use super::*;
 
 // --- Katakana Conversion Tests ---
-
-#[test]
-fn test_hiragana_to_katakana() {
-    assert_eq!(
-        InputMethodEngine::hiragana_to_katakana("あいうえお"),
-        "アイウエオ"
-    );
-    assert_eq!(
-        InputMethodEngine::hiragana_to_katakana("かきくけこ"),
-        "カキクケコ"
-    );
-    assert_eq!(
-        InputMethodEngine::hiragana_to_katakana("がぎぐげご"),
-        "ガギグゲゴ"
-    );
-    assert_eq!(
-        InputMethodEngine::hiragana_to_katakana("ぱぴぷぺぽ"),
-        "パピプペポ"
-    );
-    assert_eq!(InputMethodEngine::hiragana_to_katakana("っ"), "ッ");
-    assert_eq!(InputMethodEngine::hiragana_to_katakana("ゃゅょ"), "ャュョ");
-    // Mixed: non-hiragana characters should remain unchanged
-    assert_eq!(
-        InputMethodEngine::hiragana_to_katakana("あいabc"),
-        "アイabc"
-    );
-    assert_eq!(InputMethodEngine::hiragana_to_katakana("テスト"), "テスト"); // Already katakana
-}
+//
+// Pure hiragana→katakana mapping is covered by `karukan_engine::kana` tests;
+// the cases here exercise the IM-side state-machine integration (Ctrl+K
+// switches mode, baking, etc.).
 
 #[test]
 fn test_ctrl_k_converts_to_katakana() {

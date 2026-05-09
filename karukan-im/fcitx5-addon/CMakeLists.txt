@@ -47,6 +47,11 @@ target_include_directories(karukan PRIVATE
     ${XKBCommon_INCLUDE_DIRS}
 )
 
+# Expose fcitx5 version to C++ so we can guard newer API usage
+if(Fcitx5Core_VERSION VERSION_GREATER_EQUAL "5.1.9")
+    target_compile_definitions(karukan PRIVATE FCITX5_HAS_CANDIDATE_SET_COMMENT)
+endif()
+
 target_link_libraries(karukan
     Fcitx5::Core
     Fcitx5::Config

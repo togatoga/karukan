@@ -92,17 +92,21 @@ pub extern "C" fn karukan_engine_get_candidate(
         .unwrap_or(ptr::null())
 }
 
-/// Get a candidate annotation (comment) by index
-/// Returns a pointer to a null-terminated UTF-8 string, or null if index is out of range
+/// Get the per-candidate description (mozc-style right-side comment) by index.
+///
+/// Returns a `[…]`-wrapped UTF-8 string suitable for fcitx5 `setComment`,
+/// or an empty string when the candidate has no description. Source labels
+/// (`🤖 AI`, `📚 辞書`, ...) are surfaced via the aux text instead, not here.
+/// Returns null if the index is out of range.
 #[unsafe(no_mangle)]
-pub extern "C" fn karukan_engine_get_candidate_annotation(
+pub extern "C" fn karukan_engine_get_candidate_description(
     engine: *const KarukanEngine,
     index: c_uint,
 ) -> *const c_char {
     let engine = ffi_ref!(engine, ptr::null());
     engine
         .candidates
-        .annotations
+        .descriptions
         .get(index as usize)
         .map(|c| c.as_ptr())
         .unwrap_or(ptr::null())

@@ -1,14 +1,11 @@
 //! Composing input handling (Empty and Composing states)
 
-use karukan_engine::ConversionEvent;
-
 use super::*;
 
-/// Append candidates to `target`, skipping duplicates and updating indices.
+/// Append candidates to `target`, skipping duplicates by text.
 fn append_candidates_dedup(target: &mut Vec<Candidate>, source: Vec<Candidate>) {
-    for mut c in source {
+    for c in source {
         if !target.iter().any(|existing| existing.text == c.text) {
-            c.index = target.len();
             target.push(c);
         }
     }
@@ -38,12 +35,15 @@ impl InputMethodEngine {
             };
 
         let Some((candidates, reading)) = candidates else {
-            // No useful AI suggestion — still show learning + dictionary candidates
+            // No useful AI suggestion — still show learning + dictionary + rule-based
+            // rewriter variants. The rewriter path produces mozc-style symbol variants
+            // (e.g. `「` → `『`, `【`, ...) for symbol-only inputs where the model is skipped.
             self.live.text.clear();
             let preedit = self.set_composing_state();
             let reading = self.input_buf.text.clone();
             let mut all_candidates = self.lookup_learning_candidates(&reading);
             append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
+            append_candidates_dedup(&mut all_candidates, self.lookup_rewriter_variants(&reading));
             if all_candidates.is_empty() {
                 return EngineResult::consumed()
                     .with_action(EngineAction::UpdatePreedit(preedit))
@@ -148,19 +148,13 @@ impl InputMethodEngine {
             self.input_buf.insert(&ch.to_string());
         } else {
             let prev_output_len = 0;
-            let event = self.converters.romaji.push(ch);
+            let _event = self.converters.romaji.push(ch);
             let romaji_buffer = self.converters.romaji.buffer().to_string();
 
-            // Check for PassThrough FIRST: the converter adds PassThrough chars
-            // to its output, so we must check the event before checking output emptiness.
-            // Exception: digits should enter Composing so users can type "20世紀" etc.
-            if let ConversionEvent::PassThrough(c) = event
-                && !c.is_ascii_digit()
-            {
-                self.converters.romaji.reset();
-                return EngineResult::consumed().with_action(EngineAction::Commit(c.to_string()));
-            }
-            // For digits, fall through to enter Composing normally
+            // PassThrough chars (no romaji rule, e.g. `'`, `;`, `<`, `(`) used to
+            // auto-commit immediately, but that prevented users from composing
+            // sequences like `「」` or getting symbol variants. Treat them like
+            // digits — let them enter Composing and accumulate in the preedit.
 
             if self.converters.romaji.output().is_empty() && romaji_buffer.is_empty() {
                 return EngineResult::not_consumed();
@@ -269,21 +263,13 @@ impl InputMethodEngine {
         }
 
         let prev_output_len = self.converters.romaji.output().chars().count();
-        let event = self.converters.romaji.push(ch);
+        let _event = self.converters.romaji.push(ch);
         let curr_output_len = self.converters.romaji.output().chars().count();
-        let romaji_buffer = self.converters.romaji.buffer().to_string();
-
-        // Track whether composed_hiragana was empty before processing.
-        // Used to decide if PassThrough chars should auto-commit (standalone punctuation)
-        // or stay in preedit (punctuation after hiragana).
-        let composed_was_empty = self.input_buf.text.is_empty();
 
         // Consume ALL new converter output into composed_hiragana at cursor position.
-        // This must happen BEFORE PassThrough handling because the converter may
-        // recursively pass through multiple chars (e.g., "thx" → output="th", buffer="x",
-        // event=PassThrough('h')), and we need to capture all of them via delta detection.
-        // PassThrough chars are already included in the converter output, so we must NOT
-        // also insert them separately.
+        // The converter may recursively pass through multiple chars (e.g., "thx" →
+        // output="th", buffer="x"), so capture all of them via delta detection.
+        // PassThrough chars are already included in the converter output.
         if curr_output_len > prev_output_len {
             let new_chars: String = self
                 .converters
@@ -295,23 +281,9 @@ impl InputMethodEngine {
             self.input_buf.insert(&new_chars);
         }
 
-        // Handle pass-through: only auto-commit when there was no previous hiragana
-        // (standalone punctuation). If hiragana was already in the preedit, keep the
-        // passthrough chars in composed_hiragana (already inserted by delta detection).
-        // Exception: digits always stay in preedit to allow "20世紀" style input.
-        if let ConversionEvent::PassThrough(c) = event
-            && !c.is_ascii_digit()
-            && composed_was_empty
-            && romaji_buffer.is_empty()
-        {
-            let text = self.input_buf.text.clone();
-            self.input_buf.clear();
-            self.state = InputState::Empty;
-            return EngineResult::consumed()
-                .with_action(EngineAction::UpdatePreedit(Preedit::new()))
-                .with_action(EngineAction::HideAuxText)
-                .with_action(EngineAction::Commit(text));
-        }
+        // PassThrough chars no longer auto-commit. They accumulate in the preedit
+        // alongside hiragana, allowing users to compose `「」`, type `'word'`,
+        // and access symbol variants from the candidate list.
 
         if let Some(result) = self.try_reset_if_empty() {
             return result;
@@ -329,7 +301,7 @@ impl InputMethodEngine {
         let reading = self.input_buf.text.clone();
         let text = if self.input_mode == InputMode::Katakana {
             // Katakana mode always commits katakana, ignoring live conversion
-            Self::hiragana_to_katakana(&reading)
+            karukan_engine::hiragana_to_katakana(&reading)
         } else if !self.live.text.is_empty() {
             // Live conversion active: commit converted text
             self.live.text.clone()

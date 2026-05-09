@@ -2,26 +2,48 @@ use super::*;
 
 #[test]
 fn test_passthrough_no_double_counting() {
-    // Regression test: typing '<' twice should produce "<<", not "<<<".
-    // PassThrough chars are added to converter.output() AND returned as
-    // PassThrough events. Without proper handling, both paths insert the char.
+    // Regression test: typing '<' twice should produce "<<" in the preedit,
+    // not "<<<" or "<<<<". The converter adds PassThrough chars to output()
+    // AND returns them as PassThrough events; without proper handling, both
+    // paths would insert the char.
     let mut engine = InputMethodEngine::new();
 
-    // Type '<' (Shift+,) in empty state → should commit directly
-    let result = engine.process_key(&press('<'));
-    let has_commit = result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(text) if text == "<"));
-    assert!(has_commit, "First '<' should commit '<'");
+    // Type '<' from empty state → enters Composing with preedit "<"
+    engine.process_key(&press('<'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "<");
 
-    // Type '<' again in empty state → should commit directly again
-    let result = engine.process_key(&press('<'));
-    let has_commit = result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(text) if text == "<"));
-    assert!(has_commit, "Second '<' should commit '<'");
+    // Type '<' again → preedit becomes "<<", not "<<<"
+    engine.process_key(&press('<'));
+    assert_eq!(
+        engine.preedit().unwrap().text(),
+        "<<",
+        "Second '<' should produce '<<', not over-count chars"
+    );
+}
+
+#[test]
+fn test_apostrophe_starts_input_mode() {
+    // Regression for: typing `'` in empty state should enter Composing,
+    // not auto-commit. This lets users type `'word'` or get symbol variants.
+    let mut engine = InputMethodEngine::new();
+
+    let result = engine.process_key(&press('\''));
+    assert!(result.consumed);
+    assert!(
+        matches!(engine.state(), InputState::Composing { .. }),
+        "Apostrophe should enter Composing, not auto-commit"
+    );
+    assert_eq!(engine.preedit().unwrap().text(), "'");
+
+    // No Commit action should have fired.
+    assert!(
+        !result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(_))),
+        "First apostrophe should not commit"
+    );
 }
 
 #[test]

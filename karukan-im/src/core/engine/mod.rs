@@ -20,7 +20,9 @@ use input_buffer::InputBuffer;
 #[cfg(test)]
 mod tests;
 
-use karukan_engine::{Dictionary, KanaKanjiConverter, LearningCache, RomajiConverter};
+use karukan_engine::{
+    Dictionary, KanaKanjiConverter, LearningCache, RewriterChain, RomajiConverter,
+};
 use tracing::{debug, trace};
 
 use super::candidate::{Candidate, CandidateList};
@@ -38,8 +40,11 @@ enum CandidateSource {
     Learning,
     /// Model inference result
     Model,
-    /// System dictionary lookup
+    /// System dictionary lookup (also covers reading→symbol lookups via
+    /// mozc's symbol.tsv — they're treated as just another dictionary).
     Dictionary,
+    /// Rewriter-generated variant (half-width katakana, symbol)
+    Rewriter,
     /// Hiragana/katakana fallback
     Fallback,
 }
@@ -51,18 +56,48 @@ impl CandidateSource {
             CandidateSource::Learning => "\u{1F4DD} \u{5B66}\u{7FD2}", // 📝 学習
             CandidateSource::Model => "\u{1F916} AI",                  // 🤖 AI
             CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
+            CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
             CandidateSource::Fallback => "",
         }
     }
 }
 
-/// A conversion candidate with source annotation
+/// A conversion candidate tagged with its source and an optional description.
+///
+/// Built up internally during candidate construction; later mapped onto the
+/// public `Candidate` (where `source.label()` becomes `source_label` and this
+/// `description` becomes `description`).
 #[derive(Debug, Clone)]
 struct AnnotatedCandidate {
     text: String,
     source: CandidateSource,
     /// Override reading (e.g. from prefix_lookup where the full reading differs from input)
     reading: Option<String>,
+    /// Per-candidate description (e.g. `三点リーダ` for `…`,
+    /// `[全]英大文字` for `ＡＢＣ`). Surfaced as the mozc-style right-side
+    /// comment on the candidate; never contains a source label.
+    description: Option<String>,
+}
+
+impl AnnotatedCandidate {
+    fn new(text: impl Into<String>, source: CandidateSource) -> Self {
+        Self {
+            text: text.into(),
+            source,
+            reading: None,
+            description: None,
+        }
+    }
+
+    fn with_reading(mut self, reading: Option<String>) -> Self {
+        self.reading = reading;
+        self
+    }
+
+    fn with_description(mut self, description: Option<String>) -> Self {
+        self.description = description;
+        self
+    }
 }
 
 /// Resolve a model variant id from settings.
@@ -117,6 +152,7 @@ impl InputMethodEngine {
                 romaji: RomajiConverter::new(),
                 kanji: None,
                 light_kanji: None,
+                rewriters: RewriterChain::default_chain(),
             },
             surrounding_context: None,
             config: EngineConfig::default(),
@@ -228,7 +264,7 @@ impl InputMethodEngine {
     /// Called when leaving Katakana mode so the preedit doesn't revert.
     fn bake_katakana(&mut self) {
         if !self.input_buf.text.is_empty() {
-            self.input_buf.text = karukan_engine::kana::hiragana_to_katakana(&self.input_buf.text);
+            self.input_buf.text = karukan_engine::hiragana_to_katakana(&self.input_buf.text);
         }
     }
 

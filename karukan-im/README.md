@@ -239,6 +239,7 @@ cp dict.bin ~/.local/share/karukan-im/
 3. 🤖 モデル推論
 4. 📚 システム辞書（スコア順）
 5. ひらがな / カタカナ
+6. 🔄 Rewriter（半角カタカナ・英字全角半角・記号バリアント）
 
 ### Learning Cache
 

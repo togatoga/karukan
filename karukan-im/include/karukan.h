@@ -148,12 +148,15 @@ uint32_t karukan_engine_get_candidate_count(const KarukanEngine* engine);
 const char* karukan_engine_get_candidate(const KarukanEngine* engine, uint32_t index);
 
 /*
- * Get a candidate annotation (comment) by index.
- * Returns a pointer to a null-terminated UTF-8 string (e.g. "🤖", "📚"),
- * or NULL if index is out of range. Empty string means no annotation.
+ * Get the per-candidate description (mozc-style right-side comment) by index.
+ * Returns a "[…]"-wrapped UTF-8 string ready for fcitx5 setComment
+ * (e.g. "[三点リーダ]", "[全]英大文字"), or an empty string when the
+ * candidate has no description. Source labels ("🤖 AI", "📚 辞書", ...)
+ * are surfaced via the aux text instead.
+ * Returns NULL if index is out of range.
  * The pointer is valid until the next process_key call.
  */
-const char* karukan_engine_get_candidate_annotation(const KarukanEngine* engine, uint32_t index);
+const char* karukan_engine_get_candidate_description(const KarukanEngine* engine, uint32_t index);
 
 /*
  * Get the current candidate cursor position (selected index).

@@ -94,7 +94,7 @@ impl InputMethodEngine {
         num_candidates: usize,
     ) -> ConversionStrategy {
         let has_light_model = self.converters.light_kanji.is_some();
-        let katakana = karukan_engine::kana::hiragana_to_katakana(reading);
+        let katakana = karukan_engine::hiragana_to_katakana(reading);
 
         // Count tokens using main model's tokenizer
         let Some(converter) = &self.converters.kanji else {

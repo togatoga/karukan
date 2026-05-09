@@ -1,0 +1,13214 @@
+# Derived from Mozc symbol.tsv (https://github.com/google/mozc)
+# Copyright 2010-2018, Google Inc. Licensed under BSD 3-Clause.
+# See /THIRD_PARTY_LICENSES for the full license text.
+
+descriptions:
+  # Single-bracket forms (mozc keeps these under POS=括弧開/括弧閉 with
+  # ASCII/halfwidth-only readings, so they're filtered out of `entries`).
+  # Other curated overrides also live here. Anything in `entries` whose
+  # description matches mozc need NOT be repeated below.
+  〈: 始め山括弧
+  〉: 終わり山括弧
+  《: 始め二重山括弧
+  》: 終わり二重山括弧
+  「: 始めかぎ括弧
+  」: 終わりかぎ括弧
+  『: 始め二重かぎ括弧
+  』: 終わり二重かぎ括弧
+  【: 始めすみつき括弧
+  】: 終わりすみつき括弧
+  〔: 始め甲括弧
+  〕: 終わり甲括弧
+  〘: 始め二重甲括弧
+  〙: 終わり二重甲括弧
+  〚: 始め二重角括弧
+  〛: 終わり二重角括弧
+  （: 始め丸括弧
+  ）: 終わり丸括弧
+  ［: 始め角括弧
+  ］: 終わり角括弧
+  ｛: 始め波括弧
+  ｝: 終わり波括弧
+variants:
+- key: 「
+  chain:
+  - 『
+  - 【
+  - 〔
+  - （
+  - 〈
+  - 《
+  - ［
+  - ｛
+  - 〘
+  - 〚
+  - ｢
+- key: 『
+  chain:
+  - 「
+  - 【
+  - 〔
+  - （
+  - 〈
+  - 《
+  - ［
+  - ｛
+  - 〘
+  - 〚
+- key: 【
+  chain:
+  - 「
+  - 『
+  - 〔
+  - （
+  - 〈
+  - 《
+  - ［
+  - ｛
+  - 〘
+  - 〚
+- key: （
+  chain:
+  - 「
+  - 『
+  - 【
+  - 〔
+  - 〈
+  - 《
+  - ［
+  - ｛
+  - (
+  - 〘
+  - 〚
+- key: 〔
+  chain:
+  - 「
+  - 『
+  - 【
+  - （
+  - 〈
+  - 《
+  - ［
+  - ｛
+  - 〘
+  - 〚
+- key: 〈
+  chain:
+  - 「
+  - 『
+  - 【
+  - （
+  - 〔
+  - 《
+  - ［
+  - ｛
+  - 〘
+  - 〚
+- key: 《
+  chain:
+  - 「
+  - 『
+  - 【
+  - （
+  - 〔
+  - 〈
+  - ［
+  - ｛
+  - 〘
+  - 〚
+- key: ［
+  chain:
+  - 「
+  - 『
+  - 【
+  - （
+  - 〔
+  - 〈
+  - 《
+  - ｛
+  - '['
+  - 〘
+  - 〚
+- key: ｛
+  chain:
+  - 「
+  - 『
+  - 【
+  - （
+  - 〔
+  - 〈
+  - 《
+  - ［
+  - '{'
+  - 〘
+  - 〚
+- key: (
+  chain:
+  - 「
+  - 『
+  - 【
+  - （
+  - '['
+  - 〔
+  - '{'
+- key: '['
+  chain:
+  - 「
+  - 『
+  - 【
+  - ［
+  - (
+  - 〔
+  - '{'
+- key: '{'
+  chain:
+  - 「
+  - 『
+  - 【
+  - ｛
+  - (
+  - '['
+  - 〔
+- key: 」
+  chain:
+  - 』
+  - 】
+  - 〕
+  - ）
+  - 〉
+  - 》
+  - ］
+  - ｝
+  - 〙
+  - 〛
+  - ｣
+- key: 』
+  chain:
+  - 」
+  - 】
+  - 〕
+  - ）
+  - 〉
+  - 》
+  - ］
+  - ｝
+  - 〙
+  - 〛
+- key: 】
+  chain:
+  - 」
+  - 』
+  - 〕
+  - ）
+  - 〉
+  - 》
+  - ］
+  - ｝
+  - 〙
+  - 〛
+- key: ）
+  chain:
+  - 」
+  - 』
+  - 】
+  - 〕
+  - 〉
+  - 》
+  - ］
+  - ｝
+  - )
+  - 〙
+  - 〛
+- key: 〕
+  chain:
+  - 」
+  - 』
+  - 】
+  - ）
+  - 〉
+  - 》
+  - ］
+  - ｝
+  - 〙
+  - 〛
+- key: 〉
+  chain:
+  - 」
+  - 』
+  - 】
+  - ）
+  - 〕
+  - 》
+  - ］
+  - ｝
+  - 〙
+  - 〛
+- key: 》
+  chain:
+  - 」
+  - 』
+  - 】
+  - ）
+  - 〕
+  - 〉
+  - ］
+  - ｝
+  - 〙
+  - 〛
+- key: ］
+  chain:
+  - 」
+  - 』
+  - 】
+  - ）
+  - 〕
+  - 〉
+  - 》
+  - ｝
+  - ']'
+  - 〙
+  - 〛
+- key: ｝
+  chain:
+  - 」
+  - 』
+  - 】
+  - ）
+  - 〕
+  - 〉
+  - 》
+  - ］
+  - '}'
+  - 〙
+  - 〛
+- key: )
+  chain:
+  - 」
+  - 』
+  - 】
+  - ）
+  - ']'
+  - 〕
+  - '}'
+- key: ']'
+  chain:
+  - 」
+  - 』
+  - 】
+  - ］
+  - )
+  - 〕
+  - '}'
+- key: '}'
+  chain:
+  - 」
+  - 』
+  - 】
+  - ｝
+  - )
+  - ']'
+  - 〕
+- key: 「」
+  chain:
+  - 『』
+  - 【】
+  - 〔〕
+  - （）
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - ｢｣
+  - ()
+  - '[]'
+  - '{}'
+  - '""'
+  - ''''''
+  - “”
+  - ‘’
+- key: 『』
+  chain:
+  - 「」
+  - 【】
+  - 〔〕
+  - （）
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - ()
+  - '[]'
+  - '{}'
+- key: 【】
+  chain:
+  - 「」
+  - 『』
+  - 〔〕
+  - （）
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - ()
+  - '[]'
+  - '{}'
+- key: （）
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - 〔〕
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - ()
+  - '[]'
+  - '{}'
+- key: 〔〕
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+- key: 〈〉
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 《》
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - <>
+  - ＜＞
+- key: 《》
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 〈〉
+  - ［］
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - <<>>
+- key: ［］
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 〈〉
+  - 《》
+  - ｛｝
+  - 〘〙
+  - 〚〛
+  - '[]'
+  - ()
+  - '{}'
+- key: ｛｝
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 〈〉
+  - 《》
+  - ［］
+  - 〘〙
+  - 〚〛
+  - '{}'
+  - ()
+  - '[]'
+- key: ()
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - '[]'
+  - '{}'
+- key: '[]'
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - ()
+  - '{}'
+- key: '{}'
+  chain:
+  - 「」
+  - 『』
+  - 【】
+  - （）
+  - 〔〕
+  - 〈〉
+  - 《》
+  - ［］
+  - ｛｝
+  - ()
+  - '[]'
+- key: “”
+  chain:
+  - '""'
+  - 「」
+  - 『』
+  - ‘’
+- key: ‘’
+  chain:
+  - ''''''
+  - 「」
+  - 『』
+  - “”
+- key: '""'
+  chain:
+  - “”
+  - 「」
+  - 『』
+- key: ''''''
+  chain:
+  - ‘’
+  - 「」
+  - 『』
+- key: <>
+  chain:
+  - 〈〉
+  - 《》
+  - ＜＞
+- key: ＜＞
+  chain:
+  - 〈〉
+  - 《》
+  - <>
+- key: 、
+  chain:
+  - ，
+  - ','
+  - ､
+- key: 。
+  chain:
+  - ．
+  - .
+  - ｡
+- key: ，
+  chain:
+  - 、
+  - ','
+- key: ．
+  chain:
+  - 。
+  - .
+- key: ','
+  chain:
+  - 、
+  - ，
+- key: .
+  chain:
+  - 。
+  - ．
+- key: ‥
+  chain:
+  - 。。
+  - ..
+  - ・・
+  - ．．
+  - …
+- key: 。。
+  chain:
+  - ‥
+  - ..
+  - ・・
+  - ．．
+  - …
+- key: ..
+  chain:
+  - ‥
+  - 。。
+  - ・・
+  - ．．
+  - …
+- key: ・・
+  chain:
+  - ‥
+  - 。。
+  - ..
+  - ．．
+- key: ．．
+  chain:
+  - ‥
+  - 。。
+  - ..
+  - ・・
+- key: …
+  chain:
+  - 。。。
+  - '...'
+  - ・・・
+  - ．．．
+  - ‥
+- key: 。。。
+  chain:
+  - …
+  - '...'
+  - ・・・
+  - ．．．
+  - ‥
+- key: '...'
+  chain:
+  - …
+  - 。。。
+  - ・・・
+  - ．．．
+  - ‥
+- key: ・・・
+  chain:
+  - …
+  - 。。。
+  - '...'
+  - ．．．
+- key: ．．．
+  chain:
+  - …
+  - 。。。
+  - '...'
+  - ・・・
+- key: ！！
+  chain:
+  - '!!'
+  - ‼
+- key: '!!'
+  chain:
+  - ！！
+  - ‼
+- key: ？？
+  chain:
+  - ??
+  - ⁇
+- key: ??
+  chain:
+  - ？？
+  - ⁇
+- key: ！？
+  chain:
+  - '!?'
+  - ?!
+  - ？！
+  - ⁉
+- key: ？！
+  chain:
+  - ?!
+  - '!?'
+  - ！？
+  - ⁈
+- key: '!?'
+  chain:
+  - ?!
+  - ！？
+  - ？！
+  - ⁉
+- key: ?!
+  chain:
+  - '!?'
+  - ？！
+  - ！？
+  - ⁈
+- key: ・
+  chain:
+  - ･
+  - /
+  - ／
+- key: ！
+  chain:
+  - '!'
+  - ！？
+  - '!?'
+- key: '!'
+  chain:
+  - ！
+  - ！？
+  - '!?'
+- key: ？
+  chain:
+  - '?'
+  - ？！
+  - ?!
+- key: '?'
+  chain:
+  - ？
+  - ？！
+  - ?!
+- key: ：
+  chain:
+  - ':'
+- key: ':'
+  chain:
+  - ：
+  - ;
+- key: ；
+  chain:
+  - ;
+- key: ;
+  chain:
+  - ；
+  - ':'
+- key: ／
+  chain:
+  - /
+  - ＼
+  - ・
+- key: /
+  chain:
+  - ／
+  - ＼
+- key: ＼
+  chain:
+  - \
+  - ／
+- key: \
+  chain:
+  - ＼
+- key: 〜
+  chain:
+  - '~'
+  - ～
+- key: '~'
+  chain:
+  - 〜
+  - ～
+- key: ー
+  chain:
+  - —
+  - –
+  - '-'
+  - ｰ
+- key: '-'
+  chain:
+  - ー
+  - —
+  - –
+  - ｰ
+- key: '"'
+  chain:
+  - ”
+  - “
+  - ＂
+  - 「
+  - 『
+- key: ''''
+  chain:
+  - ’
+  - ‘
+  - ｀
+- key: ”
+  chain:
+  - '"'
+  - “
+  - ＂
+- key: “
+  chain:
+  - '"'
+  - ”
+  - ＂
+- key: ＂
+  chain:
+  - '"'
+  - ”
+  - “
+- key: ’
+  chain:
+  - ''''
+  - ‘
+- key: ‘
+  chain:
+  - ''''
+  - ’
+- key: ｀
+  chain:
+  - '`'
+  - ''''
+- key: '`'
+  chain:
+  - ｀
+  - ''''
+- key: +
+  chain:
+  - ＋
+  - ±
+- key: ＋
+  chain:
+  - +
+  - ±
+- key: '='
+  chain:
+  - ＝
+  - ≠
+- key: ＝
+  chain:
+  - '='
+  - ≠
+- key: '*'
+  chain:
+  - ＊
+  - ×
+  - ・
+  - ※
+  - ★
+  - ☆
+- key: ＊
+  chain:
+  - '*'
+  - ×
+- key: <
+  chain:
+  - ＜
+  - ≦
+  - ≪
+- key: ＜
+  chain:
+  - <
+  - ≦
+  - ≪
+- key: '>'
+  chain:
+  - ＞
+  - ≧
+  - ≫
+- key: ＞
+  chain:
+  - '>'
+  - ≧
+  - ≫
+- key: '&'
+  chain:
+  - ＆
+- key: ＆
+  chain:
+  - '&'
+- key: '@'
+  chain:
+  - ＠
+- key: ＠
+  chain:
+  - '@'
+- key: '#'
+  chain:
+  - ＃
+  - ♯
+- key: ＃
+  chain:
+  - '#'
+  - ♯
+- key: '%'
+  chain:
+  - ％
+  - ‰
+- key: ％
+  chain:
+  - '%'
+  - ‰
+- key: $
+  chain:
+  - ＄
+  - ¥
+  - ￥
+  - €
+- key: ＄
+  chain:
+  - $
+  - ¥
+  - ￥
+  - €
+- key: _
+  chain:
+  - ＿
+  - ー
+- key: ＿
+  chain:
+  - _
+- key: '|'
+  chain:
+  - ｜
+  - ￤
+- key: ｜
+  chain:
+  - '|'
+  - ￤
+- key: ^
+  chain:
+  - ＾
+- key: ＾
+  chain:
+  - ^
+- key: 　
+  chain:
+  - ' '
+- key: ' '
+  chain:
+  - 　
+- key: 〒
+  chain:
+  - 〶
+- key: 円
+  chain:
+  - ¥
+  - ￥
+  - $
+  - ＄
+  - €
+- key: ¥
+  chain:
+  - ￥
+  - $
+  - ＄
+  - €
+- key: ￥
+  chain:
+  - ¥
+  - $
+  - ＄
+  - €
+
+# ---------------------------------------------------------------------------
+# Auto-generated section from mozc/src/data/symbol/symbol.tsv.
+# Maps reading (hiragana) → symbol candidates. Only rows whose readings
+# contain at least one pure-kana token are included; literal symbol-only
+# readings (e.g. `,`, `「`) are dropped because karukan's fallback/rewriter
+# paths already handle them. Katakana readings have been normalized to
+# hiragana so they match the IM's reading buffer. Re-running the porter
+# (`/tmp/port_mozc_symbols.py` archetype) overwrites only the entries below.
+# ---------------------------------------------------------------------------
+entries:
+- char: 、
+  readings:
+  - とうてん
+  - ','
+  - 、
+  - ，
+  - てん
+  description: 読点
+- char: 。
+  readings:
+  - くてん
+  - .
+  - ．
+  - 。
+  - まる
+  description: 句点
+- char: ，
+  readings:
+  - かんま
+  - こんま
+  - ','
+  - ，
+  - 、
+  - てん
+  description: カンマ
+- char: ．
+  readings:
+  - ぴりおど
+  - どっと
+  - .
+  - ．
+  - 。
+  - てん
+  description: ピリオド
+- char: ・
+  readings:
+  - てん
+  - なかてん
+  - なかぐろ
+  - 、
+  - ・
+  - /
+  description: 中点
+- char: ：
+  readings:
+  - ころん
+  - ':'
+  - ：
+  - てん
+  description: コロン
+- char: ；
+  readings:
+  - せみころん
+  - ;
+  - ；
+  - てん
+  description: セミコロン
+- char: ？
+  readings:
+  - ぎもんふ
+  - .
+  - '?'
+  - ？
+  - くえすちょん
+  - はてな
+  - ・
+  description: 疑問符
+- char: ？？
+  readings:
+  - ぎもんふ
+  - .
+  - '?'
+  - ？
+  - くえすちょん
+  - はてな
+  - ・
+  description: 疑問符
+- char: ？！
+  readings:
+  - ぎもんふ
+  - .
+  - '?'
+  - ？
+  - くえすちょん
+  - はてな
+  - ・
+  description: 疑問符
+- char: ！？
+  readings:
+  - ぎもんふ
+  - かんたんふ
+  - .
+  - '?'
+  - ？
+  - '!'
+  - ！
+  - くえすちょん
+  - はてな
+  - えくすくらめーしょん
+  - びっくり
+  - ・
+  description: 疑問符
+- char: ！
+  readings:
+  - かんたんふ
+  - .
+  - '!'
+  - ！
+  - えくすくらめーしょん
+  - びっくり
+  description: 感嘆符
+- char: ！！
+  readings:
+  - かんたんふ
+  - .
+  - '!'
+  - ！
+  - えくすくらめーしょん
+  - びっくり
+  description: 感嘆符
+- char: ゛
+  readings:
+  - だくてん
+  - '"'
+  - てん
+  - てんてん
+  - きごう
+  description: 濁点
+- char: ゜
+  readings:
+  - はんだくてん
+  - まる
+  - ''''
+  - てん
+  - きごう
+  description: 半濁点
+- char: '"'
+  readings:
+  - '"'
+  - だぶるくおーと
+  - だぶるくおーてーしょん
+  - くぉーと
+  - だぶるくぉーてしょん
+  - きごう
+  description: ダブルクオーテーション
+- char: ´
+  readings:
+  - あきゅーと
+  - きごう
+  - ''''
+  description: アキュートアクセント
+- char: ''''
+  readings:
+  - あぽすとろふぃ
+  - くぉーと
+  - きごう
+  - ''''
+  description: アポストロフィ
+- char: ¨
+  readings:
+  - うむらうと
+  - とれま
+  - きごう
+  description: ウムラウト／トレマ
+- char: ｀
+  readings:
+  - '`'
+  - ぐらーぶ
+  - きごう
+  description: グラーブアクセント
+- char: ˝
+  readings:
+  - だぶるあきゅーと
+  description: ダブルアキュート
+- char: '~'
+  readings:
+  - ちるだ
+  - きごう
+  description: チルダ
+- char: ¯
+  readings:
+  - まくろん
+  - きごう
+  description: マクロン
+- char: ＾
+  readings:
+  - ^
+  - きごう
+  description: ハット
+- char: ￣
+  readings:
+  - '~'
+  - きごう
+  - うえ
+  - おーばーらいん
+  description: オーバーライン
+- char: ＿
+  readings:
+  - _
+  - きごう
+  - した
+  - あんだーばー
+  - あんだーすこあ
+  - あんだーらいん
+  description: アンダーライン
+- char: '　'
+  readings:
+  - すぺーす
+  - くうはく
+  description: 空白
+- char: ␣
+  readings:
+  - すぺーす
+  - くうはく
+  description: 空白記号
+- char: ヽ
+  readings:
+  - おなじ
+  - くりかえし
+  - どう
+  - きごう
+  - おどりじ
+  - おどり
+  - かさねじ
+  - おくりじ
+  - ゆすりじ
+  - じゅうてん
+  - じょうじ
+  description: 繰り返し記号 踊り字
+- char: ヾ
+  readings:
+  - おなじ
+  - くりかえし
+  - どう
+  - きごう
+  - おどりじ
+  - おどり
+  - かさねじ
+  - おくりじ
+  - ゆすりじ
+  - じゅうてん
+  - じょうじ
+  description: 繰り返し記号 踊り字
+- char: ゝ
+  readings:
+  - おなじ
+  - くりかえし
+  - どう
+  - きごう
+  - おどりじ
+  - おどり
+  - かさねじ
+  - おくりじ
+  - ゆすりじ
+  - じゅうてん
+  - じょうじ
+  description: 繰り返し記号 踊り字
+- char: ゞ
+  readings:
+  - おなじ
+  - くりかえし
+  - どう
+  - きごう
+  - おどりじ
+  - おどり
+  - かさねじ
+  - おくりじ
+  - ゆすりじ
+  - じゅうてん
+  - じょうじ
+  description: 繰り返し記号 踊り字
+- char: 〃
+  readings:
+  - おなじ
+  - くりかえし
+  - どう
+  - きごう
+  - おどりじ
+  - おどり
+  - かさねじ
+  - おくりじ
+  - ゆすりじ
+  - じゅうてん
+  - じょうじ
+  - おなじく
+  - どうじょう
+  - のの
+  - ののじ
+  - ののてん
+  - ののじてん
+  description: 繰り返し記号 同上
+- char: 仝
+  readings:
+  - おなじ
+  - どう
+  - きごう
+- char: 々
+  readings:
+  - おなじ
+  - くりかえし
+  - どう
+  - のま
+  - きごう
+  - おどりじ
+  - おどり
+  - かさねじ
+  - おくりじ
+  - ゆすりじ
+  - じゅうてん
+  - じょうじ
+  description: 繰り返し記号 踊り字
+- char: 〆
+  readings:
+  - しめ
+  - きごう
+  description: しめ
+- char: 〇
+  readings:
+  - ぜろ
+  - れい
+  - きごう
+  description: 漢数字ゼロ
+- char: ー
+  readings:
+  - '-'
+  - ー
+  - －
+  - ―
+  description: 長音
+- char: '-'
+  readings:
+  - '-'
+  - ー
+  - －
+  - ―
+  - はいふん
+  - まいなす
+  - きごう
+  description: ハイフン マイナス
+- char: ―
+  readings:
+  - '-'
+  - ー
+  - －
+  - ―
+  - だっしゅ
+  - きごう
+  description: ダッシュ 水平棒
+- char: –
+  readings:
+  - '-'
+  - ー
+  - －
+  - ―
+  - だっしゅ
+  - きごう
+  - えんだっしゅ
+  - にぶだーし
+  - にぶだっしゅ
+  - enだっしゅ
+  - ENだっしゅ
+  description: enダッシュ(二分)
+- char: —
+  readings:
+  - '-'
+  - ー
+  - －
+  - ―
+  - だっしゅ
+  - きごう
+  - えmだっしゅ
+  - えむだっしゅ
+  - ぜんかくだっしゅ
+  - emだっしゅ
+  - EMだっしゅ
+  description: emダッシュ(全角)
+- char: ‐
+  readings:
+  - '-'
+  - ー
+  - －
+  - ―
+  - はいふん
+  description: ハイフン
+- char: ／
+  readings:
+  - すらっしゅ
+  - しゃせん
+  - ・
+  - /
+  - きごう
+  - ななめ
+  description: スラッシュ
+- char: ＼
+  readings:
+  - ばっくすらっしゅ
+  - ぎゃくしゃせん
+  - ・
+  - /
+  - ／
+  - \
+  - ＼
+  - ¥
+  - ￥
+  - きごう
+  - しゃせん
+  - すらっしゅ
+  - ななめ
+  description: バックスラッシュ
+- char: \
+  readings:
+  - ばっくすらっしゅ
+  - ぎゃくしゃせん
+  - ・
+  - /
+  - ／
+  - \
+  - ＼
+  - ¥
+  - ￥
+  - きごう
+  - しゃせん
+  - すらっしゅ
+  - ななめ
+  description: バックスラッシュ
+- char: 〜
+  readings:
+  - にょろ
+  - なみ
+  - から
+  - ー
+  - '-'
+  - '~'
+  - きごう
+  - より
+  description: 波ダッシュ
+- char: ∥
+  readings:
+  - '|'
+  - '||'
+  - たてぼう
+  - たてせん
+  - へいこう
+  - きごう
+  description: 縦線 平行
+- char: ‖
+  readings:
+  - '|'
+  - '||'
+  - たてぼう
+  - たてせん
+  - そうちゅう
+  - きごう
+  description: 縦線 双柱
+- char: ｜
+  readings:
+  - '|'
+  - たてぼう
+  - たてせん
+  - きごう
+  description: 縦線
+- char: …
+  readings:
+  - 。。。
+  - .
+  - ...
+  - ・・・
+  - ・
+  - 。
+  - てん
+  - きごう
+  - あまり
+  - さんてん
+  - さんてんりーだ
+  - さんてんりーだー
+  description: 三点リーダ
+- char: ‥
+  readings:
+  - 。。
+  - ..
+  - ・・
+  - ・
+  - 。
+  - てん
+  - など
+  - きごう
+  - にてんりーだ
+  - にてんりーだー
+  description: 二点リーダ
+- char: ︙
+  readings:
+  - 。。。
+  - .
+  - ...
+  - ・・・
+  - ・
+  - …
+  - ':'
+  - てん
+  - きごう
+  - さんてん
+  - さんてんりーだ
+  - さんてんりーだー
+  - たてさんてんりーだ
+  - たてさんてんりーだー
+  - たてりーだ
+  - たてりーだー
+  description: 三点リーダ (縦)
+- char: ︰
+  readings:
+  - 。。
+  - ..
+  - ・・
+  - ・
+  - ‥
+  - ':'
+  - てん
+  - など
+  - きごう
+  - にてんりーだ
+  - にてんりーだー
+  - たてにてんりーだ
+  - たてにてんりーだー
+  - たてりーだ
+  - たてりーだー
+  description: 二点リーダ (縦)
+- char: ‘
+  readings:
+  - ばっくくおーと
+  - ばっくくぉーと
+  - ''''
+  - '"'
+  - きごう
+  description: 左シングル引用符
+- char: ’
+  readings:
+  - くおーと
+  - くおーてーしょん
+  - くぉーと
+  - くぉーてーしょん
+  - ''''
+  - '"'
+  - きごう
+  description: 右シングル引用符
+- char: “
+  readings:
+  - '"'
+  - ''''
+  - だぶるくおーと
+  - だぶるくおーてーしょん
+  - くぉーと
+  - だぶるくぉーてしょん
+  - きごう
+  description: 左ダブル引用符
+- char: ”
+  readings:
+  - '"'
+  - ''''
+  - だぶるくおーと
+  - だぶるくおーてーしょん
+  - くぉーと
+  - だぶるくぉーてしょん
+  - きごう
+  description: 右ダブル引用符
+- char: （
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始め丸括弧
+- char: ）
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わり丸括弧
+- char: 〔
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始め甲括弧
+- char: 〕
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わり甲括弧
+- char: ［
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始め角括弧
+- char: ］
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わり角括弧
+- char: 〘
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始め二重甲括弧
+- char: 〙
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わり二重甲括弧
+- char: 〚
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始め二重角括弧
+- char: 〛
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わり二重角括弧
+- char: ｛
+  readings:
+  - '{'
+  - '['
+  - (
+  - 「
+  - ｢
+  description: 始め波括弧
+- char: ｝
+  readings:
+  - '}'
+  - ']'
+  - )
+  - 」
+  - ｣
+  description: 終わり波括弧
+- char: 〈
+  readings:
+  - <
+  - (
+  - '['
+  - 「
+  - ｢
+  description: 始め山括弧
+- char: 〉
+  readings:
+  - '>'
+  - )
+  - ']'
+  - 」
+  - ｣
+  description: 終わり山括弧
+- char: ‹
+  readings:
+  - <
+  - (
+  - '['
+  - 「
+  - ｢
+  description: 始め山括弧
+- char: ›
+  readings:
+  - '>'
+  - )
+  - ']'
+  - 」
+  - ｣
+  description: 終わり山括弧
+- char: 《
+  readings:
+  - <<
+  - (
+  - '['
+  - 「
+  - ｢
+  description: 始め二重山括弧
+- char: 》
+  readings:
+  - '>>'
+  - )
+  - ']'
+  - 」
+  - ｣
+  description: 終わり二重山括弧
+- char: «
+  readings:
+  - ぎゅめ
+  - <<
+  - (
+  - '['
+  - 「
+  - ｢
+  description: 始め二重山括弧・ギュメ
+- char: »
+  readings:
+  - ぎゅめ
+  - '>>'
+  - )
+  - ']'
+  - 」
+  - ｣
+  description: 終わり二重山括弧・ギュメ
+- char: 「
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始めかぎ括弧
+- char: 」
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わりかぎ括弧
+- char: 『
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始め二重かぎ括弧
+- char: 』
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わり二重かぎ括弧
+- char: 【
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  description: 始めすみつき括弧
+- char: 】
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  description: 終わりすみつき括弧
+- char: 〝
+  readings:
+  - '['
+  - 「
+  - (
+  - ｢
+  - '"'
+  - ''''
+  - きごう
+  description: 始め爪括弧
+- char: 〟
+  readings:
+  - ']'
+  - 」
+  - )
+  - ｣
+  - '"'
+  - ''''
+  - きごう
+  description: 終わり爪括弧
+- char: （）
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - まるかっこ
+  description: 丸括弧
+- char: 〔〕
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - こうかっこ
+  description: 甲括弧
+- char: ［］
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - かくかっこ
+  description: 角括弧
+- char: 〘〙
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - こうかっこ
+  description: 二重甲括弧
+- char: 〚〛
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - かくかっこ
+  description: 二重角括弧
+- char: ｛｝
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - なみかっこ
+  description: 波括弧
+- char: 〈〉
+  readings:
+  - ()
+  - 「」
+  - <>
+  - かっこ
+  - やまかっこ
+  description: 山括弧
+- char: 《》
+  readings:
+  - ()
+  - 「」
+  - <<>>
+  - かっこ
+  - やまかっこ
+  description: 二重山括弧
+- char: «»
+  readings:
+  - ()
+  - 「」
+  - <<>>
+  - かっこ
+  - やまかっこ
+  - ぎゅめ
+  description: 二重山括弧・ギュメ
+- char: ‹›
+  readings:
+  - ()
+  - 「」
+  - <>
+  - かっこ
+  - やまかっこ
+  description: 一重山括弧
+- char: 「」
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - かぎかっこ
+  description: かぎ括弧
+- char: 『』
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  - かぎかっこ
+  description: 二重かぎ括弧
+- char: 【】
+  readings:
+  - ()
+  - 「」
+  - かっこ
+  description: すみつき括弧
+- char: ‘’
+  readings:
+  - ()
+  - 「」
+  - '""'
+  - ''''''
+  - かっこ
+  description: シングル引用符
+- char: “”
+  readings:
+  - ()
+  - 「」
+  - '""'
+  - ''''''
+  - かっこ
+  description: ダブル引用符
+- char: 〝〟
+  readings:
+  - ()
+  - 「」
+  - '""'
+  - ''''''
+  - かっこ
+  - つめかっこ
+  - だぶるみにゅーと
+  - ののかぎ
+  description: 爪括弧
+- char: ＋
+  readings:
+  - ぷらす
+  - たす
+  - すうがく
+  - +
+  - ＋
+  description: 加算記号
+- char: −
+  readings:
+  - まいなす
+  - ひく
+  - はいふん
+  - すうがく
+  - '-'
+  - ー
+  description: 減算記号 マイナス
+- char: ±
+  readings:
+  - ぷらすまいなす
+  - ぷらまい
+  - +-
+  - +ー
+  - すうがく
+  - きごう
+  description: 正または負記号
+- char: ∓
+  readings:
+  - まいなすぷらす
+  - '-+'
+  - ー+
+  - すうがく
+  - きごう
+  description: 負または正記号
+- char: ×
+  readings:
+  - かける
+  - すうがく
+  - '*'
+  - ばつ
+  - ぺけ
+  - きごう
+  description: 乗算記号
+- char: ÷
+  readings:
+  - わる
+  - すうがく
+  - /
+  - ・
+  - きごう
+  description: 除算記号
+- char: ＝
+  readings:
+  - いこーる
+  - とうごう
+  - すうがく
+  - =
+  description: 等号
+- char: ゠
+  readings:
+  - だぶるはいふん
+  - =
+  description: ダブルハイフン
+- char: ≠
+  readings:
+  - ふとうごう
+  - のっといこーる
+  - すうがく
+  - =
+  - '!='
+  - <>
+  - きごう
+  - とうごう
+  description: 等号否定
+- char: ＜
+  readings:
+  - ふとうごう
+  - しょうなり
+  - すうがく
+  - <
+  description: 不等号
+- char: ＞
+  readings:
+  - ふとうごう
+  - だいなり
+  - すうがく
+  - '>'
+  description: 不等号
+- char: ≦
+  readings:
+  - ふとうごう
+  - しょうなりいこーる
+  - すうがく
+  - <
+  - <=
+  - きごう
+  description: 不等号
+- char: ≧
+  readings:
+  - ふとうごう
+  - だいなりいこーる
+  - すうがく
+  - '>'
+  - '>='
+  - きごう
+  description: 不等号
+- char: ⋮
+  readings:
+  - 。。。
+  - .
+  - ...
+  - ・・・
+  - ・
+  - 。
+  - てん
+  - さんてん
+  - さんてんりーだ
+  - さんてんりーだー
+  description: 省略記号 三点リーダー
+- char: ⋯
+  readings:
+  - 。。。
+  - .
+  - ...
+  - ・・・
+  - ・
+  - 。
+  - てん
+  - あまり
+  - さんてん
+  - さんてんりーだ
+  - さんてんりーだー
+  description: 省略記号 三点リーダー
+- char: ⋰
+  readings:
+  - 。。。
+  - .
+  - ...
+  - ・・・
+  - ・
+  - 。
+  - てん
+  - さんてん
+  - さんてんりーだ
+  - さんてんりーだー
+  description: 省略記号 三点リーダー
+- char: ⋱
+  readings:
+  - 。。。
+  - .
+  - ...
+  - ・・・
+  - ・
+  - 。
+  - てん
+  - さんてん
+  - さんてんりーだ
+  - さんてんりーだー
+  description: 省略記号 三点リーダー
+- char: ∞
+  readings:
+  - むげんだい
+  - むげん
+  - すうがく
+  - きごう
+  description: 無限大
+- char: ∴
+  readings:
+  - ゆえに
+  - すうがく
+  - きごう
+  - さんかく
+  - てん
+  description: ゆえに
+- char: ♀
+  readings:
+  - めす
+  - きごう
+  - きんせい
+  - せんせいじゅつ
+  description: 雌記号, 金星
+- char: ♂
+  readings:
+  - おす
+  - きごう
+  - かせい
+  - せんせいじゅつ
+  description: 雄記号, 火星
+- char: °
+  readings:
+  - ど
+  - たんい
+  - きごう
+  description: 度
+- char: ′
+  readings:
+  - ’
+  - ふん
+  - たんい
+  - きごう
+  description: 分
+- char: ″
+  readings:
+  - ”
+  - びょう
+  - たんい
+  - きごう
+  description: 秒
+- char: ℃
+  readings:
+  - ど
+  - たんい
+  - せっし
+  - どC
+  - どc
+  - どしー
+  - C
+  description: 摂氏温度
+- char: °C
+  readings:
+  - ど
+  - たんい
+  - せっし
+  - どC
+  - どc
+  - どしー
+  - C
+  description: 摂氏温度
+- char: °F
+  readings:
+  - かし
+  - どF
+  - どf
+  - どえふ
+  - F
+  description: 華氏温度
+- char: ￥
+  readings:
+  - えん
+  - つうか
+  - \
+  - ¥
+  - ＼
+  - たんい
+  description: 通貨記号
+- char: ¥
+  readings:
+  - えん
+  - つうか
+  - \
+  - ￥
+  - ＼
+  - たんい
+  description: 通貨記号
+- char: ＄
+  readings:
+  - どる
+  - だらー
+  - だら
+  - つうか
+  - $
+  - たんい
+  description: 通貨記号
+- char: ¢
+  readings:
+  - せんと
+  - つうか
+  - たんい
+  description: 通貨記号
+- char: £
+  readings:
+  - ぽんど
+  - つうか
+  - たんい
+  description: 通貨記号
+- char: €
+  readings:
+  - ゆーろ
+  - つうか
+  - たんい
+  description: 通貨記号
+- char: ％
+  readings:
+  - ぱーせんと
+  - たんい
+  - '%'
+  description: パーセント
+- char: ＃
+  readings:
+  - しゃーぷ
+  - なんばー
+  - いげた
+  - はっしゅ
+  - '#'
+  description: 井げた／ハッシュ
+- char: ＆
+  readings:
+  - あんど
+  - あんぱさんど
+  - '&'
+  description: アンパサンド
+- char: ＊
+  readings:
+  - あすたりすく
+  - あすてりすく
+  - ほし
+  - '*'
+  description: アスタリスク
+- char: ＠
+  readings:
+  - あっとまーく
+  - あっと
+  - '@'
+  description: アットマーク
+- char: §
+  readings:
+  - せくしょん
+  - きごう
+  - だんらく
+  description: 段落記号
+- char: ¶
+  readings:
+  - せくしょん
+  - だんらく
+  - だんらくきごう
+  - ぱらぐらふ
+  - きごう
+  description: 段落記号
+- char: ☆
+  readings:
+  - ほし
+  - しろぼし
+  - しろほし
+  - ずけい
+  description: 星
+- char: ★
+  readings:
+  - ほし
+  - くろぼし
+  - くろほし
+  - ずけい
+  description: 黒星
+- char: ○
+  readings:
+  - まる
+  - しろまる
+  - ずけい
+  description: 丸
+- char: ●
+  readings:
+  - まる
+  - くろまる
+  - ずけい
+  description: 黒丸
+- char: ◎
+  readings:
+  - にじゅうまる
+  - まる
+  - ずけい
+  description: 二重丸
+- char: ◉
+  readings:
+  - じゃのめ
+  - まる
+  - ずけい
+  description: 蛇の目
+- char: ⦿
+  readings:
+  - まるなかぐろ
+  - まる
+  - ずけい
+  description: 丸中黒
+- char: ◇
+  readings:
+  - しかく
+  - だいや
+  - ひしがた
+  - ひし
+  - ずけい
+  description: ひしがた
+- char: ◆
+  readings:
+  - しかく
+  - だいや
+  - ひしがた
+  - ひし
+  - ずけい
+  description: 黒ひしがた
+- char: □
+  readings:
+  - しかく
+  - ずけい
+  description: 四角
+- char: ■
+  readings:
+  - しかく
+  - ずけい
+  description: 黒四角
+- char: △
+  readings:
+  - さんかく
+  - ずけい
+  description: 三角
+- char: ▲
+  readings:
+  - さんかく
+  - ずけい
+  description: 黒三角
+- char: ▽
+  readings:
+  - さんかく
+  - ずけい
+  - ぎゃくさんかく
+  description: 逆三角
+- char: ▼
+  readings:
+  - さんかく
+  - ずけい
+  - ぎゃくさんかく
+  description: 逆黒三角
+- char: ▷
+  readings:
+  - さんかく
+  - ずけい
+  - みぎ
+  - みぎさんかく
+  - '>'
+  description: 右向三角
+- char: ▶
+  readings:
+  - さんかく
+  - ずけい
+  - みぎ
+  - みぎさんかく
+  - '>'
+  description: 右向黒三角
+- char: ◁
+  readings:
+  - さんかく
+  - ずけい
+  - ひだり
+  - ひだりさんかく
+  - <
+  description: 左向三角
+- char: ◀
+  readings:
+  - さんかく
+  - ずけい
+  - ひだり
+  - ひだりさんかく
+  - <
+  description: 左向黒三角
+- char: ⬠
+  readings:
+  - ごかく
+  - ずけい
+  description: 五角
+- char: ⬟
+  readings:
+  - ごかく
+  - ずけい
+  description: 黒五角
+- char: ⬭
+  readings:
+  - だえん
+  - ちょうえん
+  - ずけい
+  description: 横長楕円
+- char: ⬬
+  readings:
+  - だえん
+  - ちょうえん
+  - ずけい
+  description: 横長黒楕円
+- char: ⬯
+  readings:
+  - だえん
+  - ちょうえん
+  - ずけい
+  description: 縦長楕円
+- char: ⬮
+  readings:
+  - だえん
+  - ちょうえん
+  - ずけい
+  description: 縦長黒楕円
+- char: ﹅
+  readings:
+  - ごま
+  - けんてん
+  - ぼうてん
+  - わきてん
+  description: 圏点
+- char: ﹆
+  readings:
+  - しろごま
+  - けんてん
+  - ぼうてん
+  - わきてん
+  description: 圏点
+- char: ※
+  readings:
+  - こめ
+  - '*'
+  - こめじるし
+  - きごう
+  - ほし
+  description: 米印
+- char: ▓
+  readings:
+  - だーくしぇーど
+  - くろぬり
+  - しかく
+  description: ダークシェード
+- char: ▢
+  readings:
+  - しかく
+  - かどまる
+  description: 角丸正方形
+- char: ▣
+  readings:
+  - しかく
+  - いれこ
+  description: 入れ子正方形
+- char: ▤
+  readings:
+  - しかく
+  - よこぬり
+  description: 横塗り正方形
+- char: ▥
+  readings:
+  - しかく
+  - たてぬり
+  description: 縦塗り正方形
+- char: ▦
+  readings:
+  - しかく
+  - じゅうじぬり
+  description: 十字塗り正方形
+- char: ▧
+  readings:
+  - しかく
+  - ななめぬり
+  description: 斜め塗り正方形＼
+- char: ▨
+  readings:
+  - しかく
+  - ななめぬり
+  description: 斜め塗り正方形／
+- char: ▩
+  readings:
+  - しかく
+  - ななめじゅうじぬり
+  description: 斜め十字塗り正方形
+- char: 〒
+  readings:
+  - ゆうびん
+  - ゆうびんばんごう
+  - きごう
+  description: 郵便番号
+- char: →
+  readings:
+  - やじるし
+  - みぎや
+  - '->'
+  - ー>
+  - みぎ
+  description: 矢印
+- char: ←
+  readings:
+  - やじるし
+  - ひだりや
+  - <-
+  - <ー
+  - ひだり
+  description: 矢印
+- char: ↑
+  readings:
+  - やじるし
+  - うえや
+  - うえ
+  description: 矢印
+- char: ↓
+  readings:
+  - やじるし
+  - したや
+  - した
+  description: 矢印
+- char: ☛
+  readings:
+  - みぎへ
+  - →
+  description: 右向き指差し
+- char: ☚
+  readings:
+  - ひだりへ
+  - ←
+  description: 左向き指差し
+- char: ☞
+  readings:
+  - みぎへ
+  - →
+  description: 右向き指差し
+- char: ☜
+  readings:
+  - ひだりへ
+  - →
+  description: 左向き指差し
+- char: ☝
+  readings:
+  - うえへ
+  - ↑
+  description: 上向き指差し
+- char: ☟
+  readings:
+  - したへ
+  - ↓
+  description: 下向き指差し
+- char: 〓
+  readings:
+  - げた
+  - きごう
+  description: げた記号
+- char: ∈
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  - ぞくする
+  - ふくむ
+  description: 属する
+- char: ∉
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  - ぞくさない
+  - ふくまない
+  description: 属さない
+- char: ∋
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  - ぞくする
+  - ふくむ
+  description: 元として含む
+- char: ∌
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  - ぞくさない
+  - ふくまない
+  description: 元として含まない
+- char: ⊆
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  description: 部分集合
+- char: ⊇
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  description: 上位集合
+- char: ⊂
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  description: 真部分集合
+- char: ⊃
+  readings:
+  - すうがく
+  - しゅうごう
+  - けいさん
+  - きごう
+  description: 真上位集合
+- char: ∪
+  readings:
+  - すうがく
+  - きゃっぷ
+  - かっぷ
+  - おあ
+  - しゅうごう
+  - けいさん
+  - U
+  - きごう
+  - わしゅうごう
+  description: 和集合
+- char: ∩
+  readings:
+  - すうがく
+  - きゃっぷ
+  - かっぷ
+  - あんど
+  - しゅうごう
+  - けいさん
+  - きごう
+  - せきしゅうごう
+  description: 積集合
+- char: ∧
+  readings:
+  - すうがく
+  - かつ
+  - および
+  - あんど
+  - しゅうごう
+  - けいさん
+  - ^
+  - きごう
+  description: および
+- char: ∨
+  readings:
+  - すうがく
+  - または
+  - おあ
+  - しゅうごう
+  - けいさん
+  - V
+  - きごう
+  description: または
+- char: ¬
+  readings:
+  - すうがく
+  - のっと
+  - ひてい
+  - しゅうごう
+  - けいさん
+  - きごう
+  description: 否定
+- char: ⇒
+  readings:
+  - すうがく
+  - やじるし
+  - みぎや
+  - '->'
+  - ならば
+  - けいさん
+  - =>
+  - きごう
+  - →
+  description: ならば
+- char: ⇔
+  readings:
+  - すうがく
+  - やじるし
+  - <->
+  - どうち
+  - けいさん
+  - <=>
+  - きごう
+  description: 同値
+- char: ∀
+  readings:
+  - すうがく
+  - すべて
+  - すべての
+  - たーんえー
+  - けいさん
+  - A
+  - きごう
+  - たーんA
+  description: すべての
+- char: ∃
+  readings:
+  - すうがく
+  - そんざい
+  - けいさん
+  - E
+  - きごう
+  description: 存在記号
+- char: ∠
+  readings:
+  - すうがく
+  - かく
+  - けいさん
+  - きごう
+  description: 角
+- char: ⊥
+  readings:
+  - すうがく
+  - すいちょく
+  - けいさん
+  - きごう
+  - かく
+  description: 垂直
+- char: ⊿
+  readings:
+  - すうがく
+  - さんかく
+  - さんかくけい
+  - とらいあんぐる
+  - けいさん
+  - でるた
+  - ちょっかくさんかく
+  - ちょっかくさんかくけい
+  - きごう
+  description: 三角形
+- char: ⌒
+  readings:
+  - すうがく
+  - こ
+  - けいさん
+  - きごう
+  description: 弧
+- char: ∂
+  readings:
+  - すうがく
+  - けいさん
+  - きごう
+  - へんびぶん
+  - らうんど
+  - でる
+  description: 偏微分
+- char: ∇
+  readings:
+  - すうがく
+  - なぶら
+  - けいさん
+  - きごう
+  description: ナブラ
+- char: ∆
+  readings:
+  - でるた
+  - ぞうぶん
+  - らぷらしあん
+  description: 増分 ラプラシアン
+- char: ≡
+  readings:
+  - すうがく
+  - ごうどう
+  - けいさん
+  - =
+  - きごう
+  description: 合同
+- char: ≒
+  readings:
+  - すうがく
+  - やく
+  - きんじ
+  - いこーる
+  - =
+  - けいさん
+  - きごう
+  - とうごう
+  description: ほとんど等しい
+- char: ≪
+  readings:
+  - ふとうごう
+  - しょうなり
+  - すうがく
+  - けいさん
+  - <<
+  - きごう
+  description: 非常に小さい
+- char: ≫
+  readings:
+  - ふとうごう
+  - だいなり
+  - すうがく
+  - けいさん
+  - '>>'
+  - きごう
+  description: 非常に大きい
+- char: √
+  readings:
+  - るーと
+  - へいほうこん
+  - すうがく
+  - けいさん
+  - きごう
+  - こんごう
+  - sqrt
+  description: 根号
+- char: ∛
+  readings:
+  - さんじょうこん
+  - りっぽうこん
+  - こんごう
+  - cbrt
+  description: 三乗根号
+- char: ∜
+  readings:
+  - よんじょうこん
+  - こんごう
+  - qdrt
+  description: 四乗根号
+- char: ∽
+  readings:
+  - すうがく
+  - そうじ
+  - けいさん
+  - きごう
+  description: 相似
+- char: ∝
+  readings:
+  - すうがく
+  - ひれい
+  - けいさん
+  - きごう
+  description: 比例
+- char: ∵
+  readings:
+  - すうがく
+  - なぜならば
+  - けいさん
+  - きごう
+  - さんかく
+  - てん
+  description: なぜならば
+- char: ∫
+  readings:
+  - すうがく
+  - いんてぐらる
+  - せきぶん
+  - けいさん
+  - きごう
+  description: 積分記号
+- char: ∬
+  readings:
+  - すうがく
+  - いんてぐらる
+  - せきぶん
+  - にじゅうせきぶん
+  - けいさん
+  - きごう
+  description: 二重積分記号
+- char: ⊕
+  readings:
+  - すうがく
+  - ちょくわ
+  - えっくすおあ
+  - けいさん
+  - +
+  - きごう
+  description: 直和
+- char: ∅
+  readings:
+  - すうがく
+  - くうしゅうごう
+  - きごう
+  description: 空集合
+- char: ℕ
+  readings:
+  - すうがく
+  - しぜんすう
+  - きごう
+  description: 自然数
+- char: ℤ
+  readings:
+  - すうがく
+  - せいすう
+  - きごう
+  description: 整数
+- char: ℚ
+  readings:
+  - すうがく
+  - ゆうりすう
+  - きごう
+  description: 有理数
+- char: ℝ
+  readings:
+  - すうがく
+  - じっすう
+  - きごう
+  description: 実数
+- char: ℂ
+  readings:
+  - すうがく
+  - ふくそすう
+  - きごう
+  description: 複素数
+- char: Å
+  readings:
+  - おんぐすとろーむ
+  - たんい
+  - A
+  - きごう
+  description: オングストローム
+- char: ‰
+  readings:
+  - ぱーみる
+  - たんい
+  - きごう
+  description: 単位
+- char: ♯
+  readings:
+  - しゃーぷ
+  - おんがく
+  - '#'
+  - きごう
+  description: シャープ(音楽記号)
+- char: ♭
+  readings:
+  - ふらっと
+  - おんがく
+  - きごう
+  description: フラット
+- char: ♪
+  readings:
+  - おんぷ
+  - おんがく
+  - きごう
+  description: 音符
+- char: ♫
+  readings:
+  - おんぷ
+  - おんがく
+  - きごう
+  description: 音符
+- char: ♬
+  readings:
+  - おんぷ
+  - おんがく
+  - きごう
+  description: 音符
+- char: ♮
+  readings:
+  - なちゅらる
+  - おんがく
+  - きごう
+  description: ナチュラル
+- char: †
+  readings:
+  - だがー
+  - きごう
+  description: ダガー
+- char: ‡
+  readings:
+  - だぶるだがー
+  - だがー
+  - きごう
+  description: ダブルダガー
+- char: ◯
+  readings:
+  - まる
+  - しろまる
+  - きごう
+  description: 大きな丸
+- char: Α
+  readings:
+  - ぎりしゃ
+  - あるふぁ
+  description: ギリシャ文字
+- char: Β
+  readings:
+  - ぎりしゃ
+  - べーた
+  description: ギリシャ文字
+- char: Γ
+  readings:
+  - ぎりしゃ
+  - がんま
+  - がんまー
+  description: ギリシャ文字
+- char: Δ
+  readings:
+  - ぎりしゃ
+  - でるた
+  description: ギリシャ文字
+- char: Ε
+  readings:
+  - ぎりしゃ
+  - いぷしろん
+  description: ギリシャ文字
+- char: Ζ
+  readings:
+  - ぎりしゃ
+  - ぜーた
+  - つぇーた
+  - じーた
+  description: ギリシャ文字
+- char: Η
+  readings:
+  - ぎりしゃ
+  - いーた
+  - えーた
+  description: ギリシャ文字
+- char: Θ
+  readings:
+  - ぎりしゃ
+  - しーた
+  - てーた
+  description: ギリシャ文字
+- char: Ι
+  readings:
+  - ぎりしゃ
+  - いおた
+  description: ギリシャ文字
+- char: Κ
+  readings:
+  - ぎりしゃ
+  - かっぱ
+  description: ギリシャ文字
+- char: Λ
+  readings:
+  - ぎりしゃ
+  - らむだ
+  description: ギリシャ文字
+- char: Μ
+  readings:
+  - ぎりしゃ
+  - みゅー
+  description: ギリシャ文字
+- char: Ν
+  readings:
+  - ぎりしゃ
+  - にゅー
+  description: ギリシャ文字
+- char: Ξ
+  readings:
+  - ぎりしゃ
+  - くさい
+  - くしい
+  - くしー
+  - ぐざい
+  description: ギリシャ文字
+- char: Ο
+  readings:
+  - ぎりしゃ
+  - おみくろん
+  description: ギリシャ文字
+- char: Π
+  readings:
+  - ぎりしゃ
+  - ぱい
+  description: ギリシャ文字
+- char: Ρ
+  readings:
+  - ぎりしゃ
+  - ろー
+  description: ギリシャ文字
+- char: Σ
+  readings:
+  - ぎりしゃ
+  - しぐま
+  description: ギリシャ文字
+- char: Τ
+  readings:
+  - ぎりしゃ
+  - たう
+  description: ギリシャ文字
+- char: Υ
+  readings:
+  - ぎりしゃ
+  - ゆぷしろん
+  - いぷしろん
+  - うぷしろん
+  description: ギリシャ文字
+- char: Φ
+  readings:
+  - ぎりしゃ
+  - ふぁい
+  description: ギリシャ文字
+- char: Χ
+  readings:
+  - ぎりしゃ
+  - かい
+  description: ギリシャ文字
+- char: Ψ
+  readings:
+  - ぎりしゃ
+  - ぷさい
+  - ぷしー
+  description: ギリシャ文字
+- char: Ω
+  readings:
+  - ぎりしゃ
+  - おめが
+  - おーむ
+  description: ギリシャ文字
+- char: α
+  readings:
+  - ぎりしゃ
+  - あるふぁ
+  description: ギリシャ文字
+- char: β
+  readings:
+  - ぎりしゃ
+  - べーた
+  description: ギリシャ文字
+- char: γ
+  readings:
+  - ぎりしゃ
+  - がんま
+  - がんまー
+  description: ギリシャ文字
+- char: δ
+  readings:
+  - ぎりしゃ
+  - でるた
+  description: ギリシャ文字
+- char: ε
+  readings:
+  - ぎりしゃ
+  - いぷしろん
+  description: ギリシャ文字
+- char: ζ
+  readings:
+  - ぎりしゃ
+  - ぜーた
+  - つぇーた
+  - じーた
+  description: ギリシャ文字
+- char: η
+  readings:
+  - ぎりしゃ
+  - いーた
+  - えーた
+  description: ギリシャ文字
+- char: θ
+  readings:
+  - ぎりしゃ
+  - しーた
+  - てーた
+  description: ギリシャ文字
+- char: ι
+  readings:
+  - ぎりしゃ
+  - いおた
+  description: ギリシャ文字
+- char: κ
+  readings:
+  - ぎりしゃ
+  - かっぱ
+  description: ギリシャ文字
+- char: λ
+  readings:
+  - ぎりしゃ
+  - らむだ
+  description: ギリシャ文字
+- char: μ
+  readings:
+  - ぎりしゃ
+  - みゅー
+  - まいくろ
+  - みくろん
+  description: ギリシャ文字
+- char: ν
+  readings:
+  - ぎりしゃ
+  - にゅー
+  description: ギリシャ文字
+- char: ξ
+  readings:
+  - ぎりしゃ
+  - くさい
+  - くしい
+  - くしー
+  - ぐざい
+  description: ギリシャ文字
+- char: ο
+  readings:
+  - ぎりしゃ
+  - おみくろん
+  description: ギリシャ文字
+- char: π
+  readings:
+  - ぎりしゃ
+  - ぱい
+  description: ギリシャ文字
+- char: ρ
+  readings:
+  - ぎりしゃ
+  - ろー
+  description: ギリシャ文字
+- char: σ
+  readings:
+  - ぎりしゃ
+  - しぐま
+  description: ギリシャ文字
+- char: ς
+  readings:
+  - ぎりしゃ
+  - しぐま
+  description: ギリシャ文字
+- char: τ
+  readings:
+  - ぎりしゃ
+  - たう
+  description: ギリシャ文字
+- char: υ
+  readings:
+  - ぎりしゃ
+  - ゆぷしろん
+  - いぷしろん
+  - うぷしろん
+  description: ギリシャ文字
+- char: φ
+  readings:
+  - ぎりしゃ
+  - ふぁい
+  description: ギリシャ文字
+- char: χ
+  readings:
+  - ぎりしゃ
+  - かい
+  description: ギリシャ文字
+- char: ψ
+  readings:
+  - ぎりしゃ
+  - ぷさい
+  - ぷしー
+  description: ギリシャ文字
+- char: ω
+  readings:
+  - ぎりしゃ
+  - おめが
+  - おーむ
+  description: ギリシャ文字
+- char: А
+  readings:
+  - きりる
+  - ろしあ
+  - あー
+  description: キリル文字
+- char: Б
+  readings:
+  - きりる
+  - ろしあ
+  - べー
+  description: キリル文字
+- char: В
+  readings:
+  - きりる
+  - ろしあ
+  - ゔぇー
+  description: キリル文字
+- char: Г
+  readings:
+  - きりる
+  - ろしあ
+  - げー
+  description: キリル文字
+- char: Д
+  readings:
+  - きりる
+  - ろしあ
+  - でー
+  description: キリル文字
+- char: Е
+  readings:
+  - きりる
+  - ろしあ
+  - いぇー
+  - ぃえー
+  description: キリル文字
+- char: Ё
+  readings:
+  - きりる
+  - ろしあ
+  - よー
+  - ぃよー
+  description: キリル文字
+- char: Ж
+  readings:
+  - きりる
+  - ろしあ
+  - じぇー
+  description: キリル文字
+- char: З
+  readings:
+  - きりる
+  - ろしあ
+  - ぜー
+  - ぜぇー
+  description: キリル文字
+- char: И
+  readings:
+  - きりる
+  - ろしあ
+  - いー
+  description: キリル文字
+- char: Й
+  readings:
+  - きりる
+  - ろしあ
+  - いー
+  description: キリル文字
+- char: К
+  readings:
+  - きりる
+  - ろしあ
+  - かー
+  description: キリル文字
+- char: Л
+  readings:
+  - きりる
+  - ろしあ
+  - える
+  description: キリル文字
+- char: М
+  readings:
+  - きりる
+  - ろしあ
+  - えむ
+  description: キリル文字
+- char: Н
+  readings:
+  - きりる
+  - ろしあ
+  - えぬ
+  description: キリル文字
+- char: О
+  readings:
+  - きりる
+  - ろしあ
+  - おー
+  description: キリル文字
+- char: П
+  readings:
+  - きりる
+  - ろしあ
+  - ぺー
+  description: キリル文字
+- char: Р
+  readings:
+  - きりる
+  - ろしあ
+  - える
+  description: キリル文字
+- char: С
+  readings:
+  - きりる
+  - ろしあ
+  - えす
+  description: キリル文字
+- char: Т
+  readings:
+  - きりる
+  - ろしあ
+  - てー
+  description: キリル文字
+- char: У
+  readings:
+  - きりる
+  - ろしあ
+  - うー
+  description: キリル文字
+- char: Ф
+  readings:
+  - きりる
+  - ろしあ
+  - えふ
+  - ふぃたー
+  description: キリル文字
+- char: Х
+  readings:
+  - きりる
+  - ろしあ
+  - はー
+  description: キリル文字
+- char: Ц
+  readings:
+  - きりる
+  - ろしあ
+  - つぇー
+  description: キリル文字
+- char: Ч
+  readings:
+  - きりる
+  - ろしあ
+  - ちぇー
+  description: キリル文字
+- char: Ш
+  readings:
+  - きりる
+  - ろしあ
+  - しゃー
+  description: キリル文字
+- char: Щ
+  readings:
+  - きりる
+  - ろしあ
+  - しちゃー
+  - ししゃー
+  description: キリル文字
+- char: Ъ
+  readings:
+  - きりる
+  - ろしあ
+  description: キリル文字
+- char: Ы
+  readings:
+  - きりる
+  - ろしあ
+  - うぃ
+  description: キリル文字
+- char: Ь
+  readings:
+  - きりる
+  - ろしあ
+  description: キリル文字
+- char: Э
+  readings:
+  - きりる
+  - ろしあ
+  - えー
+  description: キリル文字
+- char: Ю
+  readings:
+  - きりる
+  - ろしあ
+  - ゆー
+  description: キリル文字
+- char: Я
+  readings:
+  - きりる
+  - ろしあ
+  - やー
+  description: キリル文字
+- char: а
+  readings:
+  - きりる
+  - ろしあ
+  - あー
+  description: キリル文字
+- char: б
+  readings:
+  - きりる
+  - ろしあ
+  - べー
+  description: キリル文字
+- char: в
+  readings:
+  - きりる
+  - ろしあ
+  - ゔぇー
+  description: キリル文字
+- char: г
+  readings:
+  - きりる
+  - ろしあ
+  - げー
+  description: キリル文字
+- char: д
+  readings:
+  - きりる
+  - ろしあ
+  - でー
+  description: キリル文字
+- char: е
+  readings:
+  - きりる
+  - ろしあ
+  - いぇー
+  - ぃえー
+  description: キリル文字
+- char: ё
+  readings:
+  - きりる
+  - ろしあ
+  - よー
+  - ぃよー
+  description: キリル文字
+- char: ж
+  readings:
+  - きりる
+  - ろしあ
+  - じぇー
+  description: キリル文字
+- char: з
+  readings:
+  - きりる
+  - ろしあ
+  - ぜー
+  - ぜぇー
+  description: キリル文字
+- char: и
+  readings:
+  - きりる
+  - ろしあ
+  - いー
+  description: キリル文字
+- char: й
+  readings:
+  - きりる
+  - ろしあ
+  - いー
+  description: キリル文字
+- char: к
+  readings:
+  - きりる
+  - ろしあ
+  - かー
+  description: キリル文字
+- char: л
+  readings:
+  - きりる
+  - ろしあ
+  - える
+  description: キリル文字
+- char: м
+  readings:
+  - きりる
+  - ろしあ
+  - えむ
+  description: キリル文字
+- char: н
+  readings:
+  - きりる
+  - ろしあ
+  - えぬ
+  description: キリル文字
+- char: о
+  readings:
+  - きりる
+  - ろしあ
+  - おー
+  description: キリル文字
+- char: п
+  readings:
+  - きりる
+  - ろしあ
+  - ぺー
+  description: キリル文字
+- char: р
+  readings:
+  - きりる
+  - ろしあ
+  - える
+  description: キリル文字
+- char: с
+  readings:
+  - きりる
+  - ろしあ
+  - えす
+  description: キリル文字
+- char: т
+  readings:
+  - きりる
+  - ろしあ
+  - てー
+  description: キリル文字
+- char: у
+  readings:
+  - きりる
+  - ろしあ
+  - うー
+  description: キリル文字
+- char: ф
+  readings:
+  - きりる
+  - ろしあ
+  - えふ
+  - ふぃたー
+  description: キリル文字
+- char: х
+  readings:
+  - きりる
+  - ろしあ
+  - はー
+  description: キリル文字
+- char: ц
+  readings:
+  - きりる
+  - ろしあ
+  - つぇー
+  description: キリル文字
+- char: ч
+  readings:
+  - きりる
+  - ろしあ
+  - ちぇー
+  description: キリル文字
+- char: ш
+  readings:
+  - きりる
+  - ろしあ
+  - しゃー
+  description: キリル文字
+- char: щ
+  readings:
+  - きりる
+  - ろしあ
+  - しちゃー
+  - ししゃー
+  description: キリル文字
+- char: ъ
+  readings:
+  - きりる
+  - ろしあ
+  description: キリル文字
+- char: ы
+  readings:
+  - きりる
+  - ろしあ
+  - うぃ
+  - うい
+  description: キリル文字
+- char: ь
+  readings:
+  - きりる
+  - ろしあ
+  description: キリル文字
+- char: э
+  readings:
+  - きりる
+  - ろしあ
+  - えー
+  description: キリル文字
+- char: ю
+  readings:
+  - きりる
+  - ろしあ
+  - ゆー
+  description: キリル文字
+- char: я
+  readings:
+  - きりる
+  - ろしあ
+  - やー
+  description: キリル文字
+- char: ─
+  readings:
+  - けいせん
+  - ほそわく
+  - よこ
+  description: 罫線
+- char: │
+  readings:
+  - けいせん
+  - ほそわく
+  - たて
+  description: 罫線
+- char: ┌
+  readings:
+  - けいせん
+  - ほそわく
+  - ひだりうえ
+  description: 罫線
+- char: ┐
+  readings:
+  - けいせん
+  - ほそわく
+  - みぎうえ
+  description: 罫線
+- char: ┘
+  readings:
+  - けいせん
+  - ほそわく
+  - みぎした
+  description: 罫線
+- char: └
+  readings:
+  - けいせん
+  - ほそわく
+  - ひだりした
+  description: 罫線
+- char: ├
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┬
+  readings:
+  - けいせん
+  - ほそわく
+  description: 罫線
+- char: ┤
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┴
+  readings:
+  - けいせん
+  - ほそわく
+  description: 罫線
+- char: ┼
+  readings:
+  - けいせん
+  - まんなか
+  description: 罫線
+- char: ━
+  readings:
+  - けいせん
+  - ふとわく
+  - よこ
+  description: 罫線
+- char: ┃
+  readings:
+  - けいせん
+  - ふとわく
+  - たて
+  description: 罫線
+- char: ┏
+  readings:
+  - けいせん
+  - ふとわく
+  - ひだりうえ
+  description: 罫線
+- char: ┓
+  readings:
+  - けいせん
+  - ふとわく
+  - みぎうえ
+  description: 罫線
+- char: ┛
+  readings:
+  - けいせん
+  - ふとわく
+  - みぎした
+  description: 罫線
+- char: ┗
+  readings:
+  - けいせん
+  - ふとわく
+  - ひだりした
+  description: 罫線
+- char: ┣
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┳
+  readings:
+  - けいせん
+  - ふとわく
+  description: 罫線
+- char: ┫
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┻
+  readings:
+  - けいせん
+  - ふとわく
+  description: 罫線
+- char: ╋
+  readings:
+  - けいせん
+  - まんなか
+  description: 罫線
+- char: ┠
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┯
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┨
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┷
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┿
+  readings:
+  - けいせん
+  - まんなか
+  description: 罫線
+- char: ┝
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┰
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┥
+  readings:
+  - けいせん
+  description: 罫線
+- char: ┸
+  readings:
+  - けいせん
+  description: 罫線
+- char: ╂
+  readings:
+  - けいせん
+  - まんなか
+  description: 罫線
+- char: №
+  readings:
+  - なんばー
+  - 'no'
+  - 'NO'
+  description: ナンバー
+- char: ℡
+  readings:
+  - でんわ
+  - tel
+  - TEL
+  description: 電話
+- char: ☏
+  readings:
+  - でんわ
+  description: 電話
+- char: ☎
+  readings:
+  - でんわ
+  description: 電話
+- char: ☖
+  readings:
+  - しょうぎ
+  - ごて
+  description: 将棋
+- char: ☗
+  readings:
+  - しょうぎ
+  - せんて
+  description: 将棋
+- char: ⛉
+  readings:
+  - しょうぎ
+  description: 将棋
+- char: ⛊
+  readings:
+  - しょうぎ
+  description: 将棋
+- char: ♤
+  readings:
+  - すぺーど
+  description: スペード
+- char: ♠
+  readings:
+  - すぺーど
+  description: スペード
+- char: ♡
+  readings:
+  - はーと
+  description: ハート
+- char: ♥
+  readings:
+  - はーと
+  description: ハート
+- char: ♢
+  readings:
+  - だいや
+  - ひしがた
+  - ひし
+  description: ダイヤ
+- char: ♦
+  readings:
+  - だいや
+  - ひしがた
+  - ひし
+  description: ダイヤ
+- char: ♧
+  readings:
+  - くらぶ
+  - くろーばー
+  - みつば
+  description: クラブ
+- char: ♣
+  readings:
+  - くらぶ
+  - くろーばー
+  - みつば
+  description: クラブ
+- char: ♨
+  readings:
+  - おんせん
+  description: 温泉記号
+- char: ☠
+  readings:
+  - どくろ
+  - がいこつ
+  - どくぶつ
+  description: 骸骨記号
+- char: ☡
+  readings:
+  - こーしょん
+  - ちゅうい
+  description: 注意記号
+- char: ☢
+  readings:
+  - ほうしゃのう
+  description: 放射能記号
+- char: ☣
+  readings:
+  - ばいおはざーど
+  description: バイオハザード記号
+- char: ☤
+  readings:
+  - かどぅけうす
+  - けりゅけいおん
+  description: ケリュケイオン
+- char: ☥
+  readings:
+  - あんく
+  description: アンク
+- char: ☯
+  readings:
+  - いんよう
+  - いんやん
+  description: 陰陽
+- char: ☰
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☱
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☲
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☳
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☴
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☵
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☶
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☷
+  readings:
+  - はっけ
+  description: 八卦
+- char: ☸
+  readings:
+  - ほうりん
+  description: 法輪記号
+- char: ☿
+  readings:
+  - すいせい
+  - せんせいじゅつ
+  description: 水星
+- char: ♁
+  readings:
+  - ちきゅう
+  - せんせいじゅつ
+  description: 地球
+- char: ♃
+  readings:
+  - もくせい
+  - せんせいじゅつ
+  description: 木星
+- char: ♄
+  readings:
+  - どせい
+  - せんせいじゅつ
+  description: 土星
+- char: ♅
+  readings:
+  - てんのうせい
+  - せんせいじゅつ
+  description: 天王星
+- char: ♆
+  readings:
+  - かいおうせい
+  - せんせいじゅつ
+  description: 海王星
+- char: ♇
+  readings:
+  - めいおうせい
+  - せんせいじゅつ
+  description: 冥王星
+- char: ♈
+  readings:
+  - せいざ
+  - おひつじざ
+  description: 牡羊座
+- char: ♉
+  readings:
+  - せいざ
+  - おうしざ
+  description: 牡牛座
+- char: ♊
+  readings:
+  - せいざ
+  - ふたござ
+  description: 双子座
+- char: ♋
+  readings:
+  - せいざ
+  - かにざ
+  description: 蟹座
+- char: ♌
+  readings:
+  - せいざ
+  - ししざ
+  description: 獅子座
+- char: ♍
+  readings:
+  - せいざ
+  - おとめざ
+  description: 乙女座
+- char: ♎
+  readings:
+  - せいざ
+  - てんびんざ
+  description: 天秤座
+- char: ♏
+  readings:
+  - せいざ
+  - さそりざ
+  description: 蠍座
+- char: ♐
+  readings:
+  - せいざ
+  - いてざ
+  description: 射手座
+- char: ♑
+  readings:
+  - せいざ
+  - やぎざ
+  description: 山羊座
+- char: ♒
+  readings:
+  - せいざ
+  - みずがめざ
+  description: 水瓶座
+- char: ♓
+  readings:
+  - せいざ
+  - うおざ
+  description: 魚座
+- char: ☹
+  readings:
+  - かおもじ
+  - むむ
+  - ':('
+  description: 顔文字
+- char: ☺
+  readings:
+  - えがお
+  - かおもじ
+  - にこにこ
+  - ':)'
+  description: 顔文字
+- char: ☻
+  readings:
+  - えがお
+  - かおもじ
+  - にこにこ
+  - ':)'
+  description: 顔文字
+- char: ☐
+  readings:
+  - ちぇっくぼっくす
+  description: チェックボックス
+- char: ☑
+  readings:
+  - ちぇっく
+  - ちぇっくぼっくす
+  description: チェックボックス
+- char: ☒
+  readings:
+  - ちぇっく
+  - ちぇっくぼっくす
+  - ばつ
+  - ぺけ
+  description: チェックボックス
+- char: ☓
+  readings:
+  - ちぇっく
+  - ばつ
+  - ぺけじ
+  - ぺけ
+  - ななめじゅうじ
+  description: 斜め十字
+- char: ✓
+  readings:
+  - ちぇっく
+  - きごう
+  description: チェックマーク
+- char: ✔
+  readings:
+  - ちぇっく
+  - きごう
+  description: チェックマーク
+- char: ♲
+  readings:
+  - りさいくる
+  description: リサイクル記号
+- char: ♺
+  readings:
+  - りさいくる
+  description: リサイクル記号
+- char: ♻
+  readings:
+  - りさいくる
+  description: リサイクル記号
+- char: ♼
+  readings:
+  - りさいくる
+  description: リサイクル記号
+- char: ♽
+  readings:
+  - りさいくる
+  description: リサイクル記号
+- char: ♿
+  readings:
+  - くるまいす
+  description: 車椅子記号
+- char: ⚀
+  readings:
+  - さいころ
+  - さいころ1
+  - 1
+  description: サイコロ
+- char: ⚁
+  readings:
+  - さいころ
+  - さいころ2
+  - 2
+  description: サイコロ
+- char: ⚂
+  readings:
+  - さいころ
+  - さいころ3
+  - 3
+  description: サイコロ
+- char: ⚃
+  readings:
+  - さいころ
+  - さいころ4
+  - 4
+  description: サイコロ
+- char: ⚄
+  readings:
+  - さいころ
+  - さいころ5
+  - 5
+  description: サイコロ
+- char: ⚅
+  readings:
+  - さいころ
+  - さいころ6
+  - 6
+  description: サイコロ
+- char: ⚖
+  readings:
+  - てんびん
+  description: 天秤
+- char: ⚙
+  readings:
+  - はぐるま
+  - ぎあ
+  description: 歯車
+- char: ⚠
+  readings:
+  - ちゅうい
+  - けいこく
+  description: 警告記号
+- char: ⚰
+  readings:
+  - かんおけ
+  description: 棺桶記号
+- char: 🀀
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ふぉんぱい
+  - ふうぱい
+  - とん
+  description: 麻雀牌
+- char: 🀁
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ふぉんぱい
+  - ふうぱい
+  - なん
+  description: 麻雀牌
+- char: 🀂
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ふぉんぱい
+  - ふうぱい
+  - しゃー
+  description: 麻雀牌
+- char: 🀃
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ふぉんぱい
+  - ふうぱい
+  - ぺい
+  - ぺー
+  description: 麻雀牌
+- char: 🀄︎
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - さんげんぱい
+  - ほんちゅん
+  - ふぉんちゅん
+  - ほんちゅー
+  - ちゅん
+  description: 麻雀牌
+- char: 🀅
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - さんげんぱい
+  - りゅうふぁ
+  - りゅーふぁ
+  - りゅーふぁー
+  - はつ
+  description: 麻雀牌
+- char: 🀆
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - さんげんぱい
+  - ぱいぱん
+  - はく
+  description: 麻雀牌
+- char: 🀇
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - いーまん
+  - いーわん
+  description: 麻雀牌
+- char: 🀈
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - りゃんまん
+  - りゃんわん
+  description: 麻雀牌
+- char: 🀉
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - さんまん
+  - さんわん
+  description: 麻雀牌
+- char: 🀊
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - すーまん
+  - すーわん
+  description: 麻雀牌
+- char: 🀋
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - うーまん
+  - うーわん
+  description: 麻雀牌
+- char: 🀌
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - ろーまん
+  - ろーわん
+  description: 麻雀牌
+- char: 🀍
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - ちーまん
+  - ちーわん
+  description: 麻雀牌
+- char: 🀎
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - ぱーまん
+  - ぱーわん
+  description: 麻雀牌
+- char: 🀏
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まんず
+  - わんず
+  - きゅーまん
+  - きゅーわん
+  - きゅうまん
+  - きゅうわん
+  - ちゅーまん
+  - ちゅーわん
+  description: 麻雀牌
+- char: 🀐
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - いーそー
+  description: 麻雀牌
+- char: 🀑
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - りゃんそー
+  description: 麻雀牌
+- char: 🀒
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - さんそー
+  description: 麻雀牌
+- char: 🀓
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - すーそー
+  description: 麻雀牌
+- char: 🀔
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - うーそー
+  description: 麻雀牌
+- char: 🀕
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - ろーそー
+  description: 麻雀牌
+- char: 🀖
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - ちーそー
+  description: 麻雀牌
+- char: 🀗
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - ぱーそー
+  description: 麻雀牌
+- char: 🀘
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - そーず
+  - きゅーそー
+  - きゅうそー
+  - ちゅーそー
+  description: 麻雀牌
+- char: 🀙
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - いーぴん
+  description: 麻雀牌
+- char: 🀚
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - りゃんぴん
+  description: 麻雀牌
+- char: 🀛
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - さんぴん
+  description: 麻雀牌
+- char: 🀜
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - すーぴん
+  description: 麻雀牌
+- char: 🀝
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - うーぴん
+  description: 麻雀牌
+- char: 🀞
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - ろーぴん
+  description: 麻雀牌
+- char: 🀟
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - ちーぴん
+  description: 麻雀牌
+- char: 🀠
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - ぱーぴん
+  description: 麻雀牌
+- char: 🀡
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぴんず
+  - きゅーぴん
+  - きゅうぴん
+  - ちゅーぴん
+  description: 麻雀牌
+- char: 🀢
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - うめ
+  description: 麻雀牌
+- char: 🀣
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - らん
+  description: 麻雀牌
+- char: 🀤
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - たけ
+  description: 麻雀牌
+- char: 🀥
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - きく
+  description: 麻雀牌
+- char: 🀦
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - はる
+  description: 麻雀牌
+- char: 🀧
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - なつ
+  description: 麻雀牌
+- char: 🀨
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - あき
+  description: 麻雀牌
+- char: 🀩
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ふゆ
+  description: 麻雀牌
+- char: 🀪
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - ぱいたー
+  - じょーかー
+  description: 麻雀牌
+- char: 🀫
+  readings:
+  - まーじゃん
+  - まーじゃんぱい
+  - まーじゃんうら
+  description: 麻雀牌
+- char: 🂠
+  readings:
+  - とらんぷ
+  - とらんぷうら
+  description: トランプ
+- char: 🂡
+  readings:
+  - とらんぷ
+  - すぺーどA
+  - すぺーど1
+  - すぺーどえーす
+  description: トランプ
+- char: 🂢
+  readings:
+  - とらんぷ
+  - すぺーど2
+  description: トランプ
+- char: 🂣
+  readings:
+  - とらんぷ
+  - すぺーど3
+  description: トランプ
+- char: 🂤
+  readings:
+  - とらんぷ
+  - すぺーど4
+  description: トランプ
+- char: 🂥
+  readings:
+  - とらんぷ
+  - すぺーど5
+  description: トランプ
+- char: 🂦
+  readings:
+  - とらんぷ
+  - すぺーど6
+  description: トランプ
+- char: 🂧
+  readings:
+  - とらんぷ
+  - すぺーど7
+  description: トランプ
+- char: 🂨
+  readings:
+  - とらんぷ
+  - すぺーど8
+  description: トランプ
+- char: 🂩
+  readings:
+  - とらんぷ
+  - すぺーど9
+  description: トランプ
+- char: 🂪
+  readings:
+  - とらんぷ
+  - すぺーど10
+  description: トランプ
+- char: 🂫
+  readings:
+  - とらんぷ
+  - すぺーどJ
+  - すぺーど11
+  - すぺーどじゃっく
+  description: トランプ
+- char: 🂬
+  readings:
+  - すぺーどC
+  - すぺーどないと
+  - かばろ
+  - すぺーどかばろ
+  description: トランプ
+- char: 🂭
+  readings:
+  - とらんぷ
+  - すぺーどQ
+  - すぺーど12
+  - すぺーどくいーん
+  description: トランプ
+- char: 🂮
+  readings:
+  - とらんぷ
+  - すぺーどK
+  - すぺーど13
+  - すぺーどきんぐ
+  description: トランプ
+- char: 🂱
+  readings:
+  - とらんぷ
+  - はーとA
+  - はーと1
+  - はーとえーす
+  description: トランプ
+- char: 🂲
+  readings:
+  - とらんぷ
+  - はーと2
+  description: トランプ
+- char: 🂳
+  readings:
+  - とらんぷ
+  - はーと3
+  description: トランプ
+- char: 🂴
+  readings:
+  - とらんぷ
+  - はーと4
+  description: トランプ
+- char: 🂵
+  readings:
+  - とらんぷ
+  - はーと5
+  description: トランプ
+- char: 🂶
+  readings:
+  - とらんぷ
+  - はーと6
+  description: トランプ
+- char: 🂷
+  readings:
+  - とらんぷ
+  - はーと7
+  description: トランプ
+- char: 🂸
+  readings:
+  - とらんぷ
+  - はーと8
+  description: トランプ
+- char: 🂹
+  readings:
+  - とらんぷ
+  - はーと9
+  description: トランプ
+- char: 🂺
+  readings:
+  - とらんぷ
+  - はーと10
+  description: トランプ
+- char: 🂻
+  readings:
+  - とらんぷ
+  - はーとJ
+  - はーと11
+  - はーとじゃっく
+  description: トランプ
+- char: 🂼
+  readings:
+  - はーとC
+  - はーとないと
+  - かばろ
+  - はーとかばろ
+  description: トランプ
+- char: 🂽
+  readings:
+  - とらんぷ
+  - はーとQ
+  - はーと12
+  - はーとくいーん
+  description: トランプ
+- char: 🂾
+  readings:
+  - とらんぷ
+  - はーとK
+  - はーと13
+  - はーときんぐ
+  description: トランプ
+- char: 🃁
+  readings:
+  - とらんぷ
+  - だいやA
+  - だいや1
+  - だいやえーす
+  description: トランプ
+- char: 🃂
+  readings:
+  - とらんぷ
+  - だいや2
+  description: トランプ
+- char: 🃃
+  readings:
+  - とらんぷ
+  - だいや3
+  description: トランプ
+- char: 🃄
+  readings:
+  - とらんぷ
+  - だいや4
+  description: トランプ
+- char: 🃅
+  readings:
+  - とらんぷ
+  - だいや5
+  description: トランプ
+- char: 🃆
+  readings:
+  - とらんぷ
+  - だいや6
+  description: トランプ
+- char: 🃇
+  readings:
+  - とらんぷ
+  - だいや7
+  description: トランプ
+- char: 🃈
+  readings:
+  - とらんぷ
+  - だいや8
+  description: トランプ
+- char: 🃉
+  readings:
+  - とらんぷ
+  - だいや9
+  description: トランプ
+- char: 🃊
+  readings:
+  - とらんぷ
+  - だいや10
+  description: トランプ
+- char: 🃋
+  readings:
+  - とらんぷ
+  - だいやJ
+  - だいや11
+  - だいやじゃっく
+  description: トランプ
+- char: 🃌
+  readings:
+  - だいやC
+  - だいやないと
+  - かばろ
+  - はーとかばろ
+  description: トランプ
+- char: 🃍
+  readings:
+  - とらんぷ
+  - だいやQ
+  - だいや12
+  - だいやくいーん
+  description: トランプ
+- char: 🃎
+  readings:
+  - とらんぷ
+  - だいやK
+  - だいや13
+  - だいやきんぐ
+  description: トランプ
+- char: 🃑
+  readings:
+  - とらんぷ
+  - くらぶA
+  - くらぶ1
+  - くらぶえーす
+  description: トランプ
+- char: 🃒
+  readings:
+  - とらんぷ
+  - くらぶ2
+  description: トランプ
+- char: 🃓
+  readings:
+  - とらんぷ
+  - くらぶ3
+  description: トランプ
+- char: 🃔
+  readings:
+  - とらんぷ
+  - くらぶ4
+  description: トランプ
+- char: 🃕
+  readings:
+  - とらんぷ
+  - くらぶ5
+  description: トランプ
+- char: 🃖
+  readings:
+  - とらんぷ
+  - くらぶ6
+  description: トランプ
+- char: 🃗
+  readings:
+  - とらんぷ
+  - くらぶ7
+  description: トランプ
+- char: 🃘
+  readings:
+  - とらんぷ
+  - くらぶ8
+  description: トランプ
+- char: 🃙
+  readings:
+  - とらんぷ
+  - くらぶ9
+  description: トランプ
+- char: 🃚
+  readings:
+  - とらんぷ
+  - くらぶ10
+  description: トランプ
+- char: 🃛
+  readings:
+  - とらんぷ
+  - くらぶJ
+  - くらぶ11
+  - くらぶじゃっく
+  description: トランプ
+- char: 🃜
+  readings:
+  - くらぶC
+  - くらぶないと
+  - かばろ
+  - くらぶかばろ
+  description: トランプ
+- char: 🃝
+  readings:
+  - とらんぷ
+  - くらぶQ
+  - くらぶ12
+  - くらぶくいーん
+  description: トランプ
+- char: 🃞
+  readings:
+  - とらんぷ
+  - くらぶK
+  - くらぶ13
+  - くらぶきんぐ
+  description: トランプ
+- char: Ⅰ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅱ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅲ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅳ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅴ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅵ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅶ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅷ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅸ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: Ⅹ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅰ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅱ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅲ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅳ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅴ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅵ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅶ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅷ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅸ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ⅹ
+  readings:
+  - きごう
+  - ろーま
+  description: ローマ数字
+- char: ∑
+  readings:
+  - すうがく
+  - しぐま
+  - そうわ
+  - けいさん
+  description: 総和記号
+- char: ∟
+  readings:
+  - すうがく
+  - ちょっかく
+  description: 直角
+- char: ∮
+  readings:
+  - すうがく
+  - いんてぐらる
+  - せきぶん
+  - へいろせきぶん
+  - けいさん
+  - ふぁい
+  - けいろせきぶん
+  - しゅうかいせきぶん
+  description: 閉路積分記号
+- char: ℵ
+  readings:
+  - あれふ
+- char: ①
+  readings:
+  - きごう
+  - まる1
+  - まるいち
+  description: 丸数字
+- char: ②
+  readings:
+  - きごう
+  - まる2
+  - まるに
+  description: 丸数字
+- char: ③
+  readings:
+  - きごう
+  - まる3
+  - まるさん
+  description: 丸数字
+- char: ④
+  readings:
+  - きごう
+  - まる4
+  - まるよん
+  - まるし
+  description: 丸数字
+- char: ⑤
+  readings:
+  - きごう
+  - まる5
+  - まるご
+  description: 丸数字
+- char: ⑥
+  readings:
+  - きごう
+  - まる6
+  - まるろく
+  description: 丸数字
+- char: ⑦
+  readings:
+  - きごう
+  - まる7
+  - まるなな
+  - まるしち
+  description: 丸数字
+- char: ⑧
+  readings:
+  - きごう
+  - まる8
+  - まるはち
+  description: 丸数字
+- char: ⑨
+  readings:
+  - きごう
+  - まる9
+  - まるきゅう
+  - まるく
+  description: 丸数字
+- char: ⑩
+  readings:
+  - きごう
+  - まる10
+  - まるじゅう
+  description: 丸数字
+- char: ⑪
+  readings:
+  - きごう
+  - まる11
+  - まるじゅういち
+  description: 丸数字
+- char: ⑫
+  readings:
+  - きごう
+  - まる12
+  - まるじゅうに
+  description: 丸数字
+- char: ⑬
+  readings:
+  - きごう
+  - まる13
+  - まるじゅうさん
+  description: 丸数字
+- char: ⑭
+  readings:
+  - きごう
+  - まる14
+  - まるじゅうし
+  - まるじゅうよん
+  description: 丸数字
+- char: ⑮
+  readings:
+  - きごう
+  - まる15
+  - まるじゅうご
+  description: 丸数字
+- char: ⑯
+  readings:
+  - きごう
+  - まる16
+  - まるじゅうろく
+  description: 丸数字
+- char: ⑰
+  readings:
+  - きごう
+  - まる17
+  - まるじゅうなな
+  - まるじゅうしち
+  description: 丸数字
+- char: ⑱
+  readings:
+  - きごう
+  - まる18
+  - まるじゅうはち
+  description: 丸数字
+- char: ⑲
+  readings:
+  - きごう
+  - まる19
+  - まるじゅうきゅう
+  - まるじゅうく
+  description: 丸数字
+- char: ⑳
+  readings:
+  - きごう
+  - まる20
+  - まるにじゅう
+  description: 丸数字
+- char: ㉑
+  readings:
+  - きごう
+  - まる21
+  - まるにじゅういち
+  description: 丸数字
+- char: ㉒
+  readings:
+  - きごう
+  - まる22
+  - まるにじゅうに
+  description: 丸数字
+- char: ㉓
+  readings:
+  - きごう
+  - まる23
+  - まるにじゅうさん
+  description: 丸数字
+- char: ㉔
+  readings:
+  - きごう
+  - まる24
+  - まるにじゅうよん
+  - まるにじゅうし
+  description: 丸数字
+- char: ㉕
+  readings:
+  - きごう
+  - まる25
+  - まるにじゅうご
+  description: 丸数字
+- char: ㉖
+  readings:
+  - きごう
+  - まる26
+  - まるにじゅうろく
+  description: 丸数字
+- char: ㉗
+  readings:
+  - きごう
+  - まる27
+  - まるにじゅうなな
+  - まるにじゅうしち
+  description: 丸数字
+- char: ㉘
+  readings:
+  - きごう
+  - まる28
+  - まるにじゅうはち
+  description: 丸数字
+- char: ㉙
+  readings:
+  - きごう
+  - まる29
+  - まるにじゅうきゅう
+  - まるにじゅうく
+  description: 丸数字
+- char: ㉚
+  readings:
+  - きごう
+  - まる30
+  - まるさんじゅう
+  description: 丸数字
+- char: ㉛
+  readings:
+  - きごう
+  - まる31
+  - まるさんじゅういち
+  description: 丸数字
+- char: ㉜
+  readings:
+  - きごう
+  - まる32
+  - まるさんじゅうに
+  description: 丸数字
+- char: ㉝
+  readings:
+  - きごう
+  - まる33
+  - まるさんじゅうさん
+  description: 丸数字
+- char: ㉞
+  readings:
+  - きごう
+  - まる34
+  - まるさんじゅうし
+  - まるさんじゅうよん
+  description: 丸数字
+- char: ㉟
+  readings:
+  - きごう
+  - まる35
+  - まるさんじゅうご
+  description: 丸数字
+- char: ㊱
+  readings:
+  - きごう
+  - まる36
+  - まるさんじゅうろく
+  description: 丸数字
+- char: ㊲
+  readings:
+  - きごう
+  - まる37
+  - まるさんじゅうなな
+  - まるさんじゅうしち
+  description: 丸数字
+- char: ㊳
+  readings:
+  - きごう
+  - まる38
+  - まるさんじゅうはち
+  description: 丸数字
+- char: ㊴
+  readings:
+  - きごう
+  - まる39
+  - まるさんじゅうきゅう
+  - まるさんじゅうく
+  description: 丸数字
+- char: ㊵
+  readings:
+  - きごう
+  - まる40
+  - まるよんじゅう
+  description: 丸数字
+- char: ㊶
+  readings:
+  - きごう
+  - まる41
+  - まるよんじゅういち
+  description: 丸数字
+- char: ㊷
+  readings:
+  - きごう
+  - まる42
+  - まるよんじゅうに
+  description: 丸数字
+- char: ㊸
+  readings:
+  - きごう
+  - まる43
+  - まるよんじゅうさん
+  description: 丸数字
+- char: ㊹
+  readings:
+  - きごう
+  - まる44
+  - まるよんじゅうし
+  - まるよんじゅうよん
+  description: 丸数字
+- char: ㊺
+  readings:
+  - きごう
+  - まる45
+  - まるよんじゅうご
+  description: 丸数字
+- char: ㊻
+  readings:
+  - きごう
+  - まる46
+  - まるよんじゅうろく
+  description: 丸数字
+- char: ㊼
+  readings:
+  - きごう
+  - まる47
+  - まるよんじゅうなな
+  - まるよんじゅうしち
+  description: 丸数字
+- char: ㊽
+  readings:
+  - きごう
+  - まる48
+  - まるよんじゅうはち
+  description: 丸数字
+- char: ㊾
+  readings:
+  - きごう
+  - まる49
+  - まるよんじゅうきゅう
+  - まるよんじゅうく
+  description: 丸数字
+- char: ㊿
+  readings:
+  - きごう
+  - まる50
+  - まるごじゅう
+  description: 丸数字
+- char: ㈠
+  readings:
+  - かっこ1
+  - かっこいち
+  description: 括弧漢数字
+- char: ㈡
+  readings:
+  - かっこ2
+  - かっこに
+  description: 括弧漢数字
+- char: ㈢
+  readings:
+  - かっこ3
+  - かっこさん
+  description: 括弧漢数字
+- char: ㈣
+  readings:
+  - かっこ4
+  - かっこよん
+  description: 括弧漢数字
+- char: ㈤
+  readings:
+  - かっこ5
+  - かっこご
+  description: 括弧漢数字
+- char: ㈥
+  readings:
+  - かっこ6
+  - かっころく
+  description: 括弧漢数字
+- char: ㈦
+  readings:
+  - かっこ7
+  - かっこなな
+  - かっこしち
+  description: 括弧漢数字
+- char: ㈧
+  readings:
+  - かっこ8
+  - かっこはち
+  description: 括弧漢数字
+- char: ㈨
+  readings:
+  - かっこ9
+  - かっこきゅう
+  description: 括弧漢数字
+- char: ㈩
+  readings:
+  - かっこ10
+  - かっこじゅう
+  description: 括弧漢数字
+- char: ㈱
+  readings:
+  - かぶ
+  - かぶしきがいしゃ
+  - かぶしき
+  description: 株式会社
+- char: ㈲
+  readings:
+  - ゆう
+  - ゆうげんがいしゃ
+  - ゆうげん
+  description: 有限会社
+- char: ㈹
+  readings:
+  - だい
+  - だいひょう
+  description: 代表
+- char: ©
+  readings:
+  - ちょさくけん
+  - こぴーらいと
+  - C
+  - まるしー
+  - (c)
+  - (C)
+  - まるc
+  - まるC
+  description: コピーライト
+- char: ®
+  readings:
+  - とうろくしょうひょう
+  - とれーどまーく
+  - R
+  - まるあーる
+  - (r)
+  - (R)
+  - まるr
+  - まるR
+  description: 登録商標
+- char: ™
+  readings:
+  - しょうひょう
+  - とれーどまーく
+  - TM
+  description: トレードマーク
+- char: ㊤
+  readings:
+  - うえ
+  - じょう
+  description: 丸上
+- char: ㊥
+  readings:
+  - なか
+  - ちゅう
+  description: 丸中
+- char: ㊦
+  readings:
+  - した
+  - げ
+  description: 丸下
+- char: ㊧
+  readings:
+  - ひだり
+  description: 丸左
+- char: ㊨
+  readings:
+  - みぎ
+  description: 丸右
+- char: ㋿
+  readings:
+  - れいわ
+  - ねんごう
+  description: 年号
+- char: ㍻
+  readings:
+  - へいせい
+  - ねんごう
+  description: 年号
+- char: ㍼
+  readings:
+  - しょうわ
+  - ねんごう
+  description: 年号
+- char: ㍽
+  readings:
+  - たいしょう
+  - ねんごう
+  description: 年号
+- char: ㍾
+  readings:
+  - めいじ
+  - ねんごう
+  description: 年号
+- char: ㎎
+  readings:
+  - みりぐらむ
+  - たんい
+  - mg
+  - MG
+  description: 単位
+- char: ㎏
+  readings:
+  - きろぐらむ
+  - たんい
+  - kg
+  - KG
+  description: 単位
+- char: ㎜
+  readings:
+  - みりめーとる
+  - たんい
+  - mm
+  - MM
+  description: 単位
+- char: ㎝
+  readings:
+  - せんちめーとる
+  - たんい
+  - cm
+  - CM
+  description: 単位
+- char: ㎞
+  readings:
+  - きろめーとる
+  - たんい
+  - km
+  - KM
+  description: 単位
+- char: ㎡
+  readings:
+  - へいほうめーとる
+  - たんい
+  - へいべい
+  - mm
+  - MM
+  description: 単位
+- char: ㎥
+  readings:
+  - りっぽうめーとる
+  - たんい
+  - りゅうべい
+  - りゅーべー
+  - りゅーべ
+  description: 単位
+- char: ㏄
+  readings:
+  - しーしー
+  - たんい
+  - cc
+  description: 単位
+- char: ㏍
+  readings:
+  - かぶしきがいしゃ
+  - kk
+- char: ＂
+  readings:
+  - さん
+  - せん
+- char: ＇
+  readings:
+  - ’
+- char: ￤
+  readings:
+  - たて
+  - たてぼう
+  - '|'
+  description: 縦線
+- char: ゐ
+  readings:
+  - い
+  - うぃ
+- char: ゑ
+  readings:
+  - え
+  - うぇ
+- char: ヰ
+  readings:
+  - い
+  - うぃ
+- char: ヱ
+  readings:
+  - え
+  - うぇ
+- char: ぁ
+  readings:
+  - あ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ぃ
+  readings:
+  - い
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ぅ
+  readings:
+  - う
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ぇ
+  readings:
+  - え
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ぉ
+  readings:
+  - お
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: っ
+  readings:
+  - つ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ゃ
+  readings:
+  - や
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ゅ
+  readings:
+  - ゆ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ょ
+  readings:
+  - よ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ゎ
+  readings:
+  - わ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ゟ
+  readings:
+  - より
+  - ごうじ
+  description: 合字
+- char: ァ
+  readings:
+  - あ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ィ
+  readings:
+  - い
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ゥ
+  readings:
+  - う
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ェ
+  readings:
+  - え
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ォ
+  readings:
+  - お
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ヵ
+  readings:
+  - か
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ヶ
+  readings:
+  - け
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ッ
+  readings:
+  - つ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ャ
+  readings:
+  - や
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ュ
+  readings:
+  - ゆ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ョ
+  readings:
+  - よ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: ヮ
+  readings:
+  - わ
+  - すてがな
+  - こがきもじ
+  description: 捨て仮名 小書き文字
+- char: Ａ
+  readings:
+  - えー
+  - えい
+  description: 英数字
+- char: Ｂ
+  readings:
+  - びー
+  - びぃ
+  - びい
+  description: 英数字
+- char: Ｃ
+  readings:
+  - しー
+  description: 英数字
+- char: Ｄ
+  readings:
+  - でぃー
+  - でー
+  description: 英数字
+- char: Ｅ
+  readings:
+  - いー
+  description: 英数字
+- char: Ｆ
+  readings:
+  - えふ
+  description: 英数字
+- char: Ｇ
+  readings:
+  - じー
+  description: 英数字
+- char: Ｈ
+  readings:
+  - えいち
+  - えっち
+  description: 英数字
+- char: Ｉ
+  readings:
+  - あい
+  description: 英数字
+- char: Ｊ
+  readings:
+  - じぇい
+  - じぇー
+  description: 英数字
+- char: Ｋ
+  readings:
+  - けい
+  - けー
+  description: 英数字
+- char: Ｌ
+  readings:
+  - える
+  description: 英数字
+- char: Ｍ
+  readings:
+  - えむ
+  description: 英数字
+- char: Ｎ
+  readings:
+  - えぬ
+  description: 英数字
+- char: Ｏ
+  readings:
+  - おー
+  description: 英数字
+- char: Ｐ
+  readings:
+  - ぴー
+  description: 英数字
+- char: Ｑ
+  readings:
+  - きゅー
+  - きゅう
+  description: 英数字
+- char: Ｒ
+  readings:
+  - あーる
+  description: 英数字
+- char: Ｓ
+  readings:
+  - えす
+  description: 英数字
+- char: Ｔ
+  readings:
+  - てぃ
+  - てぃー
+  - てー
+  description: 英数字
+- char: Ｕ
+  readings:
+  - ゆー
+  description: 英数字
+- char: Ｖ
+  readings:
+  - ゔぃ
+  - ぶい
+  - ぶぃ
+  description: 英数字
+- char: Ｗ
+  readings:
+  - だぶりゅー
+  - だぶる
+  - だぶるー
+  description: 英数字
+- char: Ｘ
+  readings:
+  - えっくす
+  description: 英数字
+- char: Ｙ
+  readings:
+  - わい
+  description: 英数字
+- char: Ｚ
+  readings:
+  - ぜっと
+  description: 英数字
+- char: ａ
+  readings:
+  - えー
+  - えい
+  description: 英数字
+- char: ｂ
+  readings:
+  - びー
+  - びぃ
+  - びい
+  description: 英数字
+- char: ｃ
+  readings:
+  - しー
+  description: 英数字
+- char: ｄ
+  readings:
+  - でぃー
+  - でー
+  description: 英数字
+- char: ｅ
+  readings:
+  - いー
+  description: 英数字
+- char: ｆ
+  readings:
+  - えふ
+  description: 英数字
+- char: ｇ
+  readings:
+  - じー
+  description: 英数字
+- char: ｈ
+  readings:
+  - えいち
+  - えっち
+  description: 英数字
+- char: ｉ
+  readings:
+  - あい
+  description: 英数字
+- char: ｊ
+  readings:
+  - じぇい
+  - じぇー
+  description: 英数字
+- char: ｋ
+  readings:
+  - けい
+  - けー
+  description: 英数字
+- char: ｌ
+  readings:
+  - える
+  description: 英数字
+- char: ｍ
+  readings:
+  - えむ
+  description: 英数字
+- char: ｎ
+  readings:
+  - えぬ
+  description: 英数字
+- char: ｏ
+  readings:
+  - おー
+  description: 英数字
+- char: ｐ
+  readings:
+  - ぴー
+  description: 英数字
+- char: ｑ
+  readings:
+  - きゅー
+  - きゅう
+  description: 英数字
+- char: ｒ
+  readings:
+  - あーる
+  description: 英数字
+- char: ｓ
+  readings:
+  - えす
+  description: 英数字
+- char: ｔ
+  readings:
+  - てぃ
+  - てぃー
+  - てー
+  description: 英数字
+- char: ｕ
+  readings:
+  - ゆー
+  description: 英数字
+- char: ｖ
+  readings:
+  - ゔぃ
+  - ぶい
+  - ぶぃ
+  description: 英数字
+- char: ｗ
+  readings:
+  - だぶりゅー
+  - だぶる
+  - だぶるー
+  description: 英数字
+- char: ｘ
+  readings:
+  - えっくす
+  description: 英数字
+- char: ｙ
+  readings:
+  - わい
+  description: 英数字
+- char: ｚ
+  readings:
+  - ぜっと
+  description: 英数字
+- char: ☀
+  readings:
+  - てんき
+  - はれ
+  - たいよう
+  description: 天気
+- char: ☼
+  readings:
+  - てんき
+  - はれ
+  - たいよう
+  description: 天気
+- char: ☁
+  readings:
+  - てんき
+  - くもり
+  - くも
+  description: 天気
+- char: ☂
+  readings:
+  - てんき
+  - あめ
+  - かさ
+  description: 天気
+- char: ☔
+  readings:
+  - てんき
+  - あめ
+  - かさ
+  description: 天気
+- char: ☃
+  readings:
+  - てんき
+  - ゆき
+  - ゆきだるま
+  description: 天気
+- char: ☄
+  readings:
+  - ながれぼし
+  - こめっと
+  description: 流れ星
+- char: ☇
+  readings:
+  - かみなり
+  description: 天気
+- char: ☈
+  readings:
+  - らいう
+  description: 天気
+- char: ☽
+  readings:
+  - みかづき
+  description: 右三日月
+- char: ☾
+  readings:
+  - みかづき
+  description: 左三日月
+- char: ☘
+  readings:
+  - くろーばー
+  description: クローバー
+- char: ☕
+  readings:
+  - こーひー
+  - こうちゃ
+  - てぃーかっぷ
+  description: ティーカップ
+- char: ♔
+  readings:
+  - ちぇす
+  - きんぐ
+  description: チェス
+- char: ♕
+  readings:
+  - ちぇす
+  - くいーん
+  - くぃーん
+  description: チェス
+- char: ♖
+  readings:
+  - ちぇす
+  - るーく
+  description: チェス
+- char: ♗
+  readings:
+  - ちぇす
+  - びしょっぷ
+  description: チェス
+- char: ♘
+  readings:
+  - ちぇす
+  - ないと
+  description: チェス
+- char: ♙
+  readings:
+  - ちぇす
+  - ぽーん
+  description: チェス
+- char: ♚
+  readings:
+  - ちぇす
+  - きんぐ
+  description: チェス
+- char: ♛
+  readings:
+  - ちぇす
+  - くいーん
+  - くぃーん
+  description: チェス
+- char: ♜
+  readings:
+  - ちぇす
+  - るーく
+  description: チェス
+- char: ♝
+  readings:
+  - ちぇす
+  - びしょっぷ
+  description: チェス
+- char: ♞
+  readings:
+  - ちぇす
+  - ないと
+  description: チェス
+- char: ♟
+  readings:
+  - ちぇす
+  - ぽーん
+  description: チェス
+- char: ⌘
+  readings:
+  - こまんど
+  - こまんどきー
+  description: コマンドキー
+- char: ⌥
+  readings:
+  - おぷしょん
+  - おぷしょんきー
+  description: オプションキー
+- char: ⌫
+  readings:
+  - ばっくすぺーす
+  - ばっくすぺーすきー
+  description: バックスペースキー
+- char: ⌚
+  readings:
+  - うでどけい
+  - とけい
+  description: 時計記号
+- char: Á
+  readings:
+  - a
+  - A
+  - あきゅーと
+  description: アキュート付き文字
+- char: É
+  readings:
+  - e
+  - E
+  - あきゅーと
+  description: アキュート付き文字
+- char: Í
+  readings:
+  - i
+  - I
+  - あきゅーと
+  description: アキュート付き文字
+- char: Ó
+  readings:
+  - o
+  - O
+  - あきゅーと
+  description: アキュート付き文字
+- char: Ú
+  readings:
+  - u
+  - U
+  - あきゅーと
+  description: アキュート付き文字
+- char: á
+  readings:
+  - a
+  - A
+  - あきゅーと
+  description: アキュート付き文字
+- char: é
+  readings:
+  - e
+  - E
+  - あきゅーと
+  description: アキュート付き文字
+- char: í
+  readings:
+  - i
+  - I
+  - あきゅーと
+  description: アキュート付き文字
+- char: ó
+  readings:
+  - o
+  - O
+  - あきゅーと
+  description: アキュート付き文字
+- char: ú
+  readings:
+  - u
+  - U
+  - あきゅーと
+  description: アキュート付き文字
+- char: Ä
+  readings:
+  - a
+  - A
+  - うむらうと
+  - とれま
+  description: ウムラウト／トレマ付き文字
+- char: Ö
+  readings:
+  - o
+  - O
+  - うむらうと
+  - とれま
+  description: ウムラウト／トレマ付き文字
+- char: Ü
+  readings:
+  - u
+  - U
+  - うむらうと
+  - とれま
+  description: ウムラウト／トレマ付き文字
+- char: ä
+  readings:
+  - a
+  - A
+  - うむらうと
+  - とれま
+  description: ウムラウト／トレマ付き文字
+- char: ö
+  readings:
+  - o
+  - O
+  - うむらうと
+  - とれま
+  description: ウムラウト／トレマ付き文字
+- char: ü
+  readings:
+  - u
+  - U
+  - うむらうと
+  - とれま
+  description: ウムラウト／トレマ付き文字
+- char: À
+  readings:
+  - a
+  - A
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: È
+  readings:
+  - e
+  - E
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: Ì
+  readings:
+  - i
+  - I
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: Ò
+  readings:
+  - o
+  - O
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: Ù
+  readings:
+  - u
+  - U
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: à
+  readings:
+  - a
+  - A
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: è
+  readings:
+  - e
+  - E
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: ì
+  readings:
+  - i
+  - I
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: ò
+  readings:
+  - o
+  - O
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: ù
+  readings:
+  - u
+  - U
+  - ぐらーぶ
+  description: グラーブ付き文字
+- char: Â
+  readings:
+  - a
+  - A
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: Ê
+  readings:
+  - e
+  - E
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: Î
+  readings:
+  - i
+  - I
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: Ô
+  readings:
+  - o
+  - O
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: Û
+  readings:
+  - u
+  - U
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: â
+  readings:
+  - a
+  - A
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: ê
+  readings:
+  - e
+  - E
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: î
+  readings:
+  - i
+  - I
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: ô
+  readings:
+  - o
+  - O
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: û
+  readings:
+  - u
+  - U
+  - さーかむふれっくす
+  - はっと
+  description: サーカムフレックス(ハット)付き文字
+- char: Ø
+  readings:
+  - o
+  - O
+  - すらっしゅ
+  description: スラッシュ付き文字
+- char: ø
+  readings:
+  - o
+  - O
+  - すらっしゅ
+  description: スラッシュ付き文字
+- char: Ç
+  readings:
+  - c
+  - C
+  - せでぃーゆ
+  description: セディーユ付き文字
+- char: ç
+  readings:
+  - c
+  - C
+  - せでぃーゆ
+  description: セディーユ付き文字
+- char: Ő
+  readings:
+  - o
+  - O
+  - だぶるあきゅーと
+  description: ダブルアキュート付き文字
+- char: Ű
+  readings:
+  - u
+  - U
+  - だぶるあきゅーと
+  description: ダブルアキュート付き文字
+- char: ő
+  readings:
+  - o
+  - O
+  - だぶるあきゅーと
+  description: ダブルアキュート付き文字
+- char: ű
+  readings:
+  - u
+  - U
+  - だぶるあきゅーと
+  description: ダブルアキュート付き文字
+- char: Ã
+  readings:
+  - a
+  - A
+  - ちるだ
+  description: チルダ付き文字
+- char: Ñ
+  readings:
+  - n
+  - N
+  - ちるだ
+  description: チルダ付き文字
+- char: Õ
+  readings:
+  - o
+  - O
+  - ちるだ
+  description: チルダ付き文字
+- char: ã
+  readings:
+  - a
+  - A
+  - ちるだ
+  description: チルダ付き文字
+- char: ñ
+  readings:
+  - n
+  - N
+  - ちるだ
+  description: チルダ付き文字
+- char: õ
+  readings:
+  - o
+  - O
+  - ちるだ
+  description: チルダ付き文字
+- char: Ë
+  readings:
+  - e
+  - E
+  - うむらうと
+  - とれま
+  description: トレマ付き文字
+- char: Ï
+  readings:
+  - i
+  - I
+  - うむらうと
+  - とれま
+  description: トレマ付き文字
+- char: ë
+  readings:
+  - e
+  - E
+  - うむらうと
+  - とれま
+  description: トレマ付き文字
+- char: ï
+  readings:
+  - i
+  - I
+  - うむらうと
+  - とれま
+  description: トレマ付き文字
+- char: ÿ
+  readings:
+  - y
+  - Y
+  - うむらうと
+  - とれま
+  description: トレマ付き文字
+- char: Ơ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: Ư
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: Ớ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: Ờ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: Ở
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: Ỡ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: Ợ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: Ứ
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: Ừ
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: Ử
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: Ữ
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: Ự
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: ơ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: ư
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: ớ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: ờ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: ở
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: ỡ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: ợ
+  readings:
+  - o
+  - O
+  - ほーん
+  description: ホーン付き文字
+- char: ứ
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: ừ
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: ử
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: ữ
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: ự
+  readings:
+  - u
+  - U
+  - ほーん
+  description: ホーン付き文字
+- char: Ā
+  readings:
+  - a
+  - A
+  - まくろん
+  description: マクロン付き文字
+- char: Ǟ
+  readings:
+  - a
+  - A
+  - まくろん
+  description: マクロン付き文字
+- char: Ǣ
+  readings:
+  - a
+  - A
+  - ae
+  - AE
+  - まくろん
+  description: マクロン付き文字
+- char: Ē
+  readings:
+  - e
+  - E
+  - まくろん
+  description: マクロン付き文字
+- char: Ḡ
+  readings:
+  - g
+  - G
+  - まくろん
+  description: マクロン付き文字
+- char: Ī
+  readings:
+  - i
+  - I
+  - まくろん
+  description: マクロン付き文字
+- char: Ō
+  readings:
+  - o
+  - O
+  - まくろん
+  description: マクロン付き文字
+- char: Ȫ
+  readings:
+  - o
+  - O
+  - まくろん
+  description: マクロン付き文字
+- char: Ū
+  readings:
+  - u
+  - U
+  - まくろん
+  description: マクロン付き文字
+- char: Ǖ
+  readings:
+  - u
+  - U
+  - まくろん
+  description: マクロン付き文字
+- char: Ȳ
+  readings:
+  - y
+  - Y
+  - まくろん
+  description: マクロン付き文字
+- char: ā
+  readings:
+  - a
+  - A
+  - まくろん
+  description: マクロン付き文字
+- char: ǟ
+  readings:
+  - a
+  - A
+  - まくろん
+  description: マクロン付き文字
+- char: ǣ
+  readings:
+  - a
+  - A
+  - ae
+  - AE
+  - まくろん
+  description: マクロン付き文字
+- char: ē
+  readings:
+  - e
+  - E
+  - まくろん
+  description: マクロン付き文字
+- char: ḡ
+  readings:
+  - g
+  - G
+  - まくろん
+  description: マクロン付き文字
+- char: ī
+  readings:
+  - i
+  - I
+  - まくろん
+  description: マクロン付き文字
+- char: ō
+  readings:
+  - o
+  - O
+  - まくろん
+  description: マクロン付き文字
+- char: ȫ
+  readings:
+  - o
+  - O
+  - まくろん
+  description: マクロン付き文字
+- char: ū
+  readings:
+  - u
+  - U
+  - まくろん
+  description: マクロン付き文字
+- char: ǖ
+  readings:
+  - u
+  - U
+  - まくろん
+  description: マクロン付き文字
+- char: ȳ
+  readings:
+  - y
+  - Y
+  - まくろん
+  description: マクロン付き文字
+- char: Å
+  readings:
+  - a
+  - A
+  - りんぐ
+  description: リング付き文字
+- char: å
+  readings:
+  - a
+  - A
+  - りんぐ
+  description: リング付き文字
+- char: Æ
+  readings:
+  - a
+  - A
+  - ae
+  - AE
+  - にじゅうぼいん
+  - ごうじ
+  - あっしゅ
+  description: 二重母音 合字
+- char: æ
+  readings:
+  - a
+  - A
+  - ae
+  - AE
+  - にじゅうぼいん
+  - ごうじ
+  - あっしゅ
+  - はつおんきごう
+  description: 発音記号 二重母音 合字
+- char: ß
+  readings:
+  - s
+  - S
+  - ss
+  - SS
+  - ごうじ
+  - えすつぇっと
+  description: エスツェット 合字
+- char: ẞ
+  readings:
+  - s
+  - S
+  - ss
+  - SS
+  - ごうじ
+  - えすつぇっと
+  description: エスツェット大文字 合字
+- char: ɑ
+  readings:
+  - a
+  - A
+  - はつおんきごう
+  - えー
+  - えい
+  - ぶろーどえー
+  - ぶろーどえい
+  - ぶろーどa
+  - ぶろーどA
+  - ぶろーどあ
+  description: 発音記号
+- char: ɒ
+  readings:
+  - a
+  - A
+  - はつおんきごう
+  description: 発音記号
+- char: ʌ
+  readings:
+  - はつおんきごう
+  - いんばーてっどぶい
+  - いんばーてぃっどぶい
+  - いんゔぁーてぃっどゔぃー
+  - いんゔぁーてっどゔぃー
+  - うぇっじ
+  - v
+  - u
+  - V
+  - U
+  description: 発音記号
+- char: ə
+  readings:
+  - はつおんきごう
+  - あいまいぼいん
+  - しゅわー
+  - しゅわ
+  - e
+  - E
+  description: 発音記号
+- char: ɚ
+  readings:
+  - はつおんきごう
+  - あいまいぼいん
+  - ふっくとしゅわー
+  - ふっくとしゅわ
+  - ふっくどしゅわー
+  - ふっくどしゅわ
+  - しゅわー
+  - しゅわ
+  - e
+  - E
+  description: 発音記号
+- char: ɔ
+  readings:
+  - はつおんきごう
+  - おーぷんおー
+  - o
+  - O
+  description: 発音記号
+- char: ɪ
+  readings:
+  - はつおんきごう
+  - i
+  - I
+  description: 発音記号
+- char: ʊ
+  readings:
+  - はつおんきごう
+  - ゆぷしろん
+  - u
+  - U
+  description: 発音記号
+- char: ð
+  readings:
+  - はつおんきごう
+  - えず
+  - えす
+  description: 発音記号
+- char: ŋ
+  readings:
+  - はつおんきごう
+  - えんぐ
+  - えん
+  - んg
+  - ng
+  - NG
+  description: 発音記号
+- char: ʃ
+  readings:
+  - はつおんきごう
+  - えしゅ
+  - sh
+  - SH
+  description: 発音記号
+- char: ʒ
+  readings:
+  - はつおんきごう
+  - えじゅ
+  - えっじゅ
+  - zh
+  - ZH
+  description: 発音記号
+- char: ʧ
+  readings:
+  - はつおんきごう
+  - tsh
+  - TSH
+  description: 発音記号
+- char: ʤ
+  readings:
+  - はつおんきごう
+  - dzh
+  - DZH
+  description: 発音記号
+- char: ː
+  readings:
+  - はつおんきごう
+  - ちょうぼいん
+  - ：
+  - ':'
+  description: 発音記号
+- char: ␀
+  readings:
+  - NUL
+  description: 制御記号
+- char: ␁
+  readings:
+  - SOH
+  description: 制御記号
+- char: ␂
+  readings:
+  - STX
+  description: 制御記号
+- char: ␃
+  readings:
+  - ETX
+  description: 制御記号
+- char: ␄
+  readings:
+  - EOT
+  description: 制御記号
+- char: ␅
+  readings:
+  - ENQ
+  description: 制御記号
+- char: ␆
+  readings:
+  - ACK
+  description: 制御記号
+- char: ␇
+  readings:
+  - BEL
+  description: 制御記号
+- char: ␈
+  readings:
+  - BS
+  description: 制御記号
+- char: ␉
+  readings:
+  - HT
+  description: 制御記号
+- char: ␊
+  readings:
+  - LF
+  description: 制御記号
+- char: ␋
+  readings:
+  - VT
+  description: 制御記号
+- char: ␌
+  readings:
+  - FF
+  description: 制御記号
+- char: ␍
+  readings:
+  - CR
+  description: 制御記号
+- char: ␎
+  readings:
+  - SO
+  description: 制御記号
+- char: ␏
+  readings:
+  - SI
+  description: 制御記号
+- char: ␐
+  readings:
+  - DLE
+  description: 制御記号
+- char: ␑
+  readings:
+  - DC1
+  description: 制御記号
+- char: ␒
+  readings:
+  - DC2
+  description: 制御記号
+- char: ␓
+  readings:
+  - DC3
+  description: 制御記号
+- char: ␔
+  readings:
+  - DC4
+  description: 制御記号
+- char: ␕
+  readings:
+  - NAK
+  description: 制御記号
+- char: ␖
+  readings:
+  - SYN
+  description: 制御記号
+- char: ␗
+  readings:
+  - ETB
+  description: 制御記号
+- char: ␘
+  readings:
+  - CAN
+  description: 制御記号
+- char: ␙
+  readings:
+  - EM
+  description: 制御記号
+- char: ␚
+  readings:
+  - SUB
+  description: 制御記号
+- char: ␛
+  readings:
+  - ESC
+  description: 制御記号
+- char: ␜
+  readings:
+  - FS
+  description: 制御記号
+- char: ␝
+  readings:
+  - GS
+  description: 制御記号
+- char: ␞
+  readings:
+  - RS
+  description: 制御記号
+- char: ␟
+  readings:
+  - US
+  description: 制御記号
+- char: ␠
+  readings:
+  - SP
+  description: 制御記号
+- char: ␡
+  readings:
+  - DEL
+  description: 制御記号
+- char: ␤
+  readings:
+  - NL
+  description: 制御記号
+- char: ʬ
+  readings:
+  - ww
+  - ばいらびあるぱーかっしぶ
+- char: ¤
+  readings:
+  - つうか
+  - たんい
+  - こくさいつうかきごう
+  description: 通貨記号
+- char: ₠
+  readings:
+  - つうか
+  - たんい
+  - おうしゅうつうかたんい
+  - えきゅー　きゅうゆーろ　えきゅーきごう　きゅうゆーろきごう
+  description: 通貨記号
+- char: ₡
+  readings:
+  - つうか
+  - たんい
+  - ころん
+  - ころんきごう
+  description: 通貨記号
+- char: ₢
+  readings:
+  - つうか
+  - たんい
+  - くるぜいろ
+  - くるぜいろきごう
+  description: 通貨記号
+- char: ₣
+  readings:
+  - つうか
+  - たんい
+  - ふらん
+  - ふらんきごう
+  description: 通貨記号
+- char: ₤
+  readings:
+  - つうか
+  - たんい
+  - りら
+  - りらきごう
+  description: 通貨記号
+- char: ₥
+  readings:
+  - つうか
+  - たんい
+  - みるきごう
+  description: 通貨記号
+- char: ₦
+  readings:
+  - つうか
+  - たんい
+  - ないら
+  - ないらきごう
+  description: 通貨記号
+- char: ₧
+  readings:
+  - つうか
+  - たんい
+  - ぺせた
+  - ぺせたきごう
+  description: 通貨記号
+- char: ₨
+  readings:
+  - つうか
+  - たんい
+  - るぴー
+  - るぴーきごう
+  description: 通貨記号
+- char: ₩
+  readings:
+  - つうか
+  - たんい
+  - うぉん
+  - うぉんきごう
+  description: 通貨記号
+- char: ₪
+  readings:
+  - つうか
+  - たんい
+  - しんしぇける
+  - しんしぇけるきごう
+  description: 通貨記号
+- char: ₫
+  readings:
+  - つうか
+  - たんい
+  - どん
+  - どんきごう
+  description: 通貨記号
+- char: ₭
+  readings:
+  - つうか
+  - たんい
+  - きーぷ
+  - きーぷきごう
+  description: 通貨記号
+- char: ₮
+  readings:
+  - つうか
+  - たんい
+  - どぐろぐ
+  - とぅぐるぐ
+  - とぅぐるく
+  - とぅぐりく
+  - どぐろぐきごう
+  - とぅぐるぐきごう
+  - とぅぐるくきごう
+  - とぅぐりくきごう
+  description: 通貨記号
+- char: ₯
+  readings:
+  - つうか
+  - たんい
+  - どらくま
+  - どらくまきごう
+  description: 通貨記号
+- char: ₰
+  readings:
+  - つうか
+  - たんい
+  - ぺにひ
+  - ぺにひきごう
+  description: 通貨記号
+- char: ₱
+  readings:
+  - つうか
+  - たんい
+  - ぺそ
+  - ぺそきごう
+  description: 通貨記号
+- char: ₲
+  readings:
+  - つうか
+  - たんい
+  - ぐあらにー
+  - ぐあらにーきごう
+  description: 通貨記号
+- char: ₳
+  readings:
+  - つうか
+  - たんい
+  - あうすとらる
+  - あうすとらるきごう
+  description: 通貨記号
+- char: ₴
+  readings:
+  - つうか
+  - たんい
+  - ぐりぶな
+  - ふりヴにゃ
+  - ふりぶにゃ
+  - ぐりぶなきごう
+  - ふりヴにゃきごう
+  - ふりぶにゃきごう
+  description: 通貨記号
+- char: ₵
+  readings:
+  - つうか
+  - たんい
+  - せでぃ
+  - せでぃきごう
+  description: 通貨記号
+- char: ₶
+  readings:
+  - つうか
+  - たんい
+  - りーぶる
+  - とぅーるりーぶる
+  description: 通貨記号
+- char: ₷
+  readings:
+  - つうか
+  - たんい
+  - すぺすみろ
+  description: 通貨記号
+- char: ₸
+  readings:
+  - つうか
+  - たんい
+  - てんげ
+  description: 通貨記号
+- char: ₹
+  readings:
+  - つうか
+  - たんい
+  - るぴー
+  - いんどるぴー
+  description: 通貨記号
+- char: ₺
+  readings:
+  - つうか
+  - たんい
+  - りら
+  - とるこりら
+  description: 通貨記号
+- char: ₻
+  readings:
+  - つうか
+  - たんい
+  - まるく
+  - のるうぇーまるく
+  description: 通貨記号
+- char: ₼
+  readings:
+  - つうか
+  - たんい
+  - まなと
+  - あぜるばいじゃんまなと
+  description: 通貨記号
+- char: ₽
+  readings:
+  - つうか
+  - たんい
+  - るーぶる
+  - ろしあるーぶる
+  description: 通貨記号
+- char: ₾
+  readings:
+  - つうか
+  - たんい
+  - らり
+  - じょーじあらり
+  description: 通貨記号
+- char: ₿
+  readings:
+  - つうか
+  - たんい
+  - びっとこいん
+  description: 通貨記号
+- char: ㌀
+  readings:
+  - あぱーと
+- char: ㌁
+  readings:
+  - あるふぁ
+- char: ㌂
+  readings:
+  - あんぺあ
+  description: 単位
+- char: ㌃
+  readings:
+  - あーる
+  - たんい
+  description: 単位
+- char: ㌄
+  readings:
+  - いにんぐ
+  - たんい
+  description: 単位
+- char: ㌅
+  readings:
+  - いんち
+  - たんい
+  description: 単位
+- char: ㌆
+  readings:
+  - うぉん
+  - たんい
+  description: 単位
+- char: ㌇
+  readings:
+  - えすくーど
+  - たんい
+  description: 単位
+- char: ㌈
+  readings:
+  - えーかー
+  - たんい
+  description: 単位
+- char: ㌉
+  readings:
+  - おんす
+  - たんい
+  description: 単位
+- char: ㌊
+  readings:
+  - おーむ
+  - たんい
+  description: 単位
+- char: ㌋
+  readings:
+  - かいり
+  - たんい
+  description: 単位
+- char: ㌌
+  readings:
+  - からっと
+  - たんい
+  description: 単位
+- char: ㌍
+  readings:
+  - かろりー
+  - たんい
+  description: 単位
+- char: ㌎
+  readings:
+  - がろん
+  - たんい
+  description: 単位
+- char: ㌏
+  readings:
+  - がんま
+  - たんい
+  description: 単位
+- char: ㌐
+  readings:
+  - ぎが
+  - たんい
+  description: 単位
+- char: ㌑
+  readings:
+  - ぎにー
+  - たんい
+  description: 単位
+- char: ㌒
+  readings:
+  - きゅりー
+  - たんい
+  description: 単位
+- char: ㌓
+  readings:
+  - ぎるだー
+  - たんい
+  description: 単位
+- char: ㌔
+  readings:
+  - きろ
+  - たんい
+  description: 単位
+- char: ㌕
+  readings:
+  - きろぐらむ
+  - たんい
+  description: 単位
+- char: ㌖
+  readings:
+  - きろめーとる
+  - たんい
+  description: 単位
+- char: ㌗
+  readings:
+  - きろわっと
+  - たんい
+  description: 単位
+- char: ㌘
+  readings:
+  - ぐらむ
+  - たんい
+  description: 単位
+- char: ㌙
+  readings:
+  - ぐらむとん
+  - たんい
+  description: 単位
+- char: ㌚
+  readings:
+  - くるぜいろ
+  - たんい
+  description: 単位
+- char: ㌛
+  readings:
+  - くろーね
+  - たんい
+  description: 単位
+- char: ㌜
+  readings:
+  - けーす
+  - たんい
+  description: 単位
+- char: ㌝
+  readings:
+  - こるな
+  - たんい
+  description: 単位
+- char: ㌞
+  readings:
+  - こーぽ
+- char: ㌟
+  readings:
+  - さいくる
+  - たんい
+  description: 単位
+- char: ㌠
+  readings:
+  - さんちーむ
+  - たんい
+  description: 単位
+- char: ㌡
+  readings:
+  - しりんぐ
+  - たんい
+  description: 単位
+- char: ㌢
+  readings:
+  - せんち
+  - たんい
+  description: 単位
+- char: ㌣
+  readings:
+  - せんと
+  - たんい
+  description: 単位
+- char: ㌤
+  readings:
+  - だーす
+  - たんい
+  description: 単位
+- char: ㌥
+  readings:
+  - でし
+  - たんい
+  description: 単位
+- char: ㌦
+  readings:
+  - どる
+  - たんい
+  description: 単位
+- char: ㌧
+  readings:
+  - とん
+  - たんい
+  description: 単位
+- char: ㌨
+  readings:
+  - なの
+  - たんい
+  description: 単位
+- char: ㌩
+  readings:
+  - のっと
+  - たんい
+  description: 単位
+- char: ㌪
+  readings:
+  - はいつ
+- char: ㌫
+  readings:
+  - ぱーせんと
+  - たんい
+  description: 単位
+- char: ㌬
+  readings:
+  - ぱーつ
+  - たんい
+  description: 単位
+- char: ㌭
+  readings:
+  - ばーれる
+  - たんい
+  description: 単位
+- char: ㌮
+  readings:
+  - ぴあすとる
+  - たんい
+  description: 単位
+- char: ㌯
+  readings:
+  - ぴくる
+  - たんい
+  description: 単位
+- char: ㌰
+  readings:
+  - ぴこ
+  - たんい
+  description: 単位
+- char: ㌱
+  readings:
+  - びる
+- char: ㌲
+  readings:
+  - ふぁらっど
+  - たんい
+  description: 単位
+- char: ㌳
+  readings:
+  - ふぃーと
+  - たんい
+  description: 単位
+- char: ㌴
+  readings:
+  - ぶっしぇる
+  - たんい
+  description: 単位
+- char: ㌵
+  readings:
+  - ふらん
+  - たんい
+  description: 単位
+- char: ㌶
+  readings:
+  - へくたーる
+  - たんい
+  description: 単位
+- char: ㌷
+  readings:
+  - ぺそ
+  - たんい
+  description: 単位
+- char: ㌸
+  readings:
+  - ぺにひ
+  - たんい
+  description: 単位
+- char: ㌹
+  readings:
+  - へるつ
+  - たんい
+  description: 単位
+- char: ㌺
+  readings:
+  - ぺんす
+  - たんい
+  description: 単位
+- char: ㌻
+  readings:
+  - ぺーじ
+  - たんい
+  description: 単位
+- char: ㌼
+  readings:
+  - べーた
+- char: ㌽
+  readings:
+  - ぽいんと
+  - たんい
+  description: 単位
+- char: ㌾
+  readings:
+  - ぼると
+  - たんい
+  description: 単位
+- char: ㌿
+  readings:
+  - ほん
+  - たんい
+  description: 単位
+- char: ㍀
+  readings:
+  - ぽんど
+  - たんい
+  description: 単位
+- char: ㍁
+  readings:
+  - ほーる
+- char: ㍂
+  readings:
+  - ほーん
+  - たんい
+  description: 単位
+- char: ㍃
+  readings:
+  - まいくろ
+  - たんい
+  description: 単位
+- char: ㍄
+  readings:
+  - まいる
+  - たんい
+  description: 単位
+- char: ㍅
+  readings:
+  - まっは
+  - たんい
+  description: 単位
+- char: ㍆
+  readings:
+  - まるく
+  - たんい
+  description: 単位
+- char: ㍇
+  readings:
+  - まんしょん
+- char: ㍈
+  readings:
+  - みくろん
+  - たんい
+  description: 単位
+- char: ㍉
+  readings:
+  - みり
+  - たんい
+  description: 単位
+- char: ㍊
+  readings:
+  - みりばーる
+  - たんい
+  description: 単位
+- char: ㍋
+  readings:
+  - めが
+  - たんい
+  description: 単位
+- char: ㍌
+  readings:
+  - めがとん
+  - たんい
+  description: 単位
+- char: ㍍
+  readings:
+  - めーとる
+  - たんい
+  description: 単位
+- char: ㍎
+  readings:
+  - やーど
+  - たんい
+  description: 単位
+- char: ㍏
+  readings:
+  - やーる
+  - たんい
+  description: 単位
+- char: ㍐
+  readings:
+  - ゆあん
+  - たんい
+  description: 単位
+- char: ㍑
+  readings:
+  - りっとる
+  - たんい
+  description: 単位
+- char: ㍒
+  readings:
+  - りら
+  - たんい
+  description: 単位
+- char: ㍓
+  readings:
+  - るぴー
+  - たんい
+  description: 単位
+- char: ㍔
+  readings:
+  - るーぶる
+  - たんい
+  description: 単位
+- char: ㍕
+  readings:
+  - れむ
+  - たんい
+  description: 単位
+- char: ㍖
+  readings:
+  - れんとげん
+  - たんい
+  description: 単位
+- char: ㍗
+  readings:
+  - わっと
+  - たんい
+  description: 単位
+- char: ↔
+  readings:
+  - やじるし
+  - ←→
+  - <->
+  - <ー>
+  description: 矢印
+- char: ↕
+  readings:
+  - やじるし
+  - ↑↓
+  - ↓↑
+  description: 矢印
+- char: ↖
+  readings:
+  - やじるし
+  - ←
+  - ↑
+  - ひだりうえ
+  - ひだりうえや
+  description: 矢印
+- char: ↗
+  readings:
+  - やじるし
+  - →
+  - ↑
+  - みぎうえ
+  - みぎうえや
+  description: 矢印
+- char: ↘
+  readings:
+  - やじるし
+  - →
+  - ↓
+  - みぎした
+  - みぎしたや
+  description: 矢印
+- char: ↙
+  readings:
+  - やじるし
+  - ←
+  - ↓
+  - ひだりした
+  - ひだりしたや
+  description: 矢印
+- char: ↩
+  readings:
+  - やじるし
+  - ←
+  description: 矢印
+- char: ↪
+  readings:
+  - やじるし
+  - →
+  description: 矢印
+- char: ↰
+  readings:
+  - やじるし
+  - ←
+  description: 矢印
+- char: ↱
+  readings:
+  - やじるし
+  - →
+  description: 矢印
+- char: ↲
+  readings:
+  - やじるし
+  - ←
+  description: 矢印
+- char: ↴
+  readings:
+  - やじるし
+  - ↓
+  description: 矢印
+- char: ↳
+  readings:
+  - やじるし
+  - →
+  description: 矢印
+- char: ↵
+  readings:
+  - やじるし
+  - ←
+  - えんたー
+  - りたーん
+  - かいぎょう
+  description: 矢印 改行記号
+- char: ↶
+  readings:
+  - やじるし
+  - ↓
+  description: 矢印
+- char: ↷
+  readings:
+  - やじるし
+  - ↓
+  description: 矢印
+- char: ↺
+  readings:
+  - やじるし
+  - →
+  - ↑
+  description: 矢印
+- char: ↻
+  readings:
+  - やじるし
+  - ←
+  - ↑
+  description: 矢印
+- char: ⤴
+  readings:
+  - やじるし
+  - ↑
+  description: 矢印
+- char: ⤵
+  readings:
+  - やじるし
+  - ↓
+  description: 矢印
+- char: ⇄
+  readings:
+  - やじるし
+  - →←
+  description: 矢印
+- char: ⇅
+  readings:
+  - やじるし
+  - ↑↓
+  description: 矢印
+- char: ⇆
+  readings:
+  - やじるし
+  - ←→
+  description: 矢印
+- char: ⇇
+  readings:
+  - やじるし
+  - ←
+  - ←←
+  description: 矢印
+- char: ⇈
+  readings:
+  - やじるし
+  - ↑
+  - ↑↑
+  description: 矢印
+- char: ⇉
+  readings:
+  - やじるし
+  - →
+  - →→
+  description: 矢印
+- char: ⇊
+  readings:
+  - やじるし
+  - ↓
+  - ↓↓
+  description: 矢印
+- char: ⇐
+  readings:
+  - やじるし
+  - ひだりや
+  - ひだり
+  - <=
+  - ←
+  description: 太矢印
+- char: ⇑
+  readings:
+  - やじるし
+  - うえや
+  - うえ
+  - ↑
+  description: 太矢印
+- char: ⇓
+  readings:
+  - やじるし
+  - したや
+  - した
+  - ↓
+  description: 太矢印
+- char: ⇕
+  readings:
+  - やじるし
+  - ↑↓
+  - ↓↑
+  description: 太矢印
+- char: ⇖
+  readings:
+  - やじるし
+  - ひだりうえ
+  - ひだりうえや
+  - ←
+  - ↑
+  description: 太矢印
+- char: ⇗
+  readings:
+  - やじるし
+  - みぎうえ
+  - みぎうえや
+  - →
+  - ↑
+  description: 太矢印
+- char: ⇘
+  readings:
+  - やじるし
+  - みぎした
+  - みぎしたや
+  - →
+  - ↓
+  description: 太矢印
+- char: ⇙
+  readings:
+  - やじるし
+  - ひだりした
+  - ひだりしたや
+  - ←
+  - ↓
+  description: 太矢印
+- char: ⇚
+  readings:
+  - やじるし
+  - ひだりや
+  - ひだり
+  - ←
+  description: 三重矢印
+- char: ⇛
+  readings:
+  - やじるし
+  - みぎや
+  - みぎ
+  - →
+  description: 三重矢印
+- char: ⇠
+  readings:
+  - やじるし
+  - ひだりや
+  - ひだり
+  - <...
+  - ←
+  description: 点線矢印
+- char: ⇡
+  readings:
+  - やじるし
+  - うえや
+  - うえ
+  - ↑
+  description: 点線矢印
+- char: ⇢
+  readings:
+  - やじるし
+  - みぎや
+  - みぎ
+  - ...>
+  - →
+  description: 点線矢印
+- char: ⇣
+  readings:
+  - やじるし
+  - したや
+  - した
+  - ↓
+  description: 点線矢印
+- char: ⇦
+  readings:
+  - やじるし
+  - ひだりや
+  - ひだり
+  - ←
+  description: 白抜き矢印
+- char: ⇧
+  readings:
+  - やじるし
+  - うえや
+  - うえ
+  - ↑
+  description: 白抜き矢印
+- char: ⇨
+  readings:
+  - やじるし
+  - みぎや
+  - みぎ
+  - →
+  description: 白抜き矢印
+- char: ⇩
+  readings:
+  - やじるし
+  - したや
+  - した
+  - ↓
+  description: 白抜き矢印
+- char: 〄
+  readings:
+  - きごう
+  - JIS
+  - じす
+  description: JISマーク
+- char: 〠
+  readings:
+  - きごう
+  - ゆうびん
+  description: 郵便記号
+- char: 〶
+  readings:
+  - きごう
+  - ゆうびん
+  description: 郵便記号
+- char: 〼
+  readings:
+  - ます
+  description: 枡記号
+- char: 〽
+  readings:
+  - いおりてん
+  - うた
+  description: 庵点 歌記号
+- char: (月)
+  readings:
+  - げつ
+  - げつよう
+  - げつようび
+  description: 月曜日
+- char: (火)
+  readings:
+  - か
+  - かよう
+  - かようび
+  description: 火曜日
+- char: (水)
+  readings:
+  - すい
+  - すいよう
+  - すいようび
+  description: 水曜日
+- char: (木)
+  readings:
+  - もく
+  - もくよう
+  - もくようび
+  description: 木曜日
+- char: (金)
+  readings:
+  - きん
+  - きんよう
+  - きんようび
+  description: 金曜日
+- char: (土)
+  readings:
+  - ど
+  - どよう
+  - どようび
+  description: 土曜日
+- char: (日)
+  readings:
+  - にち
+  - にちよう
+  - にちようび
+  description: 日曜日
+- char: ㈪
+  readings:
+  - げつよう
+  - げつようび
+  description: 月曜日
+- char: ㈫
+  readings:
+  - かよう
+  - かようび
+  description: 火曜日
+- char: ㈬
+  readings:
+  - すいよう
+  - すいようび
+  description: 水曜日
+- char: ㈭
+  readings:
+  - もくよう
+  - もくようび
+  description: 木曜日
+- char: ㈮
+  readings:
+  - きんよう
+  - きんようび
+  description: 金曜日
+- char: ㈯
+  readings:
+  - どよう
+  - どようび
+  description: 土曜日
+- char: ㈰
+  readings:
+  - にちよう
+  - にちようび
+  description: 日曜日
+- char: ㈷
+  readings:
+  - しゅくじつ
+  - かっこしゅく
+  description: 祝日
+- char: ㉁
+  readings:
+  - やすみ
+  - きゅうじつ
+  - かっこきゅう
+  description: (休)
+- char: ㈳
+  readings:
+  - しゃだんほうじん
+  - かっこしゃ
+  description: (社)
+- char: ㈴
+  readings:
+  - なまえ
+  - かっこめい
+  description: (名)
+- char: ㈵
+  readings:
+  - とくしゅほうじん
+  - かっことく
+  description: (特)
+- char: ㈶
+  readings:
+  - ざいだんほうじん
+  - かっこざい
+  description: (財)
+- char: ㈸
+  readings:
+  - ろうどうくみあい
+  - かっころう
+  description: (労)
+- char: ㈺
+  readings:
+  - よびだし
+  - かっこよび
+  description: (呼)
+- char: ㈻
+  readings:
+  - がっこうほうじん
+  - かっこがく
+  description: (学)
+- char: ㈼
+  readings:
+  - かんさほうじん
+  - かっこかん
+  description: (監)
+- char: ㈽
+  readings:
+  - かっこき
+  description: (企)
+- char: ㈾
+  readings:
+  - かっこし
+  description: (資)
+- char: ㈿
+  readings:
+  - かっこきょう
+  description: (協)
+- char: ㉀
+  readings:
+  - さいじつ
+  - かっこさい
+  description: (祭)
+- char: ㉂
+  readings:
+  - かっこじ
+  - かっこより
+  description: (自)
+- char: ㉃
+  readings:
+  - いたる
+  - かっこいたる
+  description: (至)
+- char: ㊙
+  readings:
+  - まるひ
+  description: 丸秘
+- char: ㊚
+  readings:
+  - まるおとこ
+  - おとこ
+  description: 丸男
+- char: ㊛
+  readings:
+  - まるおんな
+  - おんな
+  description: 丸女
+- char: ㊜
+  readings:
+  - まるてき
+  description: 丸適
+- char: ㊝
+  readings:
+  - まるゆう
+  description: 丸優
+- char: ㊞
+  readings:
+  - まるいん
+  - いんかん
+  description: 丸印
+- char: ㊟
+  readings:
+  - まるちゅう
+  description: 丸注
+- char: ㊠
+  readings:
+  - まるこう
+  description: 丸項
+- char: ㊡
+  readings:
+  - まるきゅう
+  description: 丸休
+- char: ㊢
+  readings:
+  - まるしゃ
+  description: 丸写
+- char: ㊣
+  readings:
+  - まるせい
+  description: 丸正
+- char: ㊩
+  readings:
+  - まるい
+  description: 丸医
+- char: ㊪
+  readings:
+  - まるしゅう
+  description: 丸宗
+- char: ㊫
+  readings:
+  - まるがく
+  description: 丸学
+- char: ㊬
+  readings:
+  - まるかん
+  description: 丸監
+- char: ㊭
+  readings:
+  - まるき
+  description: 丸企
+- char: ㊮
+  readings:
+  - まるし
+  description: 丸資
+- char: ㊯
+  readings:
+  - まるきょう
+  description: 丸協
+- char: ㊰
+  readings:
+  - まるよる
+  description: 丸夜
+- char: ㋐
+  readings:
+  - まるあ
+  description: 丸ア
+- char: ㋑
+  readings:
+  - まるい
+  description: 丸イ
+- char: ㋒
+  readings:
+  - まるう
+  description: 丸ウ
+- char: ㋓
+  readings:
+  - まるえ
+  description: 丸エ
+- char: ㋔
+  readings:
+  - まるお
+  description: 丸オ
+- char: ㋕
+  readings:
+  - まるか
+  description: 丸カ
+- char: ㋖
+  readings:
+  - まるき
+  description: 丸キ
+- char: ㋗
+  readings:
+  - まるく
+  description: 丸ク
+- char: ㋘
+  readings:
+  - まるけ
+  description: 丸ケ
+- char: ㋙
+  readings:
+  - まるこ
+  description: 丸コ
+- char: ㋚
+  readings:
+  - まるさ
+  description: 丸サ
+- char: ㋛
+  readings:
+  - まるし
+  description: 丸シ
+- char: ㋜
+  readings:
+  - まるす
+  description: 丸ス
+- char: ㋝
+  readings:
+  - まるせ
+  description: 丸セ
+- char: ㋞
+  readings:
+  - まるそ
+  description: 丸ソ
+- char: ㋟
+  readings:
+  - まるた
+  description: 丸タ
+- char: ㋠
+  readings:
+  - まるち
+  description: 丸チ
+- char: ㋡
+  readings:
+  - まるつ
+  description: 丸ツ
+- char: ㋢
+  readings:
+  - まるて
+  description: 丸テ
+- char: ㋣
+  readings:
+  - まると
+  description: 丸ト
+- char: ㋤
+  readings:
+  - まるな
+  description: 丸ナ
+- char: ㋥
+  readings:
+  - まるに
+  description: 丸ニ
+- char: ㋦
+  readings:
+  - まるぬ
+  description: 丸ヌ
+- char: ㋧
+  readings:
+  - まるね
+  description: 丸ネ
+- char: ㋨
+  readings:
+  - まるの
+  description: 丸ノ
+- char: ㋩
+  readings:
+  - まるは
+  description: 丸ハ
+- char: ㋪
+  readings:
+  - まるひ
+  description: 丸ヒ
+- char: ㋫
+  readings:
+  - まるふ
+  description: 丸フ
+- char: ㋬
+  readings:
+  - まるへ
+  description: 丸ヘ
+- char: ㋭
+  readings:
+  - まるほ
+  description: 丸ホ
+- char: ㋮
+  readings:
+  - まるま
+  description: 丸マ
+- char: ㋯
+  readings:
+  - まるみ
+  description: 丸ミ
+- char: ㋰
+  readings:
+  - まるむ
+  description: 丸ム
+- char: ㋱
+  readings:
+  - まるめ
+  description: 丸メ
+- char: ㋲
+  readings:
+  - まるも
+  description: 丸モ
+- char: ㋳
+  readings:
+  - まるや
+  description: 丸ヤ
+- char: ㋴
+  readings:
+  - まるゆ
+  description: 丸ユ
+- char: ㋵
+  readings:
+  - まるよ
+  description: 丸ヨ
+- char: ㋶
+  readings:
+  - まるら
+  description: 丸ラ
+- char: ㋷
+  readings:
+  - まるり
+  description: 丸リ
+- char: ㋸
+  readings:
+  - まるる
+  description: 丸ル
+- char: ㋹
+  readings:
+  - まるれ
+  description: 丸レ
+- char: ㋺
+  readings:
+  - まるろ
+  description: 丸ロ
+- char: ㋻
+  readings:
+  - まるわ
+  description: 丸ワ
+- char: ㋼
+  readings:
+  - まるうぃ
+  - まるゐ
+  description: 丸ヰ
+- char: ㋽
+  readings:
+  - まるうぇ
+  - まるゑ
+  description: 丸ヱ
+- char: ㋾
+  readings:
+  - まるを
+  description: 丸ヲ
+- char: ⁰
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき0
+  - うえつき0
+  - うえ0
+  description: 上付き文字
+- char: ¹
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき1
+  - うえつき1
+  - うえ1
+  description: 上付き文字
+- char: ²
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき2
+  - うえつき2
+  - うえ2
+  description: 上付き文字
+- char: ³
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき3
+  - うえつき3
+  - うえ3
+  description: 上付き文字
+- char: ⁴
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき4
+  - うえつき4
+  - うえ4
+  description: 上付き文字
+- char: ⁵
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき5
+  - うえつき5
+  - うえ5
+  description: 上付き文字
+- char: ⁶
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき6
+  - うえつき6
+  - うえ6
+  description: 上付き文字
+- char: ⁷
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき7
+  - うえつき7
+  - うえ7
+  description: 上付き文字
+- char: ⁸
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき8
+  - うえつき8
+  - うえ8
+  description: 上付き文字
+- char: ⁹
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき9
+  - うえつき9
+  - うえ9
+  description: 上付き文字
+- char: ⁺
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき+
+  - うえつき+
+  - うえ+
+  - +
+  description: 上付き文字
+- char: ⁻
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき-
+  - うえつき-
+  - うえ-
+  - '-'
+  description: 上付き文字
+- char: ⁼
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき=
+  - うえつき=
+  - うえ=
+  - =
+  description: 上付き文字
+- char: ⁽
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき(
+  - うえつき(
+  - うえ(
+  - (
+  description: 上付き文字
+- char: ⁾
+  readings:
+  - うわつき
+  - うえつき
+  - うわつき)
+  - うえつき)
+  - うえ)
+  - )
+  description: 上付き文字
+- char: ⁿ
+  readings:
+  - うわつき
+  - うえつき
+  - うわつきn
+  - うえつきn
+  - うえn
+  - うわつきN
+  - うえつきN
+  - うえN
+  - うわつきん
+  - うえつきん
+  - うえん
+  - n
+  description: 上付き文字
+- char: ₀
+  readings:
+  - したつき
+  - したつき0
+  - した0
+  description: 下付き文字
+- char: ₁
+  readings:
+  - したつき
+  - したつき1
+  - した1
+  description: 下付き文字
+- char: ₂
+  readings:
+  - したつき
+  - したつき2
+  - した2
+  description: 下付き文字
+- char: ₃
+  readings:
+  - したつき
+  - したつき3
+  - した3
+  description: 下付き文字
+- char: ₄
+  readings:
+  - したつき
+  - したつき4
+  - した4
+  description: 下付き文字
+- char: ₅
+  readings:
+  - したつき
+  - したつき5
+  - した5
+  description: 下付き文字
+- char: ₆
+  readings:
+  - したつき
+  - したつき6
+  - した6
+  description: 下付き文字
+- char: ₇
+  readings:
+  - したつき
+  - したつき7
+  - した7
+  description: 下付き文字
+- char: ₈
+  readings:
+  - したつき
+  - したつき8
+  - した8
+  description: 下付き文字
+- char: ₉
+  readings:
+  - したつき
+  - したつき9
+  - した9
+  description: 下付き文字
+- char: ₊
+  readings:
+  - したつき
+  - したつき+
+  - した+
+  - +
+  description: 下付き文字
+- char: ₋
+  readings:
+  - したつき
+  - したつき-
+  - した-
+  - '-'
+  description: 下付き文字
+- char: ₌
+  readings:
+  - したつき
+  - したつき=
+  - した=
+  - =
+  description: 下付き文字
+- char: ₍
+  readings:
+  - したつき
+  - したつき(
+  - した(
+  - (
+  description: 下付き文字
+- char: ₎
+  readings:
+  - したつき
+  - したつき)
+  - した)
+  - )
+  description: 下付き文字
+- char: ₐ
+  readings:
+  - したつき
+  - したつきa
+  - したつきあ
+  - したつきA
+  - したa
+  - したあ
+  - したA
+  - a
+  description: 下付き文字
+- char: ₑ
+  readings:
+  - したつき
+  - したつきe
+  - したつきえ
+  - したつきE
+  - したe
+  - したえ
+  - したE
+  - e
+  description: 下付き文字
+- char: ₒ
+  readings:
+  - したつき
+  - したつきo
+  - したつきお
+  - したつきO
+  - したo
+  - したお
+  - したO
+  - o
+  description: 下付き文字
+- char: ₓ
+  readings:
+  - したつき
+  - したつきx
+  - したつきX
+  - したx
+  - したX
+  - x
+  description: 下付き文字
+- char: ₔ
+  readings:
+  - したつき
+  - したつきe
+  - したつきえ
+  - したつきE
+  - したe
+  - したえ
+  - したE
+  - e
+  description: 下付き文字
+- char: ✁
+  readings:
+  - きごう
+  - はさみ
+  description: はさみ
+- char: ✂
+  readings:
+  - きごう
+  - はさみ
+  description: はさみ
+- char: ✃
+  readings:
+  - きごう
+  - はさみ
+  description: はさみ
+- char: ✄
+  readings:
+  - きごう
+  - はさみ
+  description: はさみ
+- char: ✆
+  readings:
+  - きごう
+  - でんわ
+  description: 電話
+- char: ✇
+  readings:
+  - きごう
+  - てーぷ
+  - てーぷどらいぶ
+  description: テープドライブ
+- char: ✈
+  readings:
+  - きごう
+  - ひこうき
+  description: 飛行機
+- char: ✉
+  readings:
+  - きごう
+  - ふうとう
+  description: 封筒
+- char: ✌
+  readings:
+  - きごう
+  - ぴーす
+  - ぶい
+  description: ピース
+- char: ✍
+  readings:
+  - きごう
+  - てがき
+  - めも
+  description: 手書き
+- char: ✎
+  readings:
+  - きごう
+  - えんぴつ
+  description: 鉛筆
+- char: ✏
+  readings:
+  - きごう
+  - えんぴつ
+  description: 鉛筆
+- char: ✐
+  readings:
+  - きごう
+  - えんぴつ
+  description: 鉛筆
+- char: ✑
+  readings:
+  - きごう
+  - ぺん
+  - ぺんさき
+  - まんねんひつ
+  description: ペン先
+- char: ✒
+  readings:
+  - きごう
+  - ぺん
+  - ぺんさき
+  - まんねんひつ
+  description: ペン先
+- char: ✕
+  readings:
+  - きごう
+  - ばつ
+  - ぺけ
+  - かける
+  description: 乗算記号
+- char: ✖
+  readings:
+  - きごう
+  - ばつ
+  - ぺけ
+  - かける
+  description: 乗算記号
+- char: ✗
+  readings:
+  - きごう
+  - ばつ
+  - ぺけ
+  description: バツマーク
+- char: ✘
+  readings:
+  - きごう
+  - ばつ
+  - ぺけ
+  description: バツマーク
+- char: ✙
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✚
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✛
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✜
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✝
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✞
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✟
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  description: 十字架
+- char: ✠
+  readings:
+  - きごう
+  - くろす
+  - じゅうじか
+  - じゅうじ
+  - まるたじゅうじ
+  description: マルタ十字
+- char: ✡
+  readings:
+  - きごう
+  - ほし
+  - だびで
+  - だびでのほし
+  - ろくぼうせい
+  description: ダビデの星
+- char: ✢
+  readings:
+  - きごう
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✣
+  readings:
+  - きごう
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✤
+  readings:
+  - きごう
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✥
+  readings:
+  - きごう
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✦
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✧
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✩
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✪
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✫
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✬
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✭
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✮
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✯
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✰
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ✱
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✲
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✳
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✴
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✵
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✶
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✷
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✸
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✹
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✺
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✻
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✼
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✽
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ✾
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  - はな
+  description: 花
+- char: ✿
+  readings:
+  - きごう
+  - はな
+  description: 花
+- char: ❀
+  readings:
+  - きごう
+  - はな
+  description: 花
+- char: ❁
+  readings:
+  - きごう
+  - はな
+  description: 花
+- char: ❂
+  readings:
+  - きごう
+  - ほし
+  description: 星
+- char: ❃
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ❄
+  readings:
+  - きごう
+  - ゆき
+  description: 雪
+- char: ❅
+  readings:
+  - きごう
+  - ゆき
+  description: 雪
+- char: ❆
+  readings:
+  - きごう
+  - ゆき
+  description: 雪
+- char: ❇
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ❈
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ❉
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ❊
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ❋
+  readings:
+  - きごう
+  - ほし
+  - あすたりすく
+  - あすてりすく
+  description: アスタリスク
+- char: ❍
+  readings:
+  - きごう
+  - まる
+  - ずけい
+  description: 丸
+- char: ❏
+  readings:
+  - きごう
+  - しかく
+  - ずけい
+  description: 四角
+- char: ❐
+  readings:
+  - きごう
+  - しかく
+  - ずけい
+  description: 四角
+- char: ❑
+  readings:
+  - きごう
+  - しかく
+  - ずけい
+  description: 四角
+- char: ❒
+  readings:
+  - きごう
+  - しかく
+  - ずけい
+  description: 四角
+- char: ❖
+  readings:
+  - きごう
+  - ひし
+  - ひしがた
+  - ずけい
+  description: ダイヤモンド
+- char: ❘
+  readings:
+  - きごう
+  - たてぼう
+  - たてせん
+  - '|'
+  description: 縦棒
+- char: ❙
+  readings:
+  - きごう
+  - たてぼう
+  - たてせん
+  - '|'
+  description: 縦棒
+- char: ❚
+  readings:
+  - きごう
+  - たてぼう
+  - たてせん
+  - '|'
+  description: 縦棒
+- char: ❛
+  readings:
+  - きごう
+  - くぉーと
+  - ''''
+  description: シングルクォート
+- char: ❜
+  readings:
+  - きごう
+  - あぽすとろふぃ
+  - くぉーと
+  - こんま
+  - かんま
+  - ''''
+  description: シングルクォート
+- char: ❝
+  readings:
+  - きごう
+  - だぶるくおーと
+  - だぶるくおーてーしょん
+  - くぉーと
+  - だぶるくぉーてしょん
+  - '"'
+  description: ダブルクォート
+- char: ❞
+  readings:
+  - きごう
+  - だぶるくおーと
+  - だぶるくおーてーしょん
+  - くぉーと
+  - だぶるくぉーてしょん
+  - '"'
+  description: ダブルクォート
+- char: ❡
+  readings:
+  - きごう
+  - だんらく
+  - せくしょん
+  description: 段落記号
+- char: ❢
+  readings:
+  - きごう
+  - かんたんふ
+  - '!'
+  - ！
+  - えくすくらめーしょん
+  - びっくり
+  description: 感嘆符
+- char: ❣
+  readings:
+  - きごう
+  - かんたんふ
+  - '!'
+  - ！
+  - えくすくらめーしょん
+  - びっくり
+  description: 感嘆符
+- char: ❤
+  readings:
+  - きごう
+  - はーと
+  description: ハート
+- char: ❥
+  readings:
+  - きごう
+  - はーと
+  description: ハート
+- char: ❦
+  readings:
+  - きごう
+  - はーと
+  description: ハート
+- char: ❧
+  readings:
+  - きごう
+  - はーと
+  description: ハート
+- char: ❶
+  readings:
+  - きごう
+  - まる1
+  - まるいち
+  description: 丸数字
+- char: ❷
+  readings:
+  - きごう
+  - まる2
+  - まるに
+  description: 丸数字
+- char: ❸
+  readings:
+  - きごう
+  - まる3
+  - まるさん
+  description: 丸数字
+- char: ❹
+  readings:
+  - きごう
+  - まる4
+  - まるよん
+  - まるし
+  description: 丸数字
+- char: ❺
+  readings:
+  - きごう
+  - まる5
+  - まるご
+  description: 丸数字
+- char: ❻
+  readings:
+  - きごう
+  - まる6
+  - まるろく
+  description: 丸数字
+- char: ❼
+  readings:
+  - きごう
+  - まる7
+  - まるなな
+  - まるしち
+  description: 丸数字
+- char: ❽
+  readings:
+  - きごう
+  - まる8
+  - まるはち
+  description: 丸数字
+- char: ❾
+  readings:
+  - きごう
+  - まる9
+  - まるきゅう
+  - まるく
+  description: 丸数字
+- char: ❿
+  readings:
+  - きごう
+  - まる10
+  - まるじゅう
+  description: 丸数字
+- char: ➀
+  readings:
+  - きごう
+  - まる1
+  - まるいち
+  description: 丸数字
+- char: ➁
+  readings:
+  - きごう
+  - まる2
+  - まるに
+  description: 丸数字
+- char: ➂
+  readings:
+  - きごう
+  - まる3
+  - まるさん
+  description: 丸数字
+- char: ➃
+  readings:
+  - きごう
+  - まる4
+  - まるよん
+  - まるし
+  description: 丸数字
+- char: ➄
+  readings:
+  - きごう
+  - まる5
+  - まるご
+  description: 丸数字
+- char: ➅
+  readings:
+  - きごう
+  - まる6
+  - まるろく
+  description: 丸数字
+- char: ➆
+  readings:
+  - きごう
+  - まる7
+  - まるなな
+  - まるしち
+  description: 丸数字
+- char: ➇
+  readings:
+  - きごう
+  - まる8
+  - まるはち
+  description: 丸数字
+- char: ➈
+  readings:
+  - きごう
+  - まる9
+  - まるきゅう
+  - まるく
+  description: 丸数字
+- char: ➉
+  readings:
+  - きごう
+  - まる10
+  - まるじゅう
+  description: 丸数字
+- char: ➊
+  readings:
+  - きごう
+  - まる1
+  - まるいち
+  description: 丸数字
+- char: ➋
+  readings:
+  - きごう
+  - まる2
+  - まるに
+  description: 丸数字
+- char: ➌
+  readings:
+  - きごう
+  - まる3
+  - まるさん
+  description: 丸数字
+- char: ➍
+  readings:
+  - きごう
+  - まる4
+  - まるよん
+  - まるし
+  description: 丸数字
+- char: ➎
+  readings:
+  - きごう
+  - まる5
+  - まるご
+  description: 丸数字
+- char: ➏
+  readings:
+  - きごう
+  - まる6
+  - まるろく
+  description: 丸数字
+- char: ➐
+  readings:
+  - きごう
+  - まる7
+  - まるなな
+  - まるしち
+  description: 丸数字
+- char: ➑
+  readings:
+  - きごう
+  - まる8
+  - まるはち
+  description: 丸数字
+- char: ➒
+  readings:
+  - きごう
+  - まる9
+  - まるきゅう
+  - まるく
+  description: 丸数字
+- char: ➓
+  readings:
+  - きごう
+  - まる10
+  - まるじゅう
+  description: 丸数字
+- char: ➔
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➘
+  readings:
+  - きごう
+  - やじるし
+  - みぎした
+  description: 右下矢印
+- char: ➙
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➚
+  readings:
+  - きごう
+  - やじるし
+  - みぎうえ
+  description: 右上矢印
+- char: ➛
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➜
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➝
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➞
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➟
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➠
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➡
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➢
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➣
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➤
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➥
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➦
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➧
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➨
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➩
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➪
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➫
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➬
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➭
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➮
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➯
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➱
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➲
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➳
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➴
+  readings:
+  - きごう
+  - やじるし
+  - みぎした
+  description: 右下矢印
+- char: ➵
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➶
+  readings:
+  - きごう
+  - やじるし
+  - みぎうえ
+  description: 右上矢印
+- char: ➷
+  readings:
+  - きごう
+  - やじるし
+  - みぎした
+  description: 右下矢印
+- char: ➸
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➹
+  readings:
+  - きごう
+  - やじるし
+  - みぎうえ
+  description: 右上矢印
+- char: ➺
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➻
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➼
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➽
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: ➾
+  readings:
+  - きごう
+  - やじるし
+  - みぎ
+  description: 右矢印
+- char: (笑)
+  readings:
+  - わら
+  description: 笑
+- char: w
+  readings:
+  - わら
+  description: 笑
+- char: www
+  readings:
+  - わら
+  - くさ
+  description: 笑
+- char: (泣)
+  readings:
+  - なく
+  - なき
+  description: 泣
+- char: (汗)
+  readings:
+  - あせ
+  description: 汗
+- char: 乙
+  readings:
+  - ぶしゅ
+  - おつにょう
+  - つりばり
+  description: 部首
+- char: 乚
+  readings:
+  - ぶしゅ
+  - おつ
+  - おつにょう
+  - つりばり
+  description: 部首
+- char: 丨
+  readings:
+  - ぶしゅ
+  - いちぼう
+  - たて
+  - たてぼう
+  - こん
+  - '|'
+  description: 部首
+- char: 丶
+  readings:
+  - ぶしゅ
+  - てん
+  description: 部首
+- char: 丿
+  readings:
+  - ぶしゅ
+  - の
+  description: 部首
+- char: 亅
+  readings:
+  - ぶしゅ
+  - はねぼう
+  - かぎ
+  description: 部首
+- char: 二
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 亠
+  readings:
+  - ぶしゅ
+  - なべぶた
+  description: 部首
+- char: 人
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 亻
+  readings:
+  - ぶしゅ
+  - にんべん
+  description: 部首
+- char: 𠆢
+  readings:
+  - ぶしゅ
+  - ひとがしら
+  - ひとやね
+  description: 部首
+- char: 儿
+  readings:
+  - ぶしゅ
+  - にんにょう
+  - ひとあし
+  description: 部首
+- char: 入
+  readings:
+  - ぶしゅ
+  - いる
+  - いりがしら
+  - いりやね
+  description: 部首
+- char: 八
+  readings:
+  - ぶしゅ
+  - はちがしら
+  description: 部首
+- char: 冖
+  readings:
+  - ぶしゅ
+  - わかんむり
+  - べきかんむり
+  description: 部首
+- char: 冂
+  readings:
+  - ぶしゅ
+  - けいがまえ
+  - どうがまえ
+  description: 部首
+- char: 冫
+  readings:
+  - ぶしゅ
+  - にすい
+  description: 部首
+- char: 几
+  readings:
+  - ぶしゅ
+  - つくえ
+  - きにょう
+  - かぜがまえ
+  description: 部首
+- char: 凵
+  readings:
+  - ぶしゅ
+  - かんにょう
+  - うけばこ
+  description: 部首
+- char: 刀
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 刂
+  readings:
+  - ぶしゅ
+  - りっとう
+  description: 部首
+- char: 力
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 勹
+  readings:
+  - ぶしゅ
+  - つつみがまえ
+  description: 部首
+- char: 匕
+  readings:
+  - ぶしゅ
+  - ひ
+  - さじ
+  - さじのひ
+  description: 部首
+- char: 匚
+  readings:
+  - ぶしゅ
+  - はこがまえ
+  description: 部首
+- char: 匸
+  readings:
+  - ぶしゅ
+  - かくしがまえ
+  description: 部首
+- char: 十
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 卜
+  readings:
+  - ぶしゅ
+  - ぼくのと
+  description: 部首
+- char: 卩
+  readings:
+  - ぶしゅ
+  - ふしづくり
+  - まげわりふ
+  description: 部首
+- char: ⺋
+  readings:
+  - ぶしゅ
+  - ふしづくり
+  - まげわりふ
+  description: 部首
+- char: 厂
+  readings:
+  - ぶしゅ
+  - がんだれ
+  description: 部首
+- char: 厶
+  readings:
+  - ぶしゅ
+  - む
+  description: 部首
+- char: 又
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 口
+  readings:
+  - ぶしゅ
+  - くちへん
+  description: 部首
+- char: 囗
+  readings:
+  - ぶしゅ
+  - くにがまえ
+  description: 部首
+- char: 土
+  readings:
+  - ぶしゅ
+  - つちへん
+  description: 部首
+- char: 士
+  readings:
+  - ぶしゅ
+  - さむらい
+  - さむらいかんむり
+  description: 部首
+- char: 夂
+  readings:
+  - ぶしゅ
+  - ふゆがしら
+  description: 部首
+- char: 夊
+  readings:
+  - ぶしゅ
+  - すいにょう
+  - すいにゅう
+  - なつあし
+  description: 部首
+- char: 夕
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 大
+  readings:
+  - ぶしゅ
+  - だいがしら
+  description: 部首
+- char: 女
+  readings:
+  - ぶしゅ
+  - おんなへん
+  description: 部首
+- char: 子
+  readings:
+  - ぶしゅ
+  - こども
+  - こどもへん
+  description: 部首
+- char: 宀
+  readings:
+  - ぶしゅ
+  - うかんむり
+  description: 部首
+- char: 寸
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 小
+  readings:
+  - ぶしゅ
+  - しょうがしら
+  - なおがしら
+  description: 部首
+- char: 尢
+  readings:
+  - ぶしゅ
+  - まげあし
+  - だいのまげあし
+  - おうにょう
+  description: 部首
+- char: 尣
+  readings:
+  - ぶしゅ
+  - まげあし
+  - だいのまげあし
+  - おうにょう
+  description: 部首
+- char: 尸
+  readings:
+  - ぶしゅ
+  - かばねだれ
+  description: 部首
+- char: 屮
+  readings:
+  - ぶしゅ
+  - てつ
+  - めばえ
+  description: 部首
+- char: 山
+  readings:
+  - ぶしゅ
+  - やまへん
+  description: 部首
+- char: 川
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 巛
+  readings:
+  - ぶしゅ
+  - まがりがわ
+  - さんぽがわ
+  description: 部首
+- char: 工
+  readings:
+  - ぶしゅ
+  - たくみへん
+  description: 部首
+- char: 己
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 巳
+  readings:
+  - ぶしゅ
+  - おのれ
+  description: 部首
+- char: 已
+  readings:
+  - ぶしゅ
+  - おのれ
+  description: 部首
+- char: 巾
+  readings:
+  - ぶしゅ
+  - はばへん
+  description: 部首
+- char: 干
+  readings:
+  - ぶしゅ
+  - ほす
+  - かん
+  - いちじゅう
+  description: 部首
+- char: 幺
+  readings:
+  - ぶしゅ
+  - いとがしら
+  description: 部首
+- char: 广
+  readings:
+  - ぶしゅ
+  - まだれ
+  description: 部首
+- char: 廴
+  readings:
+  - ぶしゅ
+  - えんにょう
+  description: 部首
+- char: 廾
+  readings:
+  - ぶしゅ
+  - こまぬき
+  description: 部首
+- char: 弋
+  readings:
+  - ぶしゅ
+  - しきがまえ
+  - よく
+  description: 部首
+- char: 弓
+  readings:
+  - ぶしゅ
+  - ゆみへん
+  description: 部首
+- char: 彐
+  readings:
+  - ぶしゅ
+  - けいがしら
+  - いのこがしら
+  description: 部首
+- char: 彑
+  readings:
+  - ぶしゅ
+  - けいがしら
+  - いのこがしら
+  description: 部首
+- char: 彡
+  readings:
+  - ぶしゅ
+  - さんづくり
+  - かみかざり
+  - さん
+  - せん
+  description: 部首
+- char: 彳
+  readings:
+  - ぶしゅ
+  - ぎょうにんべん
+  description: 部首
+- char: 心
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 忄
+  readings:
+  - ぶしゅ
+  - りっしんべん
+  description: 部首
+- char: 㣺
+  readings:
+  - ぶしゅ
+  - したごころ
+  description: 部首
+- char: 戈
+  readings:
+  - ぶしゅ
+  - ほこがまえ
+  - ほこづくり
+  description: 部首
+- char: 戸
+  readings:
+  - ぶしゅ
+  - とだれ
+  description: 部首
+- char: 手
+  readings:
+  - ぶしゅ
+  - てへん
+  description: 部首
+- char: 扌
+  readings:
+  - ぶしゅ
+  - て
+  - てへん
+  description: 部首
+- char: 支
+  readings:
+  - ぶしゅ
+  - しにょう
+  - えだにょう
+  description: 部首
+- char: 攴
+  readings:
+  - ぶしゅ
+  - ぼくづくり，ぼくにょう，ぼんにょう
+  description: 部首
+- char: 攵
+  readings:
+  - ぶしゅ
+  - ぼくづくり，ぼくにょう，ぼんにょう
+  description: 部首
+- char: 文
+  readings:
+  - ぶしゅ
+  - ぶんにょう
+  description: 部首
+- char: 斗
+  readings:
+  - ぶしゅ
+  - ます
+  - とます
+  description: 部首
+- char: 斤
+  readings:
+  - ぶしゅ
+  - おの
+  - おのづくり
+  description: 部首
+- char: 方
+  readings:
+  - ぶしゅ
+  - かたへん
+  - ほうへん
+  description: 部首
+- char: 无
+  readings:
+  - ぶしゅ
+  - む
+  - むにょう
+  - すでのつくり
+  description: 部首
+- char: 旡
+  readings:
+  - ぶしゅ
+  - む
+  - むにょう
+  - すでのつくり
+  description: 部首
+- char: 日
+  readings:
+  - ぶしゅ
+  - ひへん
+  description: 部首
+- char: 曰
+  readings:
+  - ぶしゅ
+  - ひらび
+  - いわく
+  description: 部首
+- char: 木
+  readings:
+  - ぶしゅ
+  - きへん
+  description: 部首
+- char: 欠
+  readings:
+  - ぶしゅ
+  - あくび
+  - かける
+  description: 部首
+- char: 止
+  readings:
+  - ぶしゅ
+  - とめる
+  - とめへん
+  description: 部首
+- char: 歹
+  readings:
+  - ぶしゅ
+  - かばね
+  - かばねへん
+  description: 部首
+- char: 殳
+  readings:
+  - ぶしゅ
+  - ほこ
+  - ほこづくり
+  - るまた
+  description: 部首
+- char: 毋
+  readings:
+  - ぶしゅ
+  - なかれ
+  description: 部首
+- char: 毌
+  readings:
+  - ぶしゅ
+  - なかれ
+  description: 部首
+- char: 比
+  readings:
+  - ぶしゅ
+  - ならびひ
+  - くらべる
+  description: 部首
+- char: 毛
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 氏
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 气
+  readings:
+  - ぶしゅ
+  - きがまえ
+  description: 部首
+- char: 水
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 氵
+  readings:
+  - ぶしゅ
+  - さんずい
+  description: 部首
+- char: 氺
+  readings:
+  - ぶしゅ
+  - したみず
+  description: 部首
+- char: 火
+  readings:
+  - ぶしゅ
+  - ひへん
+  description: 部首
+- char: 灬
+  readings:
+  - ぶしゅ
+  - れんが
+  - れっか
+  description: 部首
+- char: 爪
+  readings:
+  - ぶしゅ
+  - そうにょう
+  description: 部首
+- char: 爫
+  readings:
+  - ぶしゅ
+  - つめかんむり
+  description: 部首
+- char: 父
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 爻
+  readings:
+  - ぶしゅ
+  - こう
+  description: 部首
+- char: 爿
+  readings:
+  - ぶしゅ
+  - しょうへん
+  description: 部首
+- char: 片
+  readings:
+  - ぶしゅ
+  - かたへん
+  description: 部首
+- char: 牙
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 牛
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 牜
+  readings:
+  - ぶしゅ
+  - うしへん
+  description: 部首
+- char: 犬
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 犭
+  readings:
+  - ぶしゅ
+  - けものへん
+  description: 部首
+- char: 玄
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 玉
+  readings:
+  - ぶしゅ
+  - たまへん
+  - ぎょくへん
+  description: 部首
+- char: 王
+  readings:
+  - ぶしゅ
+  - たま
+  - たまへん
+  - ぎょくへん
+  description: 部首
+- char: 玊
+  readings:
+  - ぶしゅ
+  - たま
+  - たまへん
+  - ぎょくへん
+  description: 部首
+- char: 瓜
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 瓦
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 甘
+  readings:
+  - ぶしゅ
+  - あまい
+  - かん
+  description: 部首
+- char: 生
+  readings:
+  - ぶしゅ
+  - いきる
+  - うまれる
+  description: 部首
+- char: 用
+  readings:
+  - ぶしゅ
+  - もちいる
+  description: 部首
+- char: 甩
+  readings:
+  - ぶしゅ
+  - もちいる
+  - よう
+  description: 部首
+- char: 疋
+  readings:
+  - ぶしゅ
+  - ひき
+  description: 部首
+- char: 𤴔
+  readings:
+  - ぶしゅ
+  - ひき
+  description: 部首
+- char: 辵
+  readings:
+  - ぶしゅ
+  - しんにょう
+  - しんにゅう
+  description: 部首
+- char: 辶
+  readings:
+  - ぶしゅ
+  - しんにょう
+  - しんにゅう
+  description: 部首
+- char: 疒
+  readings:
+  - ぶしゅ
+  - やまいだれ
+  description: 部首
+- char: 邑
+  readings:
+  - ぶしゅ
+  - おおざと
+  description: 部首
+- char: 癶
+  readings:
+  - ぶしゅ
+  - はつがしら
+  description: 部首
+- char: 白
+  readings:
+  - ぶしゅ
+  - しろへん
+  description: 部首
+- char: 皮
+  readings:
+  - ぶしゅ
+  - けがわ
+  - ひのかわ
+  description: 部首
+- char: 酉
+  readings:
+  - ぶしゅ
+  - とりへん
+  - ひよみのとり
+  description: 部首
+- char: 皿
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 釆
+  readings:
+  - ぶしゅ
+  - のごめ
+  - のごめへん
+  description: 部首
+- char: 辰
+  readings:
+  - ぶしゅ
+  - しんのたつ
+  description: 部首
+- char: 目
+  readings:
+  - ぶしゅ
+  - めへん
+  description: 部首
+- char: 矛
+  readings:
+  - ぶしゅ
+  - ほこへん
+  description: 部首
+- char: 矢
+  readings:
+  - ぶしゅ
+  - やへん
+  description: 部首
+- char: 石
+  readings:
+  - ぶしゅ
+  - いしへん
+  description: 部首
+- char: 示
+  readings:
+  - ぶしゅ
+  - しめす
+  - しめすへん
+  - ねへん
+  description: 部首
+- char: 礻
+  readings:
+  - ぶしゅ
+  - しめす
+  - しめすへん
+  - ねへん
+  description: 部首
+- char: 禸
+  readings:
+  - ぶしゅ
+  - ぐうのあし
+  description: 部首
+- char: 禾
+  readings:
+  - ぶしゅ
+  - のぎへん
+  description: 部首
+- char: 穴
+  readings:
+  - ぶしゅ
+  - あなかんむり
+  description: 部首
+- char: 立
+  readings:
+  - ぶしゅ
+  - たつへん
+  description: 部首
+- char: 竹
+  readings:
+  - ぶしゅ
+  - たけかんむり
+  description: 部首
+- char: ⺮
+  readings:
+  - ぶしゅ
+  - たけかんむり
+  description: 部首
+- char: 米
+  readings:
+  - ぶしゅ
+  - こめへん
+  description: 部首
+- char: 糸
+  readings:
+  - ぶしゅ
+  - いとへん
+  description: 部首
+- char: 糹
+  readings:
+  - ぶしゅ
+  - いと
+  - いとへん
+  description: 部首
+- char: 缶
+  readings:
+  - ぶしゅ
+  - ほとぎ
+  - ほとぎへん
+  description: 部首
+- char: 网
+  readings:
+  - ぶしゅ
+  - あみがしら
+  - よんがしら
+  - あみめ
+  description: 部首
+- char: 罒
+  readings:
+  - ぶしゅ
+  - あみがしら
+  - よんがしら
+  - あみめ
+  - め
+  description: 部首
+- char: 罓
+  readings:
+  - ぶしゅ
+  - あみがしら
+  - よんがしら
+  - あみめ
+  description: 部首
+- char: 𦉰
+  readings:
+  - ぶしゅ
+  - あみがしら
+  - よんがしら
+  - あみめ
+  description: 部首
+- char: 㓁
+  readings:
+  - ぶしゅ
+  - あみがしら
+  - よんがしら
+  - あみめ
+  description: 部首
+- char: 羊
+  readings:
+  - ぶしゅ
+  - ひつじへん
+  description: 部首
+- char: 𦍌
+  readings:
+  - ぶしゅ
+  - ひつじ
+  - ひつじへん
+  description: 部首
+- char: 羽
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 老
+  readings:
+  - ぶしゅ
+  - おいがしら
+  - おいかんむり
+  description: 部首
+- char: 耂
+  readings:
+  - ぶしゅ
+  - おいがしら
+  - おいかんむり
+  description: 部首
+- char: 而
+  readings:
+  - ぶしゅ
+  - しこうして
+  description: 部首
+- char: 耒
+  readings:
+  - ぶしゅ
+  - すきへん
+  - らいすき
+  description: 部首
+- char: 耳
+  readings:
+  - ぶしゅ
+  - みみへん
+  description: 部首
+- char: 聿
+  readings:
+  - ぶしゅ
+  - ふでづくり
+  description: 部首
+- char: 肀
+  readings:
+  - ぶしゅ
+  - ふでづくり
+  description: 部首
+- char: 𦘒
+  readings:
+  - ぶしゅ
+  - ふでづくり
+  description: 部首
+- char: 肉
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 月
+  readings:
+  - ぶしゅ
+  - にく
+  - にくづき
+  - つきへん
+  description: 部首
+- char: 臣
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 自
+  readings:
+  - ぶしゅ
+  - みずから
+  description: 部首
+- char: 至
+  readings:
+  - ぶしゅ
+  - いたるへん
+  description: 部首
+- char: 臼
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 𦥑
+  readings:
+  - ぶしゅ
+  - うす
+  description: 部首
+- char: 舌
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 舛
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 舟
+  readings:
+  - ぶしゅ
+  - ふねへん
+  description: 部首
+- char: 艮
+  readings:
+  - ぶしゅ
+  - こんづくり
+  - こん
+  - ねづくり
+  description: 部首
+- char: 色
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 艸
+  readings:
+  - ぶしゅ
+  - くさかんむり
+  description: 部首
+- char: 艹
+  readings:
+  - ぶしゅ
+  - くさかんむり
+  description: 部首
+- char: 虍
+  readings:
+  - ぶしゅ
+  - とらがしら
+  description: 部首
+- char: 虫
+  readings:
+  - ぶしゅ
+  - むしへん
+  description: 部首
+- char: 血
+  readings:
+  - ぶしゅ
+  - ちへん
+  description: 部首
+- char: 行
+  readings:
+  - ぶしゅ
+  - ぎょうがまえ
+  - ゆきがまえ
+  description: 部首
+- char: 衣
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 衤
+  readings:
+  - ぶしゅ
+  - ころもへん
+  description: 部首
+- char: 襾
+  readings:
+  - ぶしゅ
+  - にし
+  description: 部首
+- char: 覀
+  readings:
+  - ぶしゅ
+  - にし
+  description: 部首
+- char: 西
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 見
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 角
+  readings:
+  - ぶしゅ
+  - つのへん
+  description: 部首
+- char: 言
+  readings:
+  - ぶしゅ
+  - ごんべん
+  description: 部首
+- char: 訁
+  readings:
+  - ぶしゅ
+  - ごんべん
+  description: 部首
+- char: 谷
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 豆
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 豕
+  readings:
+  - ぶしゅ
+  - いのこへん
+  description: 部首
+- char: 豸
+  readings:
+  - ぶしゅ
+  - むじなへん
+  description: 部首
+- char: 貝
+  readings:
+  - ぶしゅ
+  - かいへん
+  description: 部首
+- char: 赤
+  readings:
+  - ぶしゅ
+  - あかへん
+  description: 部首
+- char: 走
+  readings:
+  - ぶしゅ
+  - はしる
+  - そうにょう
+  description: 部首
+- char: 足
+  readings:
+  - ぶしゅ
+  - あしへん
+  description: 部首
+- char: 𧾷
+  readings:
+  - ぶしゅ
+  - あし
+  - あしへん
+  description: 部首
+- char: 身
+  readings:
+  - ぶしゅ
+  - みへん
+  description: 部首
+- char: 車
+  readings:
+  - ぶしゅ
+  - くるまへん
+  description: 部首
+- char: 辛
+  readings:
+  - ぶしゅ
+  - からい
+  - しん
+  description: 部首
+- char: 里
+  readings:
+  - ぶしゅ
+  - さとへん
+  description: 部首
+- char: 金
+  readings:
+  - ぶしゅ
+  - かねへん
+  description: 部首
+- char: 釒
+  readings:
+  - ぶしゅ
+  - かね
+  - かねへん
+  description: 部首
+- char: 長
+  readings:
+  - ぶしゅ
+  - ながい
+  description: 部首
+- char: 镸
+  readings:
+  - ぶしゅ
+  - ながい
+  description: 部首
+- char: 門
+  readings:
+  - ぶしゅ
+  - もんがまえ
+  - かどがまえ
+  description: 部首
+- char: 阜
+  readings:
+  - ぶしゅ
+  - こざとへん
+  description: 部首
+- char: 阝
+  readings:
+  - ぶしゅ
+  - こざとへん
+  - おおざと
+  description: 部首
+- char: 隶
+  readings:
+  - ぶしゅ
+  - れいづくり
+  description: 部首
+- char: 隹
+  readings:
+  - ぶしゅ
+  - ふるとり
+  description: 部首
+- char: 雨
+  readings:
+  - ぶしゅ
+  - あめかんむり
+  description: 部首
+- char: 靑
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 青
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 非
+  readings:
+  - ぶしゅ
+  - あらず
+  description: 部首
+- char: 面
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 革
+  readings:
+  - ぶしゅ
+  - かわへん
+  - つくりがわ
+  description: 部首
+- char: 韋
+  readings:
+  - ぶしゅ
+  - なめしがわ
+  description: 部首
+- char: 韭
+  readings:
+  - ぶしゅ
+  - にら
+  description: 部首
+- char: 音
+  readings:
+  - ぶしゅ
+  - おとへん
+  description: 部首
+- char: 頁
+  readings:
+  - ぶしゅ
+  - おおがい
+  description: 部首
+- char: 風
+  readings:
+  - ぶしゅ
+  - ふうにょう
+  description: 部首
+- char: 飛
+  readings:
+  - ぶしゅ
+  - とぶ
+  description: 部首
+- char: 食
+  readings:
+  - ぶしゅ
+  - しょくへん
+  description: 部首
+- char: 𩙿
+  readings:
+  - ぶしゅ
+  - しょくへん
+  description: 部首
+- char: 飠
+  readings:
+  - ぶしゅ
+  - しょくへん
+  description: 部首
+- char: 首
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 香
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 馬
+  readings:
+  - ぶしゅ
+  - うまへん
+  description: 部首
+- char: 骨
+  readings:
+  - ぶしゅ
+  - ほねへん
+  description: 部首
+- char: 高
+  readings:
+  - ぶしゅ
+  - たかい
+  description: 部首
+- char: 髟
+  readings:
+  - ぶしゅ
+  - かみがしら
+  description: 部首
+- char: 鬥
+  readings:
+  - ぶしゅ
+  - たたかいがまえ
+  - とうがまえ
+  description: 部首
+- char: 鬯
+  readings:
+  - ぶしゅ
+  - ちょう
+  - においざけ
+  description: 部首
+- char: 鬲
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 鬼
+  readings:
+  - ぶしゅ
+  - きにょう
+  description: 部首
+- char: 魚
+  readings:
+  - ぶしゅ
+  - うおへん
+  description: 部首
+- char: 鳥
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 鹵
+  readings:
+  - ぶしゅ
+  - ろ
+  - しお
+  description: 部首
+- char: 鹿
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 麥
+  readings:
+  - ぶしゅ
+  - ばくにょう
+  description: 部首
+- char: 麦
+  readings:
+  - ぶしゅ
+  - ばくにょう
+  description: 部首
+- char: 麻
+  readings:
+  - ぶしゅ
+  - あさかんむり
+  description: 部首
+- char: 黃
+  readings:
+  - ぶしゅ
+  - き
+  description: 部首
+- char: 黄
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 黍
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 黑
+  readings:
+  - ぶしゅ
+  - くろ
+  description: 部首
+- char: 黒
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 黹
+  readings:
+  - ぶしゅ
+  - ち
+  - ぬいとり
+  - ふつへん
+  description: 部首
+- char: 黽
+  readings:
+  - ぶしゅ
+  - べんあし
+  - おおがえる
+  description: 部首
+- char: 鼎
+  readings:
+  - ぶしゅ
+  - てい
+  description: 部首
+- char: 鼓
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 鼠
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 鼻
+  readings:
+  - ぶしゅ
+  - はなへん
+  description: 部首
+- char: 齊
+  readings:
+  - ぶしゅ
+  - せい
+  description: 部首
+- char: 斉
+  readings:
+  - ぶしゅ
+  - せい
+  description: 部首
+- char: 齒
+  readings:
+  - ぶしゅ
+  - は
+  - はへん
+  description: 部首
+- char: 歯
+  readings:
+  - ぶしゅ
+  - はへん
+  description: 部首
+- char: 龍
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 竜
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 龜
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 亀
+  readings:
+  - ぶしゅ
+  description: 部首
+- char: 龠
+  readings:
+  - ぶしゅ
+  - やく
+  - やくのふえ
+  description: 部首
+- char: 𓃗
+  readings:
+  - ひえろぐりふ
+  - うま
+  description: ヒエログリフ 馬
+- char: 𓃟
+  readings:
+  - ひえろぐりふ
+  - ぶた
+  description: ヒエログリフ 豚
+- char: 𓃠
+  readings:
+  - ひえろぐりふ
+  - ねこ
+  description: ヒエログリフ 猫
+- char: 𓃡
+  readings:
+  - ひえろぐりふ
+  - いぬ
+  description: ヒエログリフ 犬
+- char: 𓃬
+  readings:
+  - ひえろぐりふ
+  - らいおん
+  description: ヒエログリフ ライオン
+- char: 𓃭
+  readings:
+  - ひえろぐりふ
+  - らいおん
+  description: ヒエログリフ ライオン
+- char: 𓃰
+  readings:
+  - ひえろぐりふ
+  - ぞう
+  description: ヒエログリフ 象
+- char: 𓃱
+  readings:
+  - ひえろぐりふ
+  - きりん
+  description: ヒエログリフ キリン
+- char: 𓃹
+  readings:
+  - ひえろぐりふ
+  - うさぎ
+  - のうさぎ
+  description: ヒエログリフ ウサギ
+- char: 𓅓
+  readings:
+  - ひえろぐりふ
+  - ふくろう
+  description: ヒエログリフ ふくろう
+- char: 𓆉
+  readings:
+  - ひえろぐりふ
+  - かめ
+  description: ヒエログリフ カメ
+- char: 𓆏
+  readings:
+  - ひえろぐりふ
+  - かえる
+  description: ヒエログリフ カエル
+- char: 𓆛
+  readings:
+  - ひえろぐりふ
+  - さかな
+  - てぃらぴあ
+  description: ヒエログリフ 魚
+- char: 𓆜
+  readings:
+  - ひえろぐりふ
+  - さかな
+  - ばーべる
+  description: ヒエログリフ 魚
+- char: 𓆝
+  readings:
+  - ひえろぐりふ
+  - さかな
+  - ぼら
+  description: ヒエログリフ 魚
+- char: 𓆞
+  readings:
+  - ひえろぐりふ
+  - さかな
+  - えれふぁんとのーずふぃっしゅ
+  description: ヒエログリフ 魚
+- char: 𓆟
+  readings:
+  - ひえろぐりふ
+  - さかな
+  description: ヒエログリフ 魚
+- char: 𓆡
+  readings:
+  - ひえろぐりふ
+  - さかな
+  - ふぐ
+  description: ヒエログリフ 魚
+- char: 濵
+  readings:
+  - まゆはま
+  description: 濱の異体字
+- char: 髙
+  readings:
+  - はしごだか
+  description: 高の異体字
+- char: 﨑
+  readings:
+  - たつさき
+  description: 崎の異体字
+- char: 𠮷
+  readings:
+  - つちよし
+  description: 吉の異体字
+- char: ㇰ
+  readings:
+  - あいぬ
+  - く
+  description: アイヌ語カナ
+- char: ㇱ
+  readings:
+  - あいぬ
+  - し
+  description: アイヌ語カナ
+- char: ㇲ
+  readings:
+  - あいぬ
+  - す
+  description: アイヌ語カナ
+- char: ㇳ
+  readings:
+  - あいぬ
+  - と
+  description: アイヌ語カナ
+- char: ㇴ
+  readings:
+  - あいぬ
+  - ぬ
+  description: アイヌ語カナ
+- char: ㇵ
+  readings:
+  - あいぬ
+  - は
+  description: アイヌ語カナ
+- char: ㇶ
+  readings:
+  - あいぬ
+  - ひ
+  description: アイヌ語カナ
+- char: ㇷ
+  readings:
+  - あいぬ
+  - ふ
+  description: アイヌ語カナ
+- char: ㇸ
+  readings:
+  - あいぬ
+  - へ
+  description: アイヌ語カナ
+- char: ㇹ
+  readings:
+  - あいぬ
+  - ほ
+  description: アイヌ語カナ
+- char: ㇺ
+  readings:
+  - あいぬ
+  - む
+  description: アイヌ語カナ
+- char: ㇻ
+  readings:
+  - あいぬ
+  - ら
+  description: アイヌ語カナ
+- char: ㇼ
+  readings:
+  - あいぬ
+  - り
+  description: アイヌ語カナ
+- char: ㇽ
+  readings:
+  - あいぬ
+  - る
+  description: アイヌ語カナ
+- char: ㇾ
+  readings:
+  - あいぬ
+  - れ
+  description: アイヌ語カナ
+- char: ㇿ
+  readings:
+  - あいぬ
+  - ろ
+  description: アイヌ語カナ
+- char: ㇷ゚
+  readings:
+  - あいぬ
+  - ぷ
+  description: アイヌ語カナ
+- char: セ゚
+  readings:
+  - あいぬ
+  - せ
+  description: アイヌ語カナ
+- char: ツ゚
+  readings:
+  - あいぬ
+  - つ
+  description: アイヌ語カナ
+- char: ト゚
+  readings:
+  - あいぬ
+  - と
+  description: アイヌ語カナ
+- char: 𛀀
+  readings:
+  - へんたいがな
+  - え
+  description: 変体仮名
+- char: 𛀁
+  readings:
+  - へんたいがな
+  - いぇ
+  - え
+  description: 江の変体仮名
+- char: 𛀂
+  readings:
+  - へんたいがな
+  - あ
+  description: 安の変体仮名
+- char: 𛀃
+  readings:
+  - へんたいがな
+  - あ
+  description: 愛の変体仮名
+- char: 𛀄
+  readings:
+  - へんたいがな
+  - あ
+  description: 阿の変体仮名
+- char: 𛀅
+  readings:
+  - へんたいがな
+  - あ
+  - を
+  description: 惡の変体仮名
+- char: 𛀆
+  readings:
+  - へんたいがな
+  - い
+  description: 以の変体仮名
+- char: 𛀇
+  readings:
+  - へんたいがな
+  - い
+  description: 伊の変体仮名
+- char: 𛀈
+  readings:
+  - へんたいがな
+  - い
+  description: 意の変体仮名
+- char: 𛀉
+  readings:
+  - へんたいがな
+  - い
+  description: 移の変体仮名
+- char: 𛀊
+  readings:
+  - へんたいがな
+  - う
+  description: 宇の変体仮名
+- char: 𛀋
+  readings:
+  - へんたいがな
+  - う
+  description: 宇の変体仮名
+- char: 𛀌
+  readings:
+  - へんたいがな
+  - う
+  description: 憂の変体仮名
+- char: 𛀍
+  readings:
+  - へんたいがな
+  - う
+  description: 有の変体仮名
+- char: 𛀎
+  readings:
+  - へんたいがな
+  - う
+  description: 雲の変体仮名
+- char: 𛀏
+  readings:
+  - へんたいがな
+  - え
+  description: 盈の変体仮名
+- char: 𛀐
+  readings:
+  - へんたいがな
+  - え
+  description: 縁の変体仮名
+- char: 𛀑
+  readings:
+  - へんたいがな
+  - え
+  description: 衣の変体仮名
+- char: 𛀒
+  readings:
+  - へんたいがな
+  - え
+  description: 衣の変体仮名
+- char: 𛀓
+  readings:
+  - へんたいがな
+  - え
+  description: 要の変体仮名
+- char: 𛀔
+  readings:
+  - へんたいがな
+  - お
+  description: 於の変体仮名
+- char: 𛀕
+  readings:
+  - へんたいがな
+  - お
+  description: 於の変体仮名
+- char: 𛀖
+  readings:
+  - へんたいがな
+  - お
+  description: 隱の変体仮名
+- char: 𛀗
+  readings:
+  - へんたいがな
+  - か
+  description: 佳の変体仮名
+- char: 𛀘
+  readings:
+  - へんたいがな
+  - か
+  description: 加の変体仮名
+- char: 𛀙
+  readings:
+  - へんたいがな
+  - か
+  description: 可の変体仮名
+- char: 𛀚
+  readings:
+  - へんたいがな
+  - か
+  description: 可の変体仮名
+- char: 𛀛
+  readings:
+  - へんたいがな
+  - か
+  description: 嘉の変体仮名
+- char: 𛀜
+  readings:
+  - へんたいがな
+  - か
+  description: 我の変体仮名
+- char: 𛀝
+  readings:
+  - へんたいがな
+  - か
+  description: 歟の変体仮名
+- char: 𛀞
+  readings:
+  - へんたいがな
+  - か
+  description: 賀の変体仮名
+- char: 𛀟
+  readings:
+  - へんたいがな
+  - か
+  description: 閑の変体仮名
+- char: 𛀠
+  readings:
+  - へんたいがな
+  - か
+  description: 香の変体仮名
+- char: 𛀡
+  readings:
+  - へんたいがな
+  - か
+  description: 駕の変体仮名
+- char: 𛀢
+  readings:
+  - へんたいがな
+  - か
+  - け
+  description: 家の変体仮名
+- char: 𛀣
+  readings:
+  - へんたいがな
+  - き
+  description: 喜の変体仮名
+- char: 𛀤
+  readings:
+  - へんたいがな
+  - き
+  description: 幾の変体仮名
+- char: 𛀥
+  readings:
+  - へんたいがな
+  - き
+  description: 幾の変体仮名
+- char: 𛀦
+  readings:
+  - へんたいがな
+  - き
+  description: 支の変体仮名
+- char: 𛀧
+  readings:
+  - へんたいがな
+  - き
+  description: 木の変体仮名
+- char: 𛀨
+  readings:
+  - へんたいがな
+  - き
+  description: 祈の変体仮名
+- char: 𛀩
+  readings:
+  - へんたいがな
+  - き
+  description: 貴の変体仮名
+- char: 𛀪
+  readings:
+  - へんたいがな
+  - き
+  description: 起の変体仮名
+- char: 𛀫
+  readings:
+  - へんたいがな
+  - く
+  description: 久の変体仮名
+- char: 𛀬
+  readings:
+  - へんたいがな
+  - く
+  description: 久の変体仮名
+- char: 𛀭
+  readings:
+  - へんたいがな
+  - く
+  description: 九の変体仮名
+- char: 𛀮
+  readings:
+  - へんたいがな
+  - く
+  description: 供の変体仮名
+- char: 𛀯
+  readings:
+  - へんたいがな
+  - く
+  description: 倶の変体仮名
+- char: 𛀰
+  readings:
+  - へんたいがな
+  - く
+  description: 具の変体仮名
+- char: 𛀱
+  readings:
+  - へんたいがな
+  - く
+  description: 求の変体仮名
+- char: 𛀲
+  readings:
+  - へんたいがな
+  - け
+  description: 介の変体仮名
+- char: 𛀳
+  readings:
+  - へんたいがな
+  - け
+  description: 介の変体仮名
+- char: 𛀴
+  readings:
+  - へんたいがな
+  - け
+  description: 希の変体仮名
+- char: 𛀵
+  readings:
+  - へんたいがな
+  - け
+  description: 氣の変体仮名
+- char: 𛀶
+  readings:
+  - へんたいがな
+  - け
+  description: 計の変体仮名
+- char: 𛀷
+  readings:
+  - へんたいがな
+  - け
+  description: 遣の変体仮名
+- char: 𛀸
+  readings:
+  - へんたいがな
+  - こ
+  description: 古の変体仮名
+- char: 𛀹
+  readings:
+  - へんたいがな
+  - こ
+  description: 故の変体仮名
+- char: 𛀺
+  readings:
+  - へんたいがな
+  - こ
+  description: 許の変体仮名
+- char: 𛀻
+  readings:
+  - へんたいがな
+  - こ
+  - き
+  description: 期の変体仮名
+- char: 𛀼
+  readings:
+  - へんたいがな
+  - さ
+  description: 乍の変体仮名
+- char: 𛀽
+  readings:
+  - へんたいがな
+  - さ
+  description: 佐の変体仮名
+- char: 𛀾
+  readings:
+  - へんたいがな
+  - さ
+  description: 佐の変体仮名
+- char: 𛀿
+  readings:
+  - へんたいがな
+  - さ
+  description: 左の変体仮名
+- char: 𛁀
+  readings:
+  - へんたいがな
+  - さ
+  description: 差の変体仮名
+- char: 𛁁
+  readings:
+  - へんたいがな
+  - さ
+  description: 散の変体仮名
+- char: 𛁂
+  readings:
+  - へんたいがな
+  - さ
+  description: 斜の変体仮名
+- char: 𛁃
+  readings:
+  - へんたいがな
+  - さ
+  description: 沙の変体仮名
+- char: 𛁄
+  readings:
+  - へんたいがな
+  - し
+  description: 之の変体仮名
+- char: 𛁅
+  readings:
+  - へんたいがな
+  - し
+  description: 之の変体仮名
+- char: 𛁆
+  readings:
+  - へんたいがな
+  - し
+  description: 事の変体仮名
+- char: 𛁇
+  readings:
+  - へんたいがな
+  - し
+  description: 四の変体仮名
+- char: 𛁈
+  readings:
+  - へんたいがな
+  - し
+  description: 志の変体仮名
+- char: 𛁉
+  readings:
+  - へんたいがな
+  - し
+  description: 新の変体仮名
+- char: 𛁊
+  readings:
+  - へんたいがな
+  - す
+  description: 受の変体仮名
+- char: 𛁋
+  readings:
+  - へんたいがな
+  - す
+  description: 壽の変体仮名
+- char: 𛁌
+  readings:
+  - へんたいがな
+  - す
+  description: 數の変体仮名
+- char: 𛁍
+  readings:
+  - へんたいがな
+  - す
+  description: 數の変体仮名
+- char: 𛁎
+  readings:
+  - へんたいがな
+  - す
+  description: 春の変体仮名
+- char: 𛁏
+  readings:
+  - へんたいがな
+  - す
+  description: 春の変体仮名
+- char: 𛁐
+  readings:
+  - へんたいがな
+  - す
+  description: 須の変体仮名
+- char: 𛁑
+  readings:
+  - へんたいがな
+  - す
+  description: 須の変体仮名
+- char: 𛁒
+  readings:
+  - へんたいがな
+  - せ
+  description: 世の変体仮名
+- char: 𛁓
+  readings:
+  - へんたいがな
+  - せ
+  description: 世の変体仮名
+- char: 𛁔
+  readings:
+  - へんたいがな
+  - せ
+  description: 世の変体仮名
+- char: 𛁕
+  readings:
+  - へんたいがな
+  - せ
+  description: 勢の変体仮名
+- char: 𛁖
+  readings:
+  - へんたいがな
+  - せ
+  description: 聲の変体仮名
+- char: 𛁗
+  readings:
+  - へんたいがな
+  - そ
+  description: 所の変体仮名
+- char: 𛁘
+  readings:
+  - へんたいがな
+  - そ
+  description: 所の変体仮名
+- char: 𛁙
+  readings:
+  - へんたいがな
+  - そ
+  description: 曾の変体仮名
+- char: 𛁚
+  readings:
+  - へんたいがな
+  - そ
+  description: 曾の変体仮名
+- char: 𛁛
+  readings:
+  - へんたいがな
+  - そ
+  description: 楚の変体仮名
+- char: 𛁜
+  readings:
+  - へんたいがな
+  - そ
+  description: 蘇の変体仮名
+- char: 𛁝
+  readings:
+  - へんたいがな
+  - そ
+  description: 處の変体仮名
+- char: 𛁞
+  readings:
+  - へんたいがな
+  - た
+  description: 堂の変体仮名
+- char: 𛁟
+  readings:
+  - へんたいがな
+  - た
+  description: 多の変体仮名
+- char: 𛁠
+  readings:
+  - へんたいがな
+  - た
+  description: 多の変体仮名
+- char: 𛁡
+  readings:
+  - へんたいがな
+  - た
+  description: 當の変体仮名
+- char: 𛁢
+  readings:
+  - へんたいがな
+  - ち
+  description: 千の変体仮名
+- char: 𛁣
+  readings:
+  - へんたいがな
+  - ち
+  description: 地の変体仮名
+- char: 𛁤
+  readings:
+  - へんたいがな
+  - ち
+  description: 智の変体仮名
+- char: 𛁥
+  readings:
+  - へんたいがな
+  - ち
+  description: 知の変体仮名
+- char: 𛁦
+  readings:
+  - へんたいがな
+  - ち
+  description: 知の変体仮名
+- char: 𛁧
+  readings:
+  - へんたいがな
+  - ち
+  description: 致の変体仮名
+- char: 𛁨
+  readings:
+  - へんたいがな
+  - ち
+  description: 遲の変体仮名
+- char: 𛁩
+  readings:
+  - へんたいがな
+  - つ
+  description: 川の変体仮名
+- char: 𛁪
+  readings:
+  - へんたいがな
+  - つ
+  description: 川の変体仮名
+- char: 𛁫
+  readings:
+  - へんたいがな
+  - つ
+  description: 津の変体仮名
+- char: 𛁬
+  readings:
+  - へんたいがな
+  - つ
+  description: 都の変体仮名
+- char: 𛁭
+  readings:
+  - へんたいがな
+  - つ
+  - と
+  description: 徒の変体仮名
+- char: 𛁮
+  readings:
+  - へんたいがな
+  - て
+  description: 亭の変体仮名
+- char: 𛁯
+  readings:
+  - へんたいがな
+  - て
+  description: 低の変体仮名
+- char: 𛁰
+  readings:
+  - へんたいがな
+  - て
+  description: 傳の変体仮名
+- char: 𛁱
+  readings:
+  - へんたいがな
+  - て
+  description: 天の変体仮名
+- char: 𛁲
+  readings:
+  - へんたいがな
+  - て
+  description: 天の変体仮名
+- char: 𛁳
+  readings:
+  - へんたいがな
+  - て
+  description: 天の変体仮名
+- char: 𛁴
+  readings:
+  - へんたいがな
+  - て
+  description: 帝の変体仮名
+- char: 𛁵
+  readings:
+  - へんたいがな
+  - て
+  description: 弖の変体仮名
+- char: 𛁶
+  readings:
+  - へんたいがな
+  - て
+  description: 轉の変体仮名
+- char: 𛁷
+  readings:
+  - へんたいがな
+  - と
+  description: 土の変体仮名
+- char: 𛁸
+  readings:
+  - へんたいがな
+  - と
+  description: 度の変体仮名
+- char: 𛁹
+  readings:
+  - へんたいがな
+  - と
+  description: 東の変体仮名
+- char: 𛁺
+  readings:
+  - へんたいがな
+  - と
+  description: 登の変体仮名
+- char: 𛁻
+  readings:
+  - へんたいがな
+  - と
+  description: 登の変体仮名
+- char: 𛁼
+  readings:
+  - へんたいがな
+  - と
+  description: 砥の変体仮名
+- char: 𛁽
+  readings:
+  - へんたいがな
+  - と
+  - ら
+  description: 等の変体仮名
+- char: 𛁾
+  readings:
+  - へんたいがな
+  - な
+  description: 南の変体仮名
+- char: 𛁿
+  readings:
+  - へんたいがな
+  - な
+  description: 名の変体仮名
+- char: 𛂀
+  readings:
+  - へんたいがな
+  - な
+  description: 奈の変体仮名
+- char: 𛂁
+  readings:
+  - へんたいがな
+  - な
+  description: 奈の変体仮名
+- char: 𛂂
+  readings:
+  - へんたいがな
+  - な
+  description: 奈の変体仮名
+- char: 𛂃
+  readings:
+  - へんたいがな
+  - な
+  description: 菜の変体仮名
+- char: 𛂄
+  readings:
+  - へんたいがな
+  - な
+  description: 那の変体仮名
+- char: 𛂅
+  readings:
+  - へんたいがな
+  - な
+  description: 那の変体仮名
+- char: 𛂆
+  readings:
+  - へんたいがな
+  - な
+  description: 難の変体仮名
+- char: 𛂇
+  readings:
+  - へんたいがな
+  - に
+  description: 丹の変体仮名
+- char: 𛂈
+  readings:
+  - へんたいがな
+  - に
+  description: 二の変体仮名
+- char: 𛂉
+  readings:
+  - へんたいがな
+  - に
+  description: 仁の変体仮名
+- char: 𛂊
+  readings:
+  - へんたいがな
+  - に
+  description: 兒の変体仮名
+- char: 𛂋
+  readings:
+  - へんたいがな
+  - に
+  description: 爾の変体仮名
+- char: 𛂌
+  readings:
+  - へんたいがな
+  - に
+  description: 爾の変体仮名
+- char: 𛂍
+  readings:
+  - へんたいがな
+  - に
+  description: 耳の変体仮名
+- char: 𛂎
+  readings:
+  - へんたいがな
+  - に
+  - て
+  description: 而の変体仮名
+- char: 𛂏
+  readings:
+  - へんたいがな
+  - ぬ
+  description: 努の変体仮名
+- char: 𛂐
+  readings:
+  - へんたいがな
+  - ぬ
+  description: 奴の変体仮名
+- char: 𛂑
+  readings:
+  - へんたいがな
+  - ぬ
+  description: 怒の変体仮名
+- char: 𛂒
+  readings:
+  - へんたいがな
+  - ね
+  description: 年の変体仮名
+- char: 𛂓
+  readings:
+  - へんたいがな
+  - ね
+  description: 年の変体仮名
+- char: 𛂔
+  readings:
+  - へんたいがな
+  - ね
+  description: 年の変体仮名
+- char: 𛂕
+  readings:
+  - へんたいがな
+  - ね
+  description: 根の変体仮名
+- char: 𛂖
+  readings:
+  - へんたいがな
+  - ね
+  description: 熱の変体仮名
+- char: 𛂗
+  readings:
+  - へんたいがな
+  - ね
+  description: 禰の変体仮名
+- char: 𛂘
+  readings:
+  - へんたいがな
+  - ね
+  - こ
+  description: 子の変体仮名
+- char: 𛂙
+  readings:
+  - へんたいがな
+  - の
+  description: 乃の変体仮名
+- char: 𛂚
+  readings:
+  - へんたいがな
+  - の
+  description: 濃の変体仮名
+- char: 𛂛
+  readings:
+  - へんたいがな
+  - の
+  description: 能の変体仮名
+- char: 𛂜
+  readings:
+  - へんたいがな
+  - の
+  description: 能の変体仮名
+- char: 𛂝
+  readings:
+  - へんたいがな
+  - の
+  description: 農の変体仮名
+- char: 𛂞
+  readings:
+  - へんたいがな
+  - は
+  description: 八の変体仮名
+- char: 𛂟
+  readings:
+  - へんたいがな
+  - は
+  description: 半の変体仮名
+- char: 𛂠
+  readings:
+  - へんたいがな
+  - は
+  description: 婆の変体仮名
+- char: 𛂡
+  readings:
+  - へんたいがな
+  - は
+  description: 波の変体仮名
+- char: 𛂢
+  readings:
+  - へんたいがな
+  - は
+  description: 盤の変体仮名
+- char: 𛂣
+  readings:
+  - へんたいがな
+  - は
+  description: 盤の変体仮名
+- char: 𛂤
+  readings:
+  - へんたいがな
+  - は
+  description: 破の変体仮名
+- char: 𛂥
+  readings:
+  - へんたいがな
+  - は
+  description: 者の変体仮名
+- char: 𛂦
+  readings:
+  - へんたいがな
+  - は
+  description: 者の変体仮名
+- char: 𛂧
+  readings:
+  - へんたいがな
+  - は
+  description: 葉の変体仮名
+- char: 𛂨
+  readings:
+  - へんたいがな
+  - は
+  description: 頗の変体仮名
+- char: 𛂩
+  readings:
+  - へんたいがな
+  - ひ
+  description: 悲の変体仮名
+- char: 𛂪
+  readings:
+  - へんたいがな
+  - ひ
+  description: 日の変体仮名
+- char: 𛂫
+  readings:
+  - へんたいがな
+  - ひ
+  description: 比の変体仮名
+- char: 𛂬
+  readings:
+  - へんたいがな
+  - ひ
+  description: 避の変体仮名
+- char: 𛂭
+  readings:
+  - へんたいがな
+  - ひ
+  description: 非の変体仮名
+- char: 𛂮
+  readings:
+  - へんたいがな
+  - ひ
+  description: 飛の変体仮名
+- char: 𛂯
+  readings:
+  - へんたいがな
+  - ひ
+  description: 飛の変体仮名
+- char: 𛂰
+  readings:
+  - へんたいがな
+  - ふ
+  description: 不の変体仮名
+- char: 𛂱
+  readings:
+  - へんたいがな
+  - ふ
+  description: 婦の変体仮名
+- char: 𛂲
+  readings:
+  - へんたいがな
+  - ふ
+  description: 布の変体仮名
+- char: 𛂳
+  readings:
+  - へんたいがな
+  - へ
+  description: 倍の変体仮名
+- char: 𛂴
+  readings:
+  - へんたいがな
+  - へ
+  description: 弊の変体仮名
+- char: 𛂵
+  readings:
+  - へんたいがな
+  - へ
+  description: 弊の変体仮名
+- char: 𛂶
+  readings:
+  - へんたいがな
+  - へ
+  description: 遍の変体仮名
+- char: 𛂷
+  readings:
+  - へんたいがな
+  - へ
+  description: 邊の変体仮名
+- char: 𛂸
+  readings:
+  - へんたいがな
+  - へ
+  description: 邊の変体仮名
+- char: 𛂹
+  readings:
+  - へんたいがな
+  - へ
+  description: 部の変体仮名
+- char: 𛂺
+  readings:
+  - へんたいがな
+  - ほ
+  description: 保の変体仮名
+- char: 𛂻
+  readings:
+  - へんたいがな
+  - ほ
+  description: 保の変体仮名
+- char: 𛂼
+  readings:
+  - へんたいがな
+  - ほ
+  description: 報の変体仮名
+- char: 𛂽
+  readings:
+  - へんたいがな
+  - ほ
+  description: 奉の変体仮名
+- char: 𛂾
+  readings:
+  - へんたいがな
+  - ほ
+  description: 寶の変体仮名
+- char: 𛂿
+  readings:
+  - へんたいがな
+  - ほ
+  description: 本の変体仮名
+- char: 𛃀
+  readings:
+  - へんたいがな
+  - ほ
+  description: 本の変体仮名
+- char: 𛃁
+  readings:
+  - へんたいがな
+  - ほ
+  description: 豐の変体仮名
+- char: 𛃂
+  readings:
+  - へんたいがな
+  - ま
+  description: 万の変体仮名
+- char: 𛃃
+  readings:
+  - へんたいがな
+  - ま
+  description: 末の変体仮名
+- char: 𛃄
+  readings:
+  - へんたいがな
+  - ま
+  description: 末の変体仮名
+- char: 𛃅
+  readings:
+  - へんたいがな
+  - ま
+  description: 滿の変体仮名
+- char: 𛃆
+  readings:
+  - へんたいがな
+  - ま
+  description: 滿の変体仮名
+- char: 𛃇
+  readings:
+  - へんたいがな
+  - ま
+  description: 萬の変体仮名
+- char: 𛃈
+  readings:
+  - へんたいがな
+  - ま
+  description: 麻の変体仮名
+- char: 𛃉
+  readings:
+  - へんたいがな
+  - み
+  description: 三の変体仮名
+- char: 𛃊
+  readings:
+  - へんたいがな
+  - み
+  description: 微の変体仮名
+- char: 𛃋
+  readings:
+  - へんたいがな
+  - み
+  description: 美の変体仮名
+- char: 𛃌
+  readings:
+  - へんたいがな
+  - み
+  description: 美の変体仮名
+- char: 𛃍
+  readings:
+  - へんたいがな
+  - み
+  description: 美の変体仮名
+- char: 𛃎
+  readings:
+  - へんたいがな
+  - み
+  description: 見の変体仮名
+- char: 𛃏
+  readings:
+  - へんたいがな
+  - み
+  description: 身の変体仮名
+- char: 𛃐
+  readings:
+  - へんたいがな
+  - む
+  description: 武の変体仮名
+- char: 𛃑
+  readings:
+  - へんたいがな
+  - む
+  description: 無の変体仮名
+- char: 𛃒
+  readings:
+  - へんたいがな
+  - む
+  description: 牟の変体仮名
+- char: 𛃓
+  readings:
+  - へんたいがな
+  - む
+  description: 舞の変体仮名
+- char: 𛃔
+  readings:
+  - へんたいがな
+  - め
+  description: 免の変体仮名
+- char: 𛃕
+  readings:
+  - へんたいがな
+  - め
+  description: 面の変体仮名
+- char: 𛃖
+  readings:
+  - へんたいがな
+  - め
+  - ま
+  description: 馬の変体仮名
+- char: 𛃗
+  readings:
+  - へんたいがな
+  - も
+  description: 母の変体仮名
+- char: 𛃘
+  readings:
+  - へんたいがな
+  - も
+  description: 毛の変体仮名
+- char: 𛃙
+  readings:
+  - へんたいがな
+  - も
+  description: 毛の変体仮名
+- char: 𛃚
+  readings:
+  - へんたいがな
+  - も
+  description: 毛の変体仮名
+- char: 𛃛
+  readings:
+  - へんたいがな
+  - も
+  description: 茂の変体仮名
+- char: 𛃜
+  readings:
+  - へんたいがな
+  - も
+  description: 裳の変体仮名
+- char: 𛃝
+  readings:
+  - へんたいがな
+  - や
+  description: 也の変体仮名
+- char: 𛃞
+  readings:
+  - へんたいがな
+  - や
+  description: 也の変体仮名
+- char: 𛃟
+  readings:
+  - へんたいがな
+  - や
+  description: 屋の変体仮名
+- char: 𛃠
+  readings:
+  - へんたいがな
+  - や
+  description: 耶の変体仮名
+- char: 𛃡
+  readings:
+  - へんたいがな
+  - や
+  description: 耶の変体仮名
+- char: 𛃢
+  readings:
+  - へんたいがな
+  - や
+  - よ
+  description: 夜の変体仮名
+- char: 𛃣
+  readings:
+  - へんたいがな
+  - ゆ
+  description: 游の変体仮名
+- char: 𛃤
+  readings:
+  - へんたいがな
+  - ゆ
+  description: 由の変体仮名
+- char: 𛃥
+  readings:
+  - へんたいがな
+  - ゆ
+  description: 由の変体仮名
+- char: 𛃦
+  readings:
+  - へんたいがな
+  - ゆ
+  description: 遊の変体仮名
+- char: 𛃧
+  readings:
+  - へんたいがな
+  - よ
+  description: 代の変体仮名
+- char: 𛃨
+  readings:
+  - へんたいがな
+  - よ
+  description: 余の変体仮名
+- char: 𛃩
+  readings:
+  - へんたいがな
+  - よ
+  description: 與の変体仮名
+- char: 𛃪
+  readings:
+  - へんたいがな
+  - よ
+  description: 與の変体仮名
+- char: 𛃫
+  readings:
+  - へんたいがな
+  - よ
+  description: 與の変体仮名
+- char: 𛃬
+  readings:
+  - へんたいがな
+  - よ
+  description: 餘の変体仮名
+- char: 𛃭
+  readings:
+  - へんたいがな
+  - ら
+  description: 羅の変体仮名
+- char: 𛃮
+  readings:
+  - へんたいがな
+  - ら
+  description: 良の変体仮名
+- char: 𛃯
+  readings:
+  - へんたいがな
+  - ら
+  description: 良の変体仮名
+- char: 𛃰
+  readings:
+  - へんたいがな
+  - ら
+  description: 良の変体仮名
+- char: 𛃱
+  readings:
+  - へんたいがな
+  - り
+  description: 利の変体仮名
+- char: 𛃲
+  readings:
+  - へんたいがな
+  - り
+  description: 利の変体仮名
+- char: 𛃳
+  readings:
+  - へんたいがな
+  - り
+  description: 李の変体仮名
+- char: 𛃴
+  readings:
+  - へんたいがな
+  - り
+  description: 梨の変体仮名
+- char: 𛃵
+  readings:
+  - へんたいがな
+  - り
+  description: 理の変体仮名
+- char: 𛃶
+  readings:
+  - へんたいがな
+  - り
+  description: 里の変体仮名
+- char: 𛃷
+  readings:
+  - へんたいがな
+  - り
+  description: 離の変体仮名
+- char: 𛃸
+  readings:
+  - へんたいがな
+  - る
+  description: 流の変体仮名
+- char: 𛃹
+  readings:
+  - へんたいがな
+  - る
+  description: 留の変体仮名
+- char: 𛃺
+  readings:
+  - へんたいがな
+  - る
+  description: 留の変体仮名
+- char: 𛃻
+  readings:
+  - へんたいがな
+  - る
+  description: 留の変体仮名
+- char: 𛃼
+  readings:
+  - へんたいがな
+  - る
+  description: 累の変体仮名
+- char: 𛃽
+  readings:
+  - へんたいがな
+  - る
+  description: 類の変体仮名
+- char: 𛃾
+  readings:
+  - へんたいがな
+  - れ
+  description: 禮の変体仮名
+- char: 𛃿
+  readings:
+  - へんたいがな
+  - れ
+  description: 禮の変体仮名
+- char: 𛄀
+  readings:
+  - へんたいがな
+  - れ
+  description: 連の変体仮名
+- char: 𛄁
+  readings:
+  - へんたいがな
+  - れ
+  description: 麗の変体仮名
+- char: 𛄂
+  readings:
+  - へんたいがな
+  - ろ
+  description: 呂の変体仮名
+- char: 𛄃
+  readings:
+  - へんたいがな
+  - ろ
+  description: 呂の変体仮名
+- char: 𛄄
+  readings:
+  - へんたいがな
+  - ろ
+  description: 婁の変体仮名
+- char: 𛄅
+  readings:
+  - へんたいがな
+  - ろ
+  description: 樓の変体仮名
+- char: 𛄆
+  readings:
+  - へんたいがな
+  - ろ
+  description: 路の変体仮名
+- char: 𛄇
+  readings:
+  - へんたいがな
+  - ろ
+  description: 露の変体仮名
+- char: 𛄈
+  readings:
+  - へんたいがな
+  - わ
+  description: 倭の変体仮名
+- char: 𛄉
+  readings:
+  - へんたいがな
+  - わ
+  description: 和の変体仮名
+- char: 𛄊
+  readings:
+  - へんたいがな
+  - わ
+  description: 和の変体仮名
+- char: 𛄋
+  readings:
+  - へんたいがな
+  - わ
+  description: 王の変体仮名
+- char: 𛄌
+  readings:
+  - へんたいがな
+  - わ
+  description: 王の変体仮名
+- char: 𛄍
+  readings:
+  - へんたいがな
+  - ゐ
+  - うぃ
+  description: 井の変体仮名
+- char: 𛄎
+  readings:
+  - へんたいがな
+  - ゐ
+  - うぃ
+  description: 井の変体仮名
+- char: 𛄏
+  readings:
+  - へんたいがな
+  - ゐ
+  - うぃ
+  description: 居の変体仮名
+- char: 𛄐
+  readings:
+  - へんたいがな
+  - ゐ
+  - うぃ
+  description: 爲の変体仮名
+- char: 𛄑
+  readings:
+  - へんたいがな
+  - ゐ
+  - うぃ
+  description: 遺の変体仮名
+- char: 𛄒
+  readings:
+  - へんたいがな
+  - ゑ
+  - うぇ
+  description: 惠の変体仮名
+- char: 𛄓
+  readings:
+  - へんたいがな
+  - ゑ
+  - うぇ
+  description: 衞の変体仮名
+- char: 𛄔
+  readings:
+  - へんたいがな
+  - ゑ
+  - うぇ
+  description: 衞の変体仮名
+- char: 𛄕
+  readings:
+  - へんたいがな
+  - ゑ
+  - うぇ
+  description: 衞の変体仮名
+- char: 𛄖
+  readings:
+  - へんたいがな
+  - を
+  description: 乎の変体仮名
+- char: 𛄗
+  readings:
+  - へんたいがな
+  - を
+  description: 乎の変体仮名
+- char: 𛄘
+  readings:
+  - へんたいがな
+  - を
+  description: 尾の変体仮名
+- char: 𛄙
+  readings:
+  - へんたいがな
+  - を
+  description: 緒の変体仮名
+- char: 𛄚
+  readings:
+  - へんたいがな
+  - を
+  description: 越の変体仮名
+- char: 𛄛
+  readings:
+  - へんたいがな
+  - を
+  description: 遠の変体仮名
+- char: 𛄜
+  readings:
+  - へんたいがな
+  - を
+  description: 遠の変体仮名
+- char: 𛄝
+  readings:
+  - へんたいがな
+  - ん
+  - む
+  - も
+  description: 无の変体仮名
+- char: 𛄞
+  readings:
+  - へんたいがな
+  - ん
+  - む
+  - も
+  description: 无の変体仮名
+- char: 𛄟
+  readings:
+  - へんたいがな
+  - う
+  description: 汙の変体仮名
+- char: 𛄠
+  readings:
+  - へんたいがな
+  - い
+  description: 変体仮名
+- char: 𛄡
+  readings:
+  - へんたいがな
+  - いぇ
+  - え
+  description: 変体仮名
+- char: 𛄢
+  readings:
+  - へんたいがな
+  - う
+  description: 汙の変体仮名
+- char: あ゙
+  readings:
+  - あ
+  - あ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ぁ゙
+  readings:
+  - あ
+  - あ"
+  - ぁ
+  - ぁ"
+  - だくてん
+  description: 濁点付き仮名
+- char: い゙
+  readings:
+  - い
+  - い"
+  - だくてん
+  description: 濁点付き仮名
+- char: ぃ゙
+  readings:
+  - い
+  - い"
+  - ぃ
+  - ぃ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ぅ゙
+  readings:
+  - う
+  - う"
+  - ゔ
+  - ぅ
+  - ぅ"
+  - だくてん
+  description: 濁点付き仮名
+- char: え゙
+  readings:
+  - え
+  - え"
+  - だくてん
+  description: 濁点付き仮名
+- char: ぇ゙
+  readings:
+  - え
+  - え"
+  - ぇ
+  - ぇ"
+  - だくてん
+  description: 濁点付き仮名
+- char: お゙
+  readings:
+  - お
+  - お"
+  - だくてん
+  description: 濁点付き仮名
+- char: ぉ゙
+  readings:
+  - お
+  - お"
+  - ぉ
+  - ぉ"
+  - だくてん
+  description: 濁点付き仮名
+- char: っ゙
+  readings:
+  - づ
+  - っ
+  - っ"
+  - だくてん
+  description: 濁点付き仮名
+- char: な゙
+  readings:
+  - な
+  - な"
+  - だくてん
+  description: 濁点付き仮名
+- char: に゙
+  readings:
+  - に
+  - に"
+  - だくてん
+  description: 濁点付き仮名
+- char: ぬ゙
+  readings:
+  - ぬ
+  - ぬ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ね゙
+  readings:
+  - ね
+  - ね"
+  - だくてん
+  description: 濁点付き仮名
+- char: の゙
+  readings:
+  - の
+  - の"
+  - だくてん
+  description: 濁点付き仮名
+- char: ま゙
+  readings:
+  - ま
+  - ま"
+  - だくてん
+  description: 濁点付き仮名
+- char: み゙
+  readings:
+  - み
+  - み"
+  - だくてん
+  description: 濁点付き仮名
+- char: む゙
+  readings:
+  - む
+  - む"
+  - だくてん
+  description: 濁点付き仮名
+- char: め゙
+  readings:
+  - め
+  - め"
+  - だくてん
+  description: 濁点付き仮名
+- char: も゙
+  readings:
+  - も
+  - も"
+  - だくてん
+  description: 濁点付き仮名
+- char: や゙
+  readings:
+  - や
+  - や"
+  - だくてん
+  description: 濁点付き仮名
+- char: ゃ゙
+  readings:
+  - や
+  - や"
+  - ゃ
+  - ゃ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ゆ゙
+  readings:
+  - ゆ
+  - ゆ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ゅ゙
+  readings:
+  - ゆ
+  - ゆ"
+  - ゅ
+  - ゅ"
+  - だくてん
+  description: 濁点付き仮名
+- char: よ゙
+  readings:
+  - よ
+  - よ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ょ゙
+  readings:
+  - よ
+  - よ"
+  - ょ
+  - ょ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ら゙
+  readings:
+  - ら
+  - ら"
+  - だくてん
+  description: 濁点付き仮名
+- char: り゙
+  readings:
+  - り
+  - り"
+  - だくてん
+  description: 濁点付き仮名
+- char: る゙
+  readings:
+  - る
+  - る"
+  - だくてん
+  description: 濁点付き仮名
+- char: れ゙
+  readings:
+  - れ
+  - れ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ろ゙
+  readings:
+  - ろ
+  - ろ"
+  - だくてん
+  description: 濁点付き仮名
+- char: わ゙
+  readings:
+  - わ
+  - わ"
+  - ゔぁ
+  - だくてん
+  description: 濁点付き仮名
+- char: ゐ゙
+  readings:
+  - ゐ
+  - ゐ"
+  - うぃ
+  - ゔぃ
+  - い
+  - い"
+  - だくてん
+  description: 濁点付き仮名
+- char: ゑ゙
+  readings:
+  - ゑ
+  - ゑ"
+  - うぇ
+  - ゔぇ
+  - え
+  - え"
+  - だくてん
+  description: 濁点付き仮名
+- char: を゙
+  readings:
+  - を
+  - を"
+  - ゔぉ
+  - だくてん
+  description: 濁点付き仮名
+- char: ん゙
+  readings:
+  - ん
+  - ん"
+  - だくてん
+  description: 濁点付き仮名
+- char: ア゙
+  readings:
+  - あ
+  - あ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ァ゙
+  readings:
+  - あ
+  - あ"
+  - ぁ
+  - ぁ"
+  - だくてん
+  description: 濁点付き仮名
+- char: イ゙
+  readings:
+  - い
+  - い"
+  - だくてん
+  description: 濁点付き仮名
+- char: ィ゙
+  readings:
+  - い
+  - い"
+  - ぃ
+  - ぃ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ゥ゙
+  readings:
+  - う
+  - う"
+  - ぅ
+  - ぅ"
+  - だくてん
+  description: 濁点付き仮名
+- char: エ゙
+  readings:
+  - え
+  - え"
+  - だくてん
+  description: 濁点付き仮名
+- char: ェ゙
+  readings:
+  - え
+  - え"
+  - ぇ
+  - ぇ"
+  - だくてん
+  description: 濁点付き仮名
+- char: オ゙
+  readings:
+  - お
+  - お"
+  - だくてん
+  description: 濁点付き仮名
+- char: ォ゙
+  readings:
+  - お
+  - お"
+  - ぉ
+  - ぉ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ッ゙
+  readings:
+  - づ
+  - っ
+  - っ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ナ゙
+  readings:
+  - な
+  - な"
+  - だくてん
+  description: 濁点付き仮名
+- char: ニ゙
+  readings:
+  - に
+  - に"
+  - だくてん
+  description: 濁点付き仮名
+- char: ヌ゙
+  readings:
+  - ぬ
+  - ぬ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ネ゙
+  readings:
+  - ね
+  - ね"
+  - だくてん
+  description: 濁点付き仮名
+- char: ノ゙
+  readings:
+  - の
+  - の"
+  - だくてん
+  description: 濁点付き仮名
+- char: マ゙
+  readings:
+  - ま
+  - ま"
+  - だくてん
+  description: 濁点付き仮名
+- char: ミ゙
+  readings:
+  - み
+  - み"
+  - だくてん
+  description: 濁点付き仮名
+- char: ム゙
+  readings:
+  - む
+  - む"
+  - だくてん
+  description: 濁点付き仮名
+- char: メ゙
+  readings:
+  - め
+  - め"
+  - だくてん
+  description: 濁点付き仮名
+- char: モ゙
+  readings:
+  - も
+  - も"
+  - だくてん
+  description: 濁点付き仮名
+- char: ヤ゙
+  readings:
+  - や
+  - や"
+  - だくてん
+  description: 濁点付き仮名
+- char: ャ゙
+  readings:
+  - や
+  - や"
+  - ゃ
+  - ゃ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ユ゙
+  readings:
+  - ゆ
+  - ゆ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ュ゙
+  readings:
+  - ゆ
+  - ゆ"
+  - ゅ
+  - ゅ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ヨ゙
+  readings:
+  - よ
+  - よ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ョ゙
+  readings:
+  - よ
+  - よ"
+  - ょ
+  - ょ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ラ゙
+  readings:
+  - ら
+  - ら"
+  - だくてん
+  description: 濁点付き仮名
+- char: リ゙
+  readings:
+  - り
+  - り"
+  - だくてん
+  description: 濁点付き仮名
+- char: ル゙
+  readings:
+  - る
+  - る"
+  - だくてん
+  description: 濁点付き仮名
+- char: レ゙
+  readings:
+  - れ
+  - れ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ロ゙
+  readings:
+  - ろ
+  - ろ"
+  - だくてん
+  description: 濁点付き仮名
+- char: ヷ
+  readings:
+  - わ
+  - わ"
+  - ゔぁ
+  - だくてん
+  description: 濁点付き仮名
+- char: ヸ
+  readings:
+  - ゐ
+  - ゐ"
+  - うぃ
+  - ゔぃ
+  - い
+  - い"
+  - だくてん
+  description: 濁点付き仮名
+- char: ヹ
+  readings:
+  - ゑ
+  - ゑ"
+  - うぇ
+  - ゔぇ
+  - え
+  - え"
+  - だくてん
+  description: 濁点付き仮名
+- char: ヺ
+  readings:
+  - を
+  - を"
+  - ゔぉ
+  - だくてん
+  description: 濁点付き仮名
+- char: ン゙
+  readings:
+  - ん
+  - ん"
+  - だくてん
+  description: 濁点付き仮名
+- char: か゚
+  readings:
+  - びだくおん
+  - か
+  - が
+  description: 鼻濁音
+- char: き゚
+  readings:
+  - びだくおん
+  - き
+  - ぎ
+  description: 鼻濁音
+- char: く゚
+  readings:
+  - びだくおん
+  - く
+  - ぐ
+  description: 鼻濁音
+- char: け゚
+  readings:
+  - びだくおん
+  - け
+  - げ
+  description: 鼻濁音
+- char: こ゚
+  readings:
+  - びだくおん
+  - こ
+  - ご
+  description: 鼻濁音
+- char: カ゚
+  readings:
+  - びだくおん
+  - か
+  - が
+  description: 鼻濁音
+- char: キ゚
+  readings:
+  - びだくおん
+  - き
+  - ぎ
+  description: 鼻濁音
+- char: ク゚
+  readings:
+  - びだくおん
+  - く
+  - ぐ
+  description: 鼻濁音
+- char: ケ゚
+  readings:
+  - びだくおん
+  - け
+  - げ
+  description: 鼻濁音
+- char: コ゚
+  readings:
+  - びだくおん
+  - こ
+  - ご
+  description: 鼻濁音

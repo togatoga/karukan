@@ -73,7 +73,10 @@ struct PreeditCache {
 #[derive(Default)]
 struct CandidateCache {
     texts: Vec<CString>,
-    annotations: Vec<CString>,
+    /// Per-candidate descriptions, already wrapped in `[...]` and ready
+    /// to be passed to fcitx5 `setComment`. Empty string when the candidate
+    /// has no description.
+    descriptions: Vec<CString>,
     count: usize,
     cursor: usize,
     dirty: bool,
@@ -175,11 +178,21 @@ impl KarukanEngine {
                         .iter()
                         .filter_map(|c| CString::new(c.text.as_str()).ok())
                         .collect();
-                    self.candidates.annotations = page
+                    // Per-candidate `description` powers the mozc-style
+                    // right-side comment. Source labels live in the aux
+                    // text (via `Candidate.source_label`), so here we only
+                    // surface the description and wrap it in `[…]` so it's
+                    // visually distinct from the candidate text itself.
+                    self.candidates.descriptions = page
                         .iter()
                         .map(|c| {
-                            let ann = c.annotation.as_deref().unwrap_or("");
-                            CString::new(ann).unwrap_or_default()
+                            let formatted = c
+                                .description
+                                .as_deref()
+                                .filter(|s| !s.is_empty())
+                                .map(|s| format!("[{}]", s))
+                                .unwrap_or_default();
+                            CString::new(formatted).unwrap_or_default()
                         })
                         .collect();
                     self.candidates.count = self.candidates.texts.len();

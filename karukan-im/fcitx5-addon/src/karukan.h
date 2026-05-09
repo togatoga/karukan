@@ -24,7 +24,7 @@ class KarukanEngine;
 class KarukanCandidateWord : public CandidateWord {
 public:
     KarukanCandidateWord(KarukanEngine* engine, Text text, int index,
-                         const std::string& annotation = "");
+                         const std::string& description = "");
     void select(InputContext* inputContext) const override;
 
 private:

@@ -1,6 +1,6 @@
 //! Type definitions for the IME engine
 
-use karukan_engine::{Dictionary, KanaKanjiConverter, RomajiConverter};
+use karukan_engine::{Dictionary, KanaKanjiConverter, RewriterChain, RomajiConverter};
 
 use crate::config::settings::StrategyMode;
 
@@ -105,6 +105,8 @@ pub(in crate::core) struct Converters {
     pub kanji: Option<KanaKanjiConverter>,
     /// Light model for beam search
     pub light_kanji: Option<KanaKanjiConverter>,
+    /// Candidate rewriters (half-width katakana, symbol variants)
+    pub rewriters: RewriterChain,
 }
 
 /// Input mode for the IME engine

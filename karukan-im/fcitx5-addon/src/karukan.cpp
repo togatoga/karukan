@@ -21,9 +21,26 @@ constexpr uint32_t kSuperMask = 64;   // Mod4Mask
 // --- KarukanCandidateWord ---
 
 KarukanCandidateWord::KarukanCandidateWord(KarukanEngine* engine, Text text, int index,
-                                           const std::string& annotation)
-    : CandidateWord(std::move(text)), engine_(engine), index_(index) {
-    (void)annotation;  // Annotation is shown in aux text, not inline
+                                           const std::string& description)
+    :
+#ifndef FCITX5_HAS_CANDIDATE_SET_COMMENT
+      // fcitx5 < 5.1.9: append description to candidate text
+      CandidateWord([&]() {
+          if (!description.empty()) {
+              text.append(" " + description);
+          }
+          return std::move(text);
+      }()),
+#else
+      CandidateWord(std::move(text)),
+#endif
+      engine_(engine), index_(index) {
+#ifdef FCITX5_HAS_CANDIDATE_SET_COMMENT
+    // fcitx5 >= 5.1.9: show description as a right-side comment
+    if (!description.empty()) {
+        setComment(Text(description));
+    }
+#endif
 }
 
 void KarukanCandidateWord::select(InputContext* inputContext) const {
@@ -54,9 +71,9 @@ void KarukanCandidateList::updateCandidates(::KarukanEngine* rustEngine) {
         if (text) {
             Text candidateText;
             candidateText.append(std::string(text));
-            const char* ann = karukan_engine_get_candidate_annotation(rustEngine, i);
-            std::string comment = (ann && ann[0] != '\0') ? std::string(ann) : "";
-            append<KarukanCandidateWord>(engine_, std::move(candidateText), i, comment);
+            const char* desc = karukan_engine_get_candidate_description(rustEngine, i);
+            std::string description = (desc && desc[0] != '\0') ? std::string(desc) : "";
+            append<KarukanCandidateWord>(engine_, std::move(candidateText), i, description);
         }
     }
 

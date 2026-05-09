@@ -2,17 +2,35 @@
 //!
 //! Handles the list of conversion candidates with pagination support.
 
-/// A single conversion candidate
+/// A single conversion candidate.
+///
+/// Two distinct annotation slots are kept separate so the same description
+/// never appears in two places at once:
+///
+/// - `source_label` — shown in the aux text (after the model name) to tell
+///   the user which subsystem produced the candidate (`🤖 AI`, `📚 辞書`,
+///   `📝 学習`, `🔄 変換`, ...).
+/// - `description` — shown as the mozc-style right-side comment on the
+///   candidate itself, describing what the candidate *is* (symbol names like
+///   `三点リーダ`, rewriter variants like `[全]英大文字`).
+///
+/// Position within a `CandidateList` is tracked by the list itself; the
+/// candidate doesn't carry its own index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     /// The converted text
     pub text: String,
     /// The original reading (hiragana)
     pub reading: Option<String>,
-    /// Optional annotation (e.g., word type, dictionary info)
-    pub annotation: Option<String>,
-    /// Unique index from the conversion engine
-    pub index: usize,
+    /// Source label for the aux text slot (e.g. `🤖 AI`, `📚 辞書`).
+    /// `None` when the source has no label (Fallback).
+    pub source_label: Option<String>,
+    /// Per-candidate description shown as the right-side comment on the
+    /// candidate (mozc-style). Only set when the candidate itself has a
+    /// meaningful description — symbol descriptions like `三点リーダ`,
+    /// rewriter descriptions like `[全]英大文字`. Source labels are
+    /// intentionally excluded so they don't duplicate the aux text.
+    pub description: Option<String>,
 }
 
 impl Candidate {
@@ -20,8 +38,8 @@ impl Candidate {
         Self {
             text: text.into(),
             reading: None,
-            annotation: None,
-            index: 0,
+            source_label: None,
+            description: None,
         }
     }
 
@@ -29,14 +47,9 @@ impl Candidate {
         Self {
             text: text.into(),
             reading: Some(reading.into()),
-            annotation: None,
-            index: 0,
+            source_label: None,
+            description: None,
         }
-    }
-
-    pub fn with_index(mut self, index: usize) -> Self {
-        self.index = index;
-        self
     }
 }
 
@@ -78,26 +91,22 @@ impl CandidateList {
 
     /// Create a candidate list from strings
     pub fn from_strings(strings: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        let candidates = strings
-            .into_iter()
-            .enumerate()
-            .map(|(i, s)| Candidate::new(s).with_index(i))
-            .collect();
-        Self::new(candidates)
+        Self::new(strings.into_iter().map(Candidate::new).collect())
     }
 
-    /// Create a candidate list from strings with reading annotation
+    /// Create a candidate list from strings, attaching the same reading to
+    /// every candidate.
     pub fn from_strings_with_reading(
         strings: impl IntoIterator<Item = impl Into<String>>,
         reading: impl Into<String>,
     ) -> Self {
         let reading = reading.into();
-        let candidates = strings
-            .into_iter()
-            .enumerate()
-            .map(|(i, s)| Candidate::with_reading(s, &reading).with_index(i))
-            .collect();
-        Self::new(candidates)
+        Self::new(
+            strings
+                .into_iter()
+                .map(|s| Candidate::with_reading(s, &reading))
+                .collect(),
+        )
     }
 
     /// Get all candidates

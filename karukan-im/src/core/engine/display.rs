@@ -23,12 +23,12 @@ impl InputMethodEngine {
 
         let katakana = self.input_mode == InputMode::Katakana;
         let display_before = if katakana {
-            Self::hiragana_to_katakana(&before)
+            karukan_engine::hiragana_to_katakana(&before)
         } else {
             before
         };
         let display_after = if katakana {
-            Self::hiragana_to_katakana(&after)
+            karukan_engine::hiragana_to_katakana(&after)
         } else {
             after
         };
@@ -169,7 +169,7 @@ impl InputMethodEngine {
             .unwrap_or_default();
         let source_label = candidates
             .and_then(|c| c.selected())
-            .and_then(|c| c.annotation.as_deref())
+            .and_then(|c| c.source_label.as_deref())
             .filter(|a| !a.is_empty())
             .map(|a| format!(" | {}", a))
             .unwrap_or_default();
@@ -212,11 +212,6 @@ impl InputMethodEngine {
                 indicator, display_reading, ctx, timing, model
             )
         }
-    }
-
-    /// Convert hiragana string to katakana
-    pub(super) fn hiragana_to_katakana(hiragana: &str) -> String {
-        karukan_engine::kana::hiragana_to_katakana(hiragana)
     }
 
     /// Truncate context to safe size for API calls

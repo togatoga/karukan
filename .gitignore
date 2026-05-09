@@ -31,5 +31,7 @@ target/
 build
 *.bin
 data/
+# Tracked data: symbol descriptions / variants for the rewriter
+!karukan-engine/data/
 *.json
 *.cache
