@@ -662,19 +662,15 @@ impl LlamaCppModel {
         ctx.decode(&mut batch)
             .map_err(|e| KanjiError::Inference(e.into()))?;
 
-        let mut n_cur = input_tokens.len();
-
         // Get model's EOS token for comparison
         let model_eos = self.model.token_eos();
 
         // Generate new tokens
-        for _ in 0..max_new_tokens {
+        for n_cur in (input_tokens.len()..).take(max_new_tokens) {
             let new_token = sampler.sample(&ctx, -1);
 
             // Check for EOS using the provided token ID
-            if let Some(eos) = eos_token_id
-                && new_token.0 == eos
-            {
+            if eos_token_id.is_some_and(|eos| new_token.0 == eos) {
                 break;
             }
 
@@ -698,7 +694,6 @@ impl LlamaCppModel {
 
             ctx.decode(&mut batch)
                 .map_err(|e| KanjiError::Inference(e.into()))?;
-            n_cur += 1;
         }
 
         Ok(generated)

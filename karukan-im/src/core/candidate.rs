@@ -127,11 +127,7 @@ impl CandidateList {
 
     /// Get the current page number (0-indexed)
     pub fn current_page(&self) -> usize {
-        if self.page_size == 0 {
-            0
-        } else {
-            self.cursor / self.page_size
-        }
+        self.cursor.checked_div(self.page_size).unwrap_or(0)
     }
 
     /// Get the total number of pages
