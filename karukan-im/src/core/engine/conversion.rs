@@ -189,7 +189,10 @@ impl InputMethodEngine {
     /// transitions into the Conversion state. The previous live-conversion
     /// result is preserved as the first model candidate so the user sees
     /// the same text they had been looking at during input.
-    pub(super) fn start_conversion(&mut self) -> EngineResult {
+    ///
+    /// `skip_learning` is set by the Tab path to omit learning-cache
+    /// candidates (Space/Down keep the default learning-included behavior).
+    pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
         // Flush any remaining romaji into composed_hiragana
         self.flush_romaji_to_composed();
 
@@ -208,7 +211,8 @@ impl InputMethodEngine {
         }
 
         // Get candidates from kanji converter (use full num_candidates for explicit conversion)
-        let mut candidates = self.build_conversion_candidates(&reading, self.config.num_candidates);
+        let mut candidates =
+            self.build_conversion_candidates(&reading, self.config.num_candidates, skip_learning);
 
         // If the previous auto-suggest result is not in the new candidates, insert it at the top
         // so it doesn't disappear when the conversion strategy changes.
@@ -336,10 +340,15 @@ impl InputMethodEngine {
     /// count for performance.
     ///
     /// Priority: Learning → User Dictionary → Model → System Dictionary → Fallback
+    ///
+    /// `skip_learning` suppresses the learning-cache step (1). Used by the Tab
+    /// key path so users can escape a noisy learning history without losing
+    /// access to dictionary/model candidates.
     pub(super) fn build_conversion_candidates(
         &mut self,
         reading: &str,
         num_candidates: usize,
+        skip_learning: bool,
     ) -> Vec<AnnotatedCandidate> {
         // Try to initialize the kanji converter, but don't bail out if it
         // fails — symbol-only inputs (e.g. `。。。`) don't need the model and
@@ -361,13 +370,16 @@ impl InputMethodEngine {
 
         // 1. Learning cache candidates (highest priority).
         //    Force-inserted so they win against duplicate text from later sources.
-        for c in self.lookup_learning_candidates(reading) {
-            // Exact matches have reading == input reading; use None to avoid redundancy
-            let cand_reading = c.reading.filter(|r| r != reading);
-            builder.push_force(
-                AnnotatedCandidate::new(c.text, CandidateSource::Learning)
-                    .with_reading(cand_reading),
-            );
+        //    Skipped when the caller asks for a learning-free conversion (Tab key).
+        if !skip_learning {
+            for c in self.lookup_learning_candidates(reading) {
+                // Exact matches have reading == input reading; use None to avoid redundancy
+                let cand_reading = c.reading.filter(|r| r != reading);
+                builder.push_force(
+                    AnnotatedCandidate::new(c.text, CandidateSource::Learning)
+                        .with_reading(cand_reading),
+                );
+            }
         }
 
         // 2. Dictionary candidates (user dict first, then system dict)
