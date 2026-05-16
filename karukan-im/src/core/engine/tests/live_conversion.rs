@@ -230,6 +230,68 @@ fn test_ctrl_shift_l_lowercase_toggles() {
 }
 
 #[test]
+fn test_toggle_on_during_composing_applies_immediately() {
+    // Toggling live conversion ON while composing should immediately attempt
+    // live conversion against the current input buffer instead of waiting for
+    // another keystroke. With no model loaded, run_auto_suggest falls back to
+    // the reading itself (which equals input_buf.text), so live.text stays
+    // empty — but the preedit must still be refreshed in a single action set.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert!(!engine.live.enabled);
+
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    assert!(result.consumed);
+    assert!(engine.live.enabled);
+
+    // The toggle must produce a preedit refresh, not only an aux update.
+    let has_preedit = result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::UpdatePreedit(_)));
+    assert!(
+        has_preedit,
+        "toggling ON during composing should refresh preedit immediately"
+    );
+}
+
+#[test]
+fn test_toggle_off_during_composing_clears_live_text() {
+    // Toggling OFF while live conversion is showing should revert the preedit
+    // back to hiragana without requiring another keystroke.
+    let mut engine = make_live_conversion_engine();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.live.text = "愛".to_string();
+
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    assert!(result.consumed);
+    assert!(!engine.live.enabled);
+    assert!(engine.live.text.is_empty());
+
+    let preedit_text = result.actions.iter().find_map(|a| {
+        if let EngineAction::UpdatePreedit(p) = a {
+            Some(p.text().to_string())
+        } else {
+            None
+        }
+    });
+    assert_eq!(preedit_text.as_deref(), Some("あい"));
+}
+
+#[test]
+fn test_engine_config_live_conversion_enabled() {
+    use crate::core::engine::EngineConfig;
+    let config = EngineConfig {
+        live_conversion: true,
+        ..EngineConfig::default()
+    };
+    let engine = InputMethodEngine::with_config(config);
+    assert!(engine.live.enabled);
+}
+
+#[test]
 fn test_ctrl_shift_l_shows_aux_text() {
     let mut engine = InputMethodEngine::new();
 

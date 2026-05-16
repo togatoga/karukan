@@ -63,6 +63,13 @@ pub struct ConversionSettings {
     pub max_latency_ms: u64,
     /// Number of threads for llama.cpp inference (0 = all cores, llama.cpp default)
     pub n_threads: u32,
+    /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
+    #[serde(default = "default_live_conversion")]
+    pub live_conversion: bool,
+}
+
+fn default_live_conversion() -> bool {
+    true
 }
 
 /// Learning cache settings

@@ -22,6 +22,8 @@ model = "jinen-v1-small-q5"
 light_model = "jinen-v1-xsmall-q5"
 # 推論スレッド数（0 = 全コア使用）
 n_threads = 4
+# 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
+live_conversion = true
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
 
 [learning]

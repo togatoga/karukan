@@ -128,6 +128,7 @@ impl KarukanEngine {
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
+            live_conversion: settings.conversion.live_conversion,
         };
         let engine = InputMethodEngine::with_config(config);
         Self {
