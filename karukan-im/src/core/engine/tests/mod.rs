@@ -9,6 +9,7 @@ mod candidates;
 mod conversion;
 mod cursor;
 mod katakana;
+mod learning;
 mod live_conversion;
 mod mode_toggle;
 mod passthrough;
