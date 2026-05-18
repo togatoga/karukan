@@ -40,7 +40,6 @@ pub enum StrategyMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversionSettings {
     /// Conversion strategy mode (adaptive, light, main)
-    #[serde(default)]
     pub strategy: StrategyMode,
     /// Number of candidates to show on Space conversion
     pub num_candidates: usize,
