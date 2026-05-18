@@ -167,10 +167,11 @@ impl InputMethodEngine {
 
     /// Create with configuration
     pub fn with_config(config: EngineConfig) -> Self {
-        let mut engine = Self::new();
-        engine.live.enabled = config.live_conversion;
-        engine.config = config;
-        engine
+        Self {
+            live: LiveConversion::new(config.live_conversion),
+            config,
+            ..Self::new()
+        }
     }
 
     /// Get last conversion time in milliseconds (inference only)

@@ -132,6 +132,15 @@ pub(in crate::core) struct LiveConversion {
     pub text: String,
 }
 
+impl LiveConversion {
+    pub fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            text: String::new(),
+        }
+    }
+}
+
 /// Dictionary store: system, user, and future cache dictionaries
 #[derive(Default)]
 pub(in crate::core) struct Dictionaries {
