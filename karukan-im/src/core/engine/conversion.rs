@@ -393,7 +393,11 @@ impl InputMethodEngine {
 
         // 3. Model inference results
         if candidates.is_empty() {
-            if builder.is_empty() {
+            // In emoji mode, defer the literal-fallback decision until
+            // after rewriters have run — otherwise `:smile` would be
+            // pinned to the top of the candidate list as a Fallback
+            // and outrank the 😄 we surface in step 5/6.
+            if builder.is_empty() && self.input_mode != InputMode::Emoji {
                 builder.push(AnnotatedCandidate::new(
                     hiragana.clone(),
                     CandidateSource::Fallback,
@@ -412,26 +416,43 @@ impl InputMethodEngine {
             }
         }
 
-        // 5. Append hiragana/katakana fallback if not already present
-        builder.push(AnnotatedCandidate::new(hiragana, CandidateSource::Fallback));
-        builder.push(AnnotatedCandidate::new(katakana, CandidateSource::Fallback));
-
-        // 6. Run rewriters only on the user's typed input (the reading itself).
-        //    Rewriters express width/punctuation variants of what the user
-        //    *typed* — not of conversion results. Running them on
-        //    dictionary/model/fallback candidates produces unrelated noise
-        //    (e.g. a dictionary entry of `,` for some reading would generate
-        //    `、`, `，` variants the user never asked for; a learning entry
-        //    `アト` pulled by prefix lookup on `あ` would emit `ｱﾄ`).
-        for (variant, description) in self
+        // 5/6. Hiragana/katakana fallback + rewriter variants.
+        //
+        // In emoji mode we surface ONLY the rewriter (i.e. EmojiRewriter)
+        // candidates — Slack's emoji picker shows emojis and nothing
+        // else, and that's the mental model the user wants here.
+        // No literal `:smile` / `:xyz` fallback in the candidate list:
+        // if nothing matches, the picker is just empty. (Enter on a
+        // no-match query in Composing still commits the buffer
+        // literal via `commit_composing`; that's the escape hatch.)
+        // Non-emoji modes keep the original order so existing IME
+        // behavior is untouched.
+        let rewriter_variants = self
             .converters
             .rewriters
-            .rewrite_all(&[reading.to_string()])
-        {
-            builder.push(
-                AnnotatedCandidate::new(variant, CandidateSource::Rewriter)
-                    .with_description(description),
-            );
+            .rewrite_all(&[reading.to_string()]);
+        if self.input_mode == InputMode::Emoji {
+            for (variant, description) in rewriter_variants {
+                builder.push(
+                    AnnotatedCandidate::new(variant, CandidateSource::Rewriter)
+                        .with_description(description),
+                );
+            }
+        } else {
+            builder.push(AnnotatedCandidate::new(hiragana, CandidateSource::Fallback));
+            builder.push(AnnotatedCandidate::new(katakana, CandidateSource::Fallback));
+            // Rewriters operate on the user's typed input (the reading
+            // itself). Running them on dictionary/model/fallback
+            // candidates produces unrelated noise (e.g. a dictionary
+            // entry of `,` for some reading would generate `、`/`，`
+            // variants the user never asked for; a learning entry `アト`
+            // pulled by prefix lookup on `あ` would emit `ｱﾄ`).
+            for (variant, description) in rewriter_variants {
+                builder.push(
+                    AnnotatedCandidate::new(variant, CandidateSource::Rewriter)
+                        .with_description(description),
+                );
+            }
         }
 
         // 7. Enrich Fallback candidates whose text is a known symbol with
@@ -630,12 +651,20 @@ impl InputMethodEngine {
             return EngineResult::consumed();
         }
 
-        if let Some(reading) = &reading {
+        // Skip learning when the buffer is a `:shortcode` query — the
+        // reading would be e.g. `:smile`, which isn't a hiragana key
+        // and would corrupt the kana-keyed learning cache.
+        if self.input_mode != InputMode::Emoji
+            && let Some(reading) = &reading
+        {
             self.record_learning(reading, &text);
         }
 
         self.state = InputState::Empty;
         self.input_buf.text.clear();
+        if self.input_mode == InputMode::Emoji {
+            self.input_mode = InputMode::Hiragana;
+        }
 
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
@@ -650,12 +679,17 @@ impl InputMethodEngine {
             return EngineResult::not_consumed();
         };
 
-        if let Some(reading) = &reading {
+        if self.input_mode != InputMode::Emoji
+            && let Some(reading) = &reading
+        {
             self.record_learning(reading, &text);
         }
 
         self.state = InputState::Empty;
         self.input_buf.text.clear();
+        if self.input_mode == InputMode::Emoji {
+            self.input_mode = InputMode::Hiragana;
+        }
 
         // Start new input with the character
         let new_input_result = self.start_input(ch);

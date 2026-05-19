@@ -19,11 +19,13 @@
 //! for deduplication and ordering.
 
 mod alphabet;
+mod emoji;
 mod half_katakana;
 mod number;
 mod symbol;
 
 pub use alphabet::AlphabetRewriter;
+pub use emoji::EmojiRewriter;
 pub use half_katakana::HalfWidthKatakanaRewriter;
 pub use number::NumberRewriter;
 pub use symbol::{SymbolRewriter, description};
@@ -68,6 +70,7 @@ impl RewriterChain {
         chain.add(Box::new(AlphabetRewriter));
         chain.add(Box::new(SymbolRewriter));
         chain.add(Box::new(NumberRewriter));
+        chain.add(Box::new(EmojiRewriter));
         chain
     }
 

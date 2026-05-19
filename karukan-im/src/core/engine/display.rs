@@ -102,6 +102,11 @@ impl InputMethodEngine {
             InputMode::Alphabet => "[A]",
             InputMode::Katakana => "[カ]",
             InputMode::Hiragana => "[あ]",
+            // ☺ (U+263A, Unicode 1.1 / 1993) — the oldest smiley-face
+            // codepoint in Unicode; gives emoji mode an unambiguous
+            // glyph in the aux text that's distinct from `[A]` so the
+            // user sees they're not in plain alphabet input.
+            InputMode::Emoji => "[☺]",
         };
         if self.live.enabled {
             format!("⚡{}", base)
