@@ -45,6 +45,7 @@
 //! hiragana conversion path, no `hiragana_to_romaji` reverse table,
 //! and no description-rendering logic specific to the romaji path.
 
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -122,75 +123,59 @@ static EMOJI_TABLE: LazyLock<EmojiTable> = LazyLock::new(|| {
 /// that many. Edit-distance ranking keeps the most relevant first.
 const MAX_TRIGGER_CANDIDATES: usize = 64;
 
-/// Sort key for a single trigger's best fuzzy placement. Ascending
-/// order means "more relevant first":
-///
-/// - `neg_longest` = `usize::MAX - longest_contiguous_run`, so longer
-///   runs sort first.
-/// - `earliest`    = position of the first matched char in target.
-/// - `target_len`  = trigger length (shorter wins among ties).
-type MatchScore = (usize, usize, usize);
+/// Sort key for a trigger's best fuzzy placement. Plain ascending
+/// `min()` selects the most relevant: longer contiguous runs come
+/// first (via [`Reverse`]), then earlier start positions, then
+/// shorter triggers.
+type MatchScore = (Reverse<usize>, usize, usize);
 
-/// Find the best peco-style fuzzy placement of `query` inside
-/// `target`. Returns `None` if `query` is not a subsequence of
-/// `target` at any starting position.
+/// Peco-style score for `query` against `target`. Returns `None`
+/// when `query` is not a subsequence of `target` from any starting
+/// position. Otherwise tries every position where `target[i] ==
+/// query[0]`, greedily completes the subseq from there, and keeps
+/// the lowest-sorting [`MatchScore`].
 ///
-/// For each occurrence of `query[0]` in `target`, greedily match the
-/// remaining query chars and keep the placement whose [`MatchScore`]
-/// sorts smallest. Lifted from peco's `filter/fuzzy.go` with
-/// `sortLongest = true` — see the module docs for the ranking rule.
-fn best_match_score(query: &str, target: &str) -> Option<MatchScore> {
-    let q: Vec<char> = query.chars().collect();
-    let t: Vec<char> = target.chars().collect();
-    if q.is_empty() || t.is_empty() {
+/// Both inputs are taken as byte slices because triggers are all
+/// ASCII (see [`scripts/emoji_porter.py`]) — no need to pay the
+/// `Vec<char>` allocation per call.
+fn best_match_score(query: &[u8], target: &[u8]) -> Option<MatchScore> {
+    if query.is_empty() {
         return None;
     }
-    let target_len = t.len();
-    let mut best: Option<MatchScore> = None;
+    let target_len = target.len();
+    (0..target_len)
+        .filter(|&start| target[start] == query[0])
+        .filter_map(|start| {
+            longest_run_from(query, target, start)
+                .map(|longest| (Reverse(longest), start, target_len))
+        })
+        .min()
+}
 
-    for start in 0..t.len() {
-        if t[start] != q[0] {
+/// Greedy subseq match from `target[start]` (which is the caller's
+/// guarantee to equal `query[0]`). Returns the longest run of
+/// adjacent matched positions if all of `query` is consumed, else
+/// `None`.
+fn longest_run_from(query: &[u8], target: &[u8], start: usize) -> Option<usize> {
+    let mut qi = 1; // query[0] consumed by the anchor itself.
+    let mut prev = start;
+    let mut longest = 1usize;
+    let mut run = 1usize;
+
+    for (ti, &tc) in target.iter().enumerate().skip(start + 1) {
+        if qi >= query.len() {
+            break;
+        }
+        if tc != query[qi] {
             continue;
         }
-        // Greedy match from `start`: take each subsequent query char
-        // at its next occurrence in target.
-        let mut positions: Vec<usize> = Vec::with_capacity(q.len());
-        positions.push(start);
-        let mut qi = 1;
-        for (offset, &tc) in t[start + 1..].iter().enumerate() {
-            if qi >= q.len() {
-                break;
-            }
-            if tc == q[qi] {
-                positions.push(start + 1 + offset);
-                qi += 1;
-            }
-        }
-        if positions.len() < q.len() {
-            continue;
-        }
-
-        // Longest contiguous run of adjacent matched positions.
-        let mut longest = 1usize;
-        let mut run = 1usize;
-        for w in positions.windows(2) {
-            if w[1] == w[0] + 1 {
-                run += 1;
-                if run > longest {
-                    longest = run;
-                }
-            } else {
-                run = 1;
-            }
-        }
-
-        let score: MatchScore = (usize::MAX - longest, start, target_len);
-        if best.is_none_or(|b| score < b) {
-            best = Some(score);
-        }
+        run = if ti == prev + 1 { run + 1 } else { 1 };
+        longest = longest.max(run);
+        prev = ti;
+        qi += 1;
     }
 
-    best
+    (qi == query.len()).then_some(longest)
 }
 
 /// Format the per-candidate description: `絵文字` alone, or
@@ -252,9 +237,10 @@ impl Rewriter for EmojiRewriter {
         if let Some(stripped) = candidate.strip_prefix(TRIGGER_PREFIX)
             && !stripped.is_empty()
         {
+            let query = stripped.as_bytes();
             let mut scored: Vec<(MatchScore, &str, &str)> = Vec::new();
             for (trig, emoji) in &EMOJI_TABLE.triggers {
-                if let Some(score) = best_match_score(stripped, trig) {
+                if let Some(score) = best_match_score(query, trig.as_bytes()) {
                     scored.push((score, trig.as_str(), emoji.as_str()));
                 }
             }
