@@ -117,12 +117,6 @@ static EMOJI_TABLE: LazyLock<EmojiTable> = LazyLock::new(|| {
     }
 });
 
-/// Upper bound on candidates returned per `:` query. Subsequence
-/// matching against ~22k triggers can yield many hits for short
-/// queries like `:s`; we cap because the IME UI can't page through
-/// that many. Edit-distance ranking keeps the most relevant first.
-const MAX_TRIGGER_CANDIDATES: usize = 64;
-
 /// Sort key for a trigger's best fuzzy placement. Plain ascending
 /// `min()` selects the most relevant: longer contiguous runs come
 /// first (via [`Reverse`]), then earlier start positions, then
@@ -245,7 +239,7 @@ impl Rewriter for EmojiRewriter {
                 }
             }
             scored.sort_by_key(|&(score, _, _)| score);
-            for (_, trig, emoji) in scored.into_iter().take(MAX_TRIGGER_CANDIDATES) {
+            for (_, trig, emoji) in scored {
                 let desc = format_trigger_description(emoji, trig);
                 push_with_desc(emoji, desc, &mut out);
             }
