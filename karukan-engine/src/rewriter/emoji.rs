@@ -7,18 +7,34 @@
 //!
 //! 2. **Slack-style `:trigger` lookup** — when the user types `:`
 //!    followed by ASCII letters/digits, those letters are matched
-//!    against each emoji's `triggers` list using a first-char-anchored
-//!    subsequence rule (see [`subseq_match`]):
+//!    against each emoji's `triggers` list using **token-chain
+//!    fuzzy** matching. Tokens are the `_`/`+`/`-` separated runs.
+//!    Rules:
 //!
-//!    - `:smile`  → exact match → 😄
-//!    - `:sml`    → s + m + l in order in `smile` → 😄
-//!    - `:smle`   → s + m + (skip i) + l + e → 😄
-//!    - `:mile`   → ✗ first char `m` ≠ first char `s` of `smile`
-//!    - `:mlsi`   → ✗ no trigger starts with `m` and contains m..l..s..i
+//!    - The query must start at a token's first char (the trigger
+//!      head or right after a separator).
+//!    - Within a token, chars may be skipped — `:hlo` consumes the
+//!      `halo` token by skipping `a`.
+//!    - To cross a separator into the next token, the query's
+//!      *next unmatched char* must equal that token's first char.
+//!      Tokens whose first char doesn't match are skipped wholesale.
 //!
-//!    The first-char anchor is what gives the matching a "prefix-like
-//!    narrowing" feel (mirrors how Slack/Discord emoji pickers behave):
-//!    typing more characters narrows the set, never broadens it.
+//! - `:halo`  → `smiling_face_with_halo`: jump to `halo` token,
+//!   consume h-a-l-o → 😇
+//! - `:hlo`   → `halo` token consumes h-(skip a)-l-o → 😇
+//! - `:smhlo` → `smiling` consumes s-m, then `halo` token
+//!   (first char `h` matches next query char), consume
+//!   the rest of h-l-o → 😇
+//! - `:smle`  → `smile` token consumes s-m-(skip i)-l-e → 😄
+//! - `:hal`   → `whale` has no token starting with `h`, reject
+//! - `:warai` → `woman` consumes w-a, jumps to `running`'s `r`,
+//!   but `running` has no `a` left → reject (so the
+//!   old `:warai` → `woman_running_facing_right`
+//!   regression stays fixed)
+//!
+//! Matches are ranked by Levenshtein edit distance against the full
+//! trigger, so exact hits beat prefixes beat mid-trigger hits, and
+//! within a tier the shorter trigger wins.
 //!
 //! `triggers:` in `data/emoji.yml` is a unified list of every ASCII
 //! string a user might type after `:` to surface this emoji. The
@@ -107,55 +123,128 @@ static EMOJI_TABLE: LazyLock<EmojiTable> = LazyLock::new(|| {
     }
 });
 
-/// Maximum number of target characters that may be skipped between two
-/// consecutive matched query characters. With `MAX_GAP = 1`, `:smle`
-/// matches `smile` (one skipped `i`) but a sparse query like `:warai`
-/// no longer subsequence-matches a long CLDR name like
-/// `woman_running_facing_right` where each consumed query char sits
-/// many positions apart in the target — which is what we want to keep
-/// the matching feel like "narrowing prefix" rather than "loose fuzzy".
-const MAX_GAP: usize = 1;
+/// Upper bound on candidates returned per `:` query. Fuzzy matching
+/// against ~22k triggers can still yield many hits for short queries
+/// like `:s`; we cap the list because the IME UI can't sensibly page
+/// through that many. The edit-distance ranking keeps the most
+/// relevant ones at the top.
+const MAX_TRIGGER_CANDIDATES: usize = 64;
 
-/// True when `query` matches `target` under the Slack-style rule:
-///
-/// - The first character of `query` must equal the first character of
-///   `target` (anchor — keeps typing-more-narrows behavior).
-/// - The remaining `query` characters appear in `target` in order
-///   (subsequence).
-/// - Between any two consecutive matched query characters, at most
-///   [`MAX_GAP`] target characters are skipped. Without this bound,
-///   long CLDR snake_case names accept almost any short query
-///   (`:warai` → `woman_running_facing_right`), drowning the
-///   candidate list in unrelated emojis.
-///
-/// Trailing target characters after the final match are unbounded —
-/// `:sm` still matches `smile` even though `ile` is unmatched.
-fn subseq_match(query: &str, target: &str) -> bool {
+/// Chars that delimit "tokens" inside a snake_case trigger. A fuzzy
+/// match must begin at a token boundary — the trigger's leading
+/// position or right after one of these — so `:halo` lands on the
+/// `halo` token in `smiling_face_with_halo` while `:hal` doesn't
+/// fire on the `hal` substring in mid-`whale`.
+fn is_word_separator(c: char) -> bool {
+    matches!(c, '_' | '+' | '-')
+}
+
+/// True iff `query` matches `target` under the token-chain fuzzy
+/// rule (see module docs). Tries every position where `target` has
+/// `query[0]` at a token start (the trigger head or right after a
+/// separator) and runs [`consume_chain`] from there.
+fn token_anchored_fuzzy_match(query: &str, target: &str) -> bool {
     if query.is_empty() || target.is_empty() {
         return false;
     }
     let q: Vec<char> = query.chars().collect();
     let t: Vec<char> = target.chars().collect();
-    if q[0] != t[0] {
-        return false;
-    }
-    let mut qi: usize = 0;
-    let mut last_match: Option<usize> = None;
-    for (ti, &tc) in t.iter().enumerate() {
-        if qi >= q.len() {
-            break;
+
+    for anchor in 0..t.len() {
+        if t[anchor] != q[0] {
+            continue;
         }
-        if tc == q[qi] {
-            if let Some(prev) = last_match
-                && ti - prev > MAX_GAP + 1
-            {
+        let is_token_start = anchor == 0 || is_word_separator(t[anchor - 1]);
+        if !is_token_start {
+            continue;
+        }
+        if consume_chain(&q, &t, anchor) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Walk `t` from `anchor` consuming `q` under the token-chain rule:
+///
+/// 1. The anchor char (`t[anchor]` == `q[0]`) is consumed up front.
+/// 2. Inside the current token, advance through `q` as a subsequence
+///    — chars in `t` that don't match the current `q` char are
+///    skipped freely.
+/// 3. When a separator (`_`/`+`/`-`) is hit, look ahead for the next
+///    token whose *first* char equals the next unmatched `q` char.
+///    Tokens whose first char doesn't match are skipped wholesale.
+///    This is what keeps `:warai` from grabbing chars across
+///    unrelated tokens of `woman_running_facing_right` while still
+///    letting `:smhlo` chain `smiling` → `halo`.
+fn consume_chain(q: &[char], t: &[char], anchor: usize) -> bool {
+    let mut qi: usize = 1; // q[0] is consumed by being the anchor.
+    let mut ti = anchor + 1;
+    loop {
+        // Consume within the current token.
+        while ti < t.len() && !is_word_separator(t[ti]) {
+            if qi >= q.len() {
+                return true;
+            }
+            if t[ti] == q[qi] {
+                qi += 1;
+            }
+            ti += 1;
+        }
+        if qi >= q.len() {
+            return true;
+        }
+        if ti >= t.len() {
+            return false;
+        }
+        // Skip the separator.
+        ti += 1;
+        // Hunt for the next token whose first char anchors q[qi].
+        loop {
+            if ti >= t.len() {
                 return false;
             }
-            last_match = Some(ti);
-            qi += 1;
+            if t[ti] == q[qi] {
+                qi += 1;
+                ti += 1;
+                break;
+            }
+            // Skip this whole token (and trailing separator).
+            while ti < t.len() && !is_word_separator(t[ti]) {
+                ti += 1;
+            }
+            if ti < t.len() {
+                ti += 1;
+            }
         }
     }
-    qi == q.len()
+}
+
+/// Levenshtein edit distance between `a` and `b` (in unicode chars).
+/// Used to rank substring-matching triggers: the lower the distance,
+/// the closer the trigger is to the typed query (exact match → 0,
+/// `query` as a prefix → `|target| - |query|`, deep middle-substring
+/// hits → larger because of the leading insertions). Compared to
+/// pure length-sort it gives slightly better intuition for typos and
+/// for picking the trigger whose match starts earliest in the name.
+fn edit_distance(a: &[char], b: &[char]) -> usize {
+    if a.is_empty() {
+        return b.len();
+    }
+    if b.is_empty() {
+        return a.len();
+    }
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut curr: Vec<usize> = vec![0; b.len() + 1];
+    for i in 1..=a.len() {
+        curr[0] = i;
+        for j in 1..=b.len() {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            curr[j] = (curr[j - 1] + 1).min(prev[j] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b.len()]
 }
 
 /// True iff every char in `s` is a legal Slack-style trigger char
@@ -221,39 +310,40 @@ impl Rewriter for EmojiRewriter {
         //    fragment (no kana, no uppercase, no symbols beyond the
         //    handful Slack permits).
         //
-        // Matches are scored to make incremental typing feel like
-        // narrowing rather than a static list reshuffling:
+        // Match rule mirrors Slack's emoji picker: a trigger is a
+        // candidate iff `query` is a substring of it. Ranking is by
+        // Levenshtein edit distance ascending, so:
         //
-        //   - Exact alias hits (`:smile` → `smile` trigger) come first
-        //     so `:smile` surfaces 😄 (not 😃 via `smiley` subseq).
-        //   - Prefix hits (`:sm` → `smile`) come next so typing more
-        //     characters keeps the same emojis pinned to the top.
-        //   - Looser subsequence hits trail behind.
-        //   - Within a tier, shorter triggers win — `:s` should
-        //     prioritize 😄 (`smile`, 5 chars) over a sea of
-        //     `*_dark_skin_tone` variants 30+ chars long that just
-        //     happen to start with `s`.
+        //   - exact `:smile` → trigger `smile`  → distance 0
+        //   - prefix `:sm`   → trigger `smile`  → distance 3
+        //   - middle `:halo` → trigger `smiling_face_with_halo`
+        //                                       → distance 18
+        //
+        // The shortest trigger whose string most-closely matches the
+        // query wins, which gives the intuitive "I typed it exactly"
+        // > "I typed a prefix" > "the word lives deep inside a CLDR
+        // name" ordering without us having to enumerate tiers.
+        // Substring-matching against ~22k triggers can balloon for
+        // short queries (`:s` hits thousands), so we cap the visible
+        // list with [`MAX_TRIGGER_CANDIDATES`].
         if let Some(stripped) = candidate.strip_prefix(TRIGGER_PREFIX)
             && is_trigger_chars(stripped)
         {
-            let mut scored: Vec<(u8, usize, &str, &str)> = Vec::new();
+            let query_chars: Vec<char> = stripped.chars().collect();
+            let mut scored: Vec<(usize, &str, &str)> = Vec::new();
             for (trig, emoji) in &EMOJI_TABLE.triggers {
-                if !subseq_match(stripped, trig) {
+                if !token_anchored_fuzzy_match(stripped, trig) {
                     continue;
                 }
-                let tier: u8 = if trig == stripped {
-                    0
-                } else if trig.starts_with(stripped) {
-                    1
-                } else {
-                    2
-                };
-                scored.push((tier, trig.len(), trig.as_str(), emoji.as_str()));
+                let trig_chars: Vec<char> = trig.chars().collect();
+                let dist = edit_distance(&query_chars, &trig_chars);
+                scored.push((dist, trig.as_str(), emoji.as_str()));
             }
-            // Stable sort: tier asc, then trigger length asc.
-            // Equal-key entries fall back to emoji.yml's source order.
-            scored.sort_by_key(|&(tier, len, _, _)| (tier, len));
-            for (_, _, trig, emoji) in scored {
+            // Stable sort: edit distance asc. Equal-distance ties
+            // fall back to emoji.yml's source order, which already
+            // places manual aliases ahead of CLDR ahead of romaji.
+            scored.sort_by_key(|&(dist, _, _)| dist);
+            for (_, trig, emoji) in scored.into_iter().take(MAX_TRIGGER_CANDIDATES) {
                 let desc = format_trigger_description(emoji, trig);
                 push_with_desc(emoji, desc, &mut out);
             }
@@ -283,43 +373,33 @@ mod tests {
     use super::*;
     use crate::rewriter::test_util::{desc, texts};
 
-    // ---------- subseq_match ----------
-
-    #[test]
-    fn subseq_first_char_must_match() {
-        assert!(subseq_match("smile", "smile"));
-        assert!(subseq_match("sml", "smile"));
-        assert!(subseq_match("smle", "smile"));
-        assert!(!subseq_match("mile", "smile"));
-        assert!(!subseq_match("mlsi", "smile"));
-    }
-
-    #[test]
-    fn subseq_rejects_loose_match_in_long_target() {
-        assert!(!subseq_match("warai", "woman_running_facing_right"));
-        assert!(!subseq_match("pien", "pleading_face"));
-    }
-
-    #[test]
-    fn subseq_allows_skip_of_one_char() {
-        assert!(subseq_match("smle", "smile"));
-        assert!(subseq_match("smie", "smile"));
-        assert!(!subseq_match("sle", "smile"));
-    }
-
-    #[test]
-    fn subseq_handles_empty_inputs() {
-        assert!(!subseq_match("", ""));
-        assert!(!subseq_match("", "smile"));
-        assert!(!subseq_match("smile", ""));
-    }
-
-    #[test]
-    fn subseq_does_not_revisit_target_chars() {
-        assert!(!subseq_match("ss", "smile"));
-    }
-
     // ---------- :trigger lookup ----------
+
+    #[test]
+    fn trigger_word_boundary_anchor_halo_surfaces_innocent() {
+        // `:halo` consumes the `halo` token in `smiling_face_with_halo`.
+        let r = EmojiRewriter::new();
+        let out = texts(&r.rewrite(":halo"));
+        assert!(
+            out.contains(&"😇".to_string()),
+            "expected 😇 from :halo, got {:?}",
+            out
+        );
+    }
+
+    #[test]
+    fn trigger_fuzzy_within_token_hlo_matches_halo() {
+        // Headline fuzzy case: `:hlo` skips the `a` inside the `halo`
+        // token and still reaches 😇. Demonstrates that within a
+        // token the user's chars can drop letters.
+        let r = EmojiRewriter::new();
+        let out = texts(&r.rewrite(":hlo"));
+        assert!(
+            out.contains(&"😇".to_string()),
+            "expected 😇 from :hlo (fuzzy within `halo` token), got {:?}",
+            out
+        );
+    }
 
     #[test]
     fn trigger_exact_match_smile() {
@@ -333,18 +413,30 @@ mod tests {
     }
 
     #[test]
-    fn trigger_subsequence_smle_matches_smile() {
+    fn trigger_typo_within_token_is_accepted() {
+        // `:smle` skips the `i` inside the `smile` token. With the
+        // head-anchored fuzzy rule this matches.
         let r = EmojiRewriter::new();
         let out = texts(&r.rewrite(":smle"));
         assert!(
             out.contains(&"😄".to_string()),
-            "expected 😄 from :smle, got {:?}",
+            "expected 😄 from :smle (fuzzy within `smile` token), got {:?}",
             out
         );
     }
 
     #[test]
-    fn trigger_mlsi_rejects_smile() {
+    fn trigger_mid_token_substring_is_rejected() {
+        // `:hal` only appears mid-token in `whale` (no token starts
+        // with `h`), so the head-anchored fuzzy rule rejects it.
+        // This is the fix for the previous substring-based behavior
+        // where `:hal` would surface 🐋 ahead of any halo-related
+        // emoji.
+        assert!(!token_anchored_fuzzy_match("hal", "whale"));
+    }
+
+    #[test]
+    fn trigger_out_of_order_does_not_match() {
         let r = EmojiRewriter::new();
         let out = texts(&r.rewrite(":mlsi"));
         assert!(
@@ -352,6 +444,35 @@ mod tests {
             "did NOT expect 😄 from :mlsi, got {:?}",
             out
         );
+    }
+
+    #[test]
+    fn trigger_chains_tokens_when_next_first_char_matches() {
+        // `:smhlo` chains `smiling` and `halo`: s-m consumed in
+        // `smiling`, then `halo`'s leading `h` anchors the jump and
+        // l-o finish off in `halo`.
+        let r = EmojiRewriter::new();
+        let out = texts(&r.rewrite(":smhlo"));
+        assert!(
+            out.contains(&"😇".to_string()),
+            "expected 😇 from :smhlo (token chain smiling→halo), got {:?}",
+            out
+        );
+    }
+
+    #[test]
+    fn trigger_rejects_when_chain_cannot_complete() {
+        // The chain rule rejects queries that would require pulling
+        // chars across tokens without each new token's first char
+        // matching the next unmatched query char. `:warai` against
+        // `woman_running_facing_right` makes it to `running` (via
+        // `r`) but then needs `a-i` and `running` has neither, and
+        // no later token starts with `a` → reject. This keeps the
+        // old `:warai` regression fixed.
+        assert!(!token_anchored_fuzzy_match(
+            "warai",
+            "woman_running_facing_right"
+        ));
     }
 
     #[test]
