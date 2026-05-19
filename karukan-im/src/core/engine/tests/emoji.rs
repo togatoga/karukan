@@ -186,14 +186,14 @@ fn conversion_emoji_first_not_literal() {
 #[test]
 fn conversion_unknown_emoji_shows_no_literal() {
     // Slack-style mental model: the emoji picker shows emojis or
-    // nothing — never the literal `:xyz` query. When the user's
+    // nothing — never the literal `:qqqq` query. When the user's
     // input doesn't match any emoji, the candidate list must NOT
     // include the literal buffer text. Enter still commits the
     // literal via `commit_composing` as an escape hatch (covered by
     // `enter_on_unknown_emoji_query_commits_literal`).
     let mut engine = InputMethodEngine::new();
     engine.process_key(&press_colon());
-    for ch in ['x', 'y', 'z'] {
+    for ch in ['q', 'q', 'q', 'q'] {
         engine.process_key(&press(ch));
     }
     engine.process_key(&press_key(Keysym::SPACE));
@@ -202,24 +202,24 @@ fn conversion_unknown_emoji_shows_no_literal() {
         .map(|list| list.candidates().iter().map(|c| c.text.clone()).collect())
         .unwrap_or_default();
     assert!(
-        !texts.iter().any(|t| t == ":xyz"),
-        "did NOT expect :xyz literal in emoji-mode candidates, got {:?}",
+        !texts.iter().any(|t| t == ":qqqq"),
+        "did NOT expect :qqqq literal in emoji-mode candidates, got {:?}",
         texts
     );
 }
 
 #[test]
 fn enter_on_unknown_emoji_query_commits_literal() {
-    // `:xyz` has no emoji match — falling back to the literal buffer
+    // `:qqqq` has no emoji match — falling back to the literal buffer
     // text is the only sensible thing to do so the user sees what they
     // typed and can correct it.
     let mut engine = InputMethodEngine::new();
     engine.process_key(&press_colon());
-    for ch in ['x', 'y', 'z'] {
+    for ch in ['q', 'q', 'q', 'q'] {
         engine.process_key(&press(ch));
     }
     let result = engine.process_key(&press_key(Keysym::RETURN));
-    assert_eq!(commit_text(&result).as_deref(), Some(":xyz"));
+    assert_eq!(commit_text(&result).as_deref(), Some(":qqqq"));
 }
 
 #[test]
