@@ -440,16 +440,22 @@ def reading_to_triggers(reading: str) -> list[str]:
             pending_double = True
             continue
         if mora == "ー":
+            # Two romanizations of the prolonged-sound mark:
+            #   - vowel repeat: `ke` + `ー` → `kee` (the standard
+            #     IME-friendly form, also what `RomajiConverter` emits)
+            #   - hyphen passthrough: `ke` + `ー` → `ke-`
+            # Both are common in practice (`keeki` vs `ke-ki` for ケーキ);
+            # emit both so `:keeki` and `:ke-ki` both reach 🍰.
             new_accs = []
             seen: set[str] = set()
             for acc in accumulators:
+                candidates = [acc + "-"]
                 if acc and acc[-1] in VOWELS:
-                    nxt = acc + acc[-1]
-                else:
-                    nxt = acc
-                if nxt not in seen:
-                    seen.add(nxt)
-                    new_accs.append(nxt)
+                    candidates.insert(0, acc + acc[-1])
+                for nxt in candidates:
+                    if nxt not in seen:
+                        seen.add(nxt)
+                        new_accs.append(nxt)
             accumulators = new_accs
             continue
 
