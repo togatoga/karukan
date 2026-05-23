@@ -59,19 +59,46 @@ fn test_engine_backspace() {
 }
 
 #[test]
-fn space_in_empty_state_passes_through() {
+fn space_in_empty_hiragana_inserts_fullwidth_space() {
     // Regression: pressing Space with no composition in progress used
-    // to enter Composing with a single half-width space as the preedit
-    // (the romaji converter PassThrough'd ' ' into input_buf). The
-    // user then had to Escape or Enter to recover. The IME should not
-    // intercept a bare Space when there's nothing being composed —
-    // let it reach the application as a normal ASCII space. The
-    // full-width space gesture remains Ctrl+Space.
+    // to enter Composing with a literal *half-width* space as the
+    // preedit (the romaji converter PassThrough'd ' ' into input_buf).
+    // mozc-compat behavior is to insert a *full-width* `　` and enter
+    // Composing in kana modes — the typical Japanese-IME expectation.
     let mut engine = InputMethodEngine::new();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "\u{3000}");
+}
+
+#[test]
+fn space_in_empty_katakana_inserts_fullwidth_space() {
+    // Katakana is a kana mode too — same full-width behavior as
+    // Hiragana when Space is pressed from Empty.
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Katakana;
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "\u{3000}");
+}
+
+#[test]
+fn space_in_empty_alphabet_passes_through() {
+    // In Alphabet mode the user is typing ASCII — injecting `　` would
+    // be wrong. Return not_consumed so the OS delivers a normal
+    // half-width space to the application.
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Alphabet;
+
     let result = engine.process_key(&press_key(Keysym::SPACE));
     assert!(
         !result.consumed,
-        "Space in Empty state should not be consumed"
+        "Space in Empty+Alphabet should not be consumed"
     );
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(
@@ -83,9 +110,9 @@ fn space_in_empty_state_passes_through() {
 
 #[test]
 fn space_after_composing_starts_still_triggers_conversion() {
-    // Sanity check that the Empty-state pass-through doesn't change
-    // the Composing-state behavior: Space inside an existing
-    // composition still acts as the conversion trigger.
+    // Sanity check that the Empty-state change doesn't affect
+    // Composing-state behavior: Space inside an existing composition
+    // still acts as the conversion trigger.
     let mut engine = InputMethodEngine::new();
     engine.process_key(&press('a'));
     assert_eq!(engine.preedit().unwrap().text(), "あ");
