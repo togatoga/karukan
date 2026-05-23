@@ -261,6 +261,82 @@ fn typing_kiniku_surfaces_muscle_via_silent_n() {
 }
 
 #[test]
+fn backspacing_to_empty_exits_emoji_mode() {
+    // Regression: deleting back through the leading `:` left the
+    // engine in Emoji mode even though the buffer was empty. The
+    // next typed char would then be inserted literally (e.g. `a`
+    // staying as `a` instead of romaji-converting to `あ`) and the
+    // aux text would keep showing `[☺]`. After erasing back to
+    // empty, the session is over and the mode should drop back to
+    // Hiragana.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press_colon());
+    for ch in ['s', 'm', 'i', 'l', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.input_mode, InputMode::Emoji);
+
+    for _ in 0..6 {
+        engine.process_key(&press_key(Keysym::BACKSPACE));
+    }
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    // And the very next keypress should behave like normal kana
+    // input — `a` becomes `あ`, not literal `a`.
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "あ");
+}
+
+#[test]
+fn backspacing_to_empty_restores_pre_emoji_katakana_mode() {
+    // Same exit path as the empty-backspace case, but verifies the
+    // pre-emoji mode is *restored* rather than forced back to Hiragana.
+    // A user typing in Katakana who pops into emoji and bails out
+    // should land back in Katakana.
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Katakana;
+
+    engine.process_key(&press_colon());
+    assert_eq!(engine.input_mode, InputMode::Emoji);
+    for ch in ['s', 'm', 'i', 'l', 'e'] {
+        engine.process_key(&press(ch));
+    }
+
+    for _ in 0..6 {
+        engine.process_key(&press_key(Keysym::BACKSPACE));
+    }
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert_eq!(engine.input_mode, InputMode::Katakana);
+}
+
+#[test]
+fn commit_emoji_restores_pre_emoji_katakana_mode() {
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Katakana;
+
+    engine.process_key(&press_colon());
+    for ch in ['s', 'm', 'i', 'l', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::RETURN));
+    assert_eq!(engine.input_mode, InputMode::Katakana);
+}
+
+#[test]
+fn escape_emoji_restores_pre_emoji_katakana_mode() {
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Katakana;
+
+    engine.process_key(&press_colon());
+    for ch in ['s', 'm', 'i', 'l', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::ESCAPE));
+    assert_eq!(engine.input_mode, InputMode::Katakana);
+}
+
+#[test]
 fn colon_in_hiragana_does_not_enter_emoji_when_already_composing() {
     // A `:` typed in the middle of an existing hiragana composition is
     // just punctuation, not an emoji trigger — emoji mode only starts

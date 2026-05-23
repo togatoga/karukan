@@ -289,6 +289,13 @@ impl InputMethodEngine {
         self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
+        // Remember where the user was so commit/cancel/erase-to-empty
+        // can drop them back into the same mode (e.g. Katakana stays
+        // Katakana). Guard against clobbering on re-entry just in case
+        // start_emoji_mode is ever called while already in Emoji mode.
+        if self.input_mode != InputMode::Emoji {
+            self.pre_emoji_mode = Some(self.input_mode);
+        }
         self.input_mode = InputMode::Emoji;
         self.input_buf.insert(":");
         self.refresh_input_state()
@@ -387,9 +394,7 @@ impl InputMethodEngine {
         self.input_buf.clear();
         self.live.text.clear();
         self.state = InputState::Empty;
-        if self.input_mode == InputMode::Emoji {
-            self.input_mode = InputMode::Hiragana;
-        }
+        self.exit_emoji_mode();
 
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
@@ -428,12 +433,10 @@ impl InputMethodEngine {
         self.input_buf.clear();
         self.live.text.clear();
         self.state = InputState::Empty;
-        // Emoji mode is per-session: leaving it returns the user to the
-        // default Hiragana behavior so their next word doesn't unexpectedly
-        // stay in ASCII-passthrough mode.
-        if self.input_mode == InputMode::Emoji {
-            self.input_mode = InputMode::Hiragana;
-        }
+        // Emoji mode is per-session: leaving it returns the user to
+        // whatever mode they were in before typing `:` so their next
+        // word doesn't unexpectedly stay in ASCII-passthrough mode.
+        self.exit_emoji_mode();
 
         let mut result = EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
