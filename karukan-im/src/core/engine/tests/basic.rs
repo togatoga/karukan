@@ -59,6 +59,43 @@ fn test_engine_backspace() {
 }
 
 #[test]
+fn space_in_empty_state_passes_through() {
+    // Regression: pressing Space with no composition in progress used
+    // to enter Composing with a single half-width space as the preedit
+    // (the romaji converter PassThrough'd ' ' into input_buf). The
+    // user then had to Escape or Enter to recover. The IME should not
+    // intercept a bare Space when there's nothing being composed —
+    // let it reach the application as a normal ASCII space. The
+    // full-width space gesture remains Ctrl+Space.
+    let mut engine = InputMethodEngine::new();
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(
+        !result.consumed,
+        "Space in Empty state should not be consumed"
+    );
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(
+        result.actions.is_empty(),
+        "expected no actions, got {:?}",
+        result.actions
+    );
+}
+
+#[test]
+fn space_after_composing_starts_still_triggers_conversion() {
+    // Sanity check that the Empty-state pass-through doesn't change
+    // the Composing-state behavior: Space inside an existing
+    // composition still acts as the conversion trigger.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "あ");
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+}
+
+#[test]
 fn test_engine_cancel() {
     let mut engine = InputMethodEngine::new();
 

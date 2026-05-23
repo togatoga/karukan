@@ -114,6 +114,18 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         }
 
+        // Plain Space from Empty state: don't intercept. Without this
+        // guard the key falls into the printable-char path below, where
+        // the romaji converter has no rule for ' ' and pass-throughs it
+        // into a Composing session whose preedit is a single half-width
+        // space — a useless state the user then has to Escape/Enter out
+        // of. The full-width space gesture is `Ctrl+Space` (above); a
+        // plain space with no composition in progress should just reach
+        // the application as a normal ASCII space.
+        if key.keysym == Keysym::SPACE && !key.modifiers.control_key && !key.modifiers.alt_key {
+            return EngineResult::not_consumed();
+        }
+
         // `:` from Empty state enters emoji shortcode mode — `:pien` stays
         // as `:pien` literally (no romaji conversion) while emoji candidates
         // are surfaced via the rewriter. The mode auto-exits back to Hiragana
