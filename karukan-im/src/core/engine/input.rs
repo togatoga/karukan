@@ -114,16 +114,27 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         }
 
-        // Plain Space from Empty state: don't intercept. Without this
-        // guard the key falls into the printable-char path below, where
-        // the romaji converter has no rule for ' ' and pass-throughs it
-        // into a Composing session whose preedit is a single half-width
-        // space — a useless state the user then has to Escape/Enter out
-        // of. The full-width space gesture is `Ctrl+Space` (above); a
-        // plain space with no composition in progress should just reach
-        // the application as a normal ASCII space.
+        // Bare Space from Empty state:
+        //
+        // * Hiragana mode → commit a full-width `　` directly, matching
+        //   the Japanese-IME convention. We deliberately do NOT enter
+        //   Composing here: if we did, the next Space the user typed
+        //   would be interpreted by `process_key_composing` as the
+        //   conversion trigger and an unwanted candidate window would
+        //   appear after two spaces in a row.
+        // * Any other mode → return `not_consumed` so the OS delivers
+        //   a normal half-width ASCII space to the application. The
+        //   user is either typing ASCII (Alphabet) or in an edge mode
+        //   (Katakana / Emoji) where injecting `　` would be wrong.
+        //
+        // The full-width space gesture from Empty in any mode is
+        // `Ctrl+Space` (above), which seeds a Composing session.
         if key.keysym == Keysym::SPACE && !key.modifiers.control_key && !key.modifiers.alt_key {
-            return EngineResult::not_consumed();
+            return if self.input_mode == InputMode::Hiragana {
+                EngineResult::consumed().with_action(EngineAction::Commit("\u{3000}".to_string()))
+            } else {
+                EngineResult::not_consumed()
+            };
         }
 
         // `:` from Empty state enters emoji shortcode mode — `:pien` stays
