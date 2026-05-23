@@ -103,34 +103,27 @@ impl InputMethodEngine {
 
     /// Process key in empty state
     pub(super) fn process_key_empty(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
-        // Ctrl+Space: start input with full-width space, regardless of mode.
-        // Kept as an explicit "always full-width" shortcut even for users who
-        // are in Alphabet mode and want to insert a `　`.
+        // Ctrl+Space: start input with full-width space
         if key.modifiers.control_key && key.keysym == Keysym::SPACE {
-            return self.start_input_with_fullwidth_space();
+            self.converters.romaji.reset();
+            self.input_buf.clear();
+            self.input_buf.insert("\u{3000}");
+            let preedit = self.set_composing_state();
+            return EngineResult::consumed()
+                .with_action(EngineAction::UpdatePreedit(preedit))
+                .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         }
 
-        // Bare Space from Empty state — mozc-compatible behavior:
-        //
-        // * Kana modes (Hiragana / Katakana) → insert a full-width space
-        //   `　` and enter Composing. Matches mozc's default
-        //   `space_character_form = FUNDAMENTAL_INPUT_MODE`, which the
-        //   typical Japanese IME user expects.
-        // * Alphabet mode → return `not_consumed` so the OS delivers a
-        //   normal half-width ASCII space to the application. The user is
-        //   typing ASCII; injecting `　` here would be wrong.
-        //
-        // Without this guard the key used to fall into the printable-char
-        // path below, where the romaji converter has no rule for ' ' and
-        // pass-throughs it into a Composing session whose preedit was a
-        // single half-width space — a useless state the user then had to
-        // Escape/Enter out of.
+        // Plain Space from Empty state: don't intercept. Without this
+        // guard the key falls into the printable-char path below, where
+        // the romaji converter has no rule for ' ' and pass-throughs it
+        // into a Composing session whose preedit is a single half-width
+        // space — a useless state the user then has to Escape/Enter out
+        // of. The full-width space gesture is `Ctrl+Space` (above); a
+        // plain space with no composition in progress should just reach
+        // the application as a normal ASCII space.
         if key.keysym == Keysym::SPACE && !key.modifiers.control_key && !key.modifiers.alt_key {
-            return if matches!(self.input_mode, InputMode::Hiragana | InputMode::Katakana) {
-                self.start_input_with_fullwidth_space()
-            } else {
-                EngineResult::not_consumed()
-            };
+            return EngineResult::not_consumed();
         }
 
         // `:` from Empty state enters emoji shortcode mode — `:pien` stays
@@ -216,19 +209,6 @@ impl InputMethodEngine {
 
         let preedit = self.set_composing_state();
 
-        EngineResult::consumed()
-            .with_action(EngineAction::UpdatePreedit(preedit))
-            .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()))
-    }
-
-    /// Start a fresh Composing session seeded with a single full-width
-    /// space (U+3000). Used both by `Ctrl+Space` from Empty (any mode)
-    /// and by a bare Space from Empty in kana modes.
-    fn start_input_with_fullwidth_space(&mut self) -> EngineResult {
-        self.converters.romaji.reset();
-        self.input_buf.clear();
-        self.input_buf.insert("\u{3000}");
-        let preedit = self.set_composing_state();
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(preedit))
             .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()))
