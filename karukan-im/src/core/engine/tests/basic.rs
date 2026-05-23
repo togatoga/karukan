@@ -59,6 +59,88 @@ fn test_engine_backspace() {
 }
 
 #[test]
+fn space_in_empty_hiragana_commits_fullwidth_space() {
+    // Bare Space from Empty in Hiragana mode commits a full-width `　`
+    // directly without entering Composing — the Japanese-IME
+    // convention, but without the side effect of "second Space starts
+    // Conversion mode" that a Composing-state insertion would cause.
+    let mut engine = InputMethodEngine::new();
+    assert_eq!(engine.input_mode, InputMode::Hiragana);
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    let committed = result.actions.iter().find_map(|a| match a {
+        EngineAction::Commit(t) => Some(t.clone()),
+        _ => None,
+    });
+    assert_eq!(committed.as_deref(), Some("\u{3000}"));
+}
+
+#[test]
+fn double_space_in_empty_hiragana_commits_two_fullwidth_spaces() {
+    // Regression for the conversion-mode-on-second-Space issue: two
+    // consecutive Spaces from Empty must produce two committed `　`s,
+    // never enter Composing, and never trigger Conversion.
+    let mut engine = InputMethodEngine::new();
+    for _ in 0..2 {
+        let result = engine.process_key(&press_key(Keysym::SPACE));
+        assert!(matches!(engine.state(), InputState::Empty));
+        let committed = result.actions.iter().find_map(|a| match a {
+            EngineAction::Commit(t) => Some(t.clone()),
+            _ => None,
+        });
+        assert_eq!(committed.as_deref(), Some("\u{3000}"));
+    }
+}
+
+#[test]
+fn space_in_empty_katakana_passes_through() {
+    // Non-Hiragana modes pass the bare Space through to the OS so the
+    // application gets a normal half-width ASCII space.
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Katakana;
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(!result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(
+        result.actions.is_empty(),
+        "expected no actions, got {:?}",
+        result.actions
+    );
+}
+
+#[test]
+fn space_in_empty_alphabet_passes_through() {
+    let mut engine = InputMethodEngine::new();
+    engine.input_mode = InputMode::Alphabet;
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(!result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(
+        result.actions.is_empty(),
+        "expected no actions, got {:?}",
+        result.actions
+    );
+}
+
+#[test]
+fn space_after_composing_starts_still_triggers_conversion() {
+    // Sanity check that the Empty-state change doesn't affect
+    // Composing-state behavior: Space inside an existing composition
+    // still acts as the conversion trigger.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "あ");
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+}
+
+#[test]
 fn test_engine_cancel() {
     let mut engine = InputMethodEngine::new();
 
