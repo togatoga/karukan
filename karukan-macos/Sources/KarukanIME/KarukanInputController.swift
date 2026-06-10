@@ -57,7 +57,13 @@ class KarukanInputController: IMKInputController {
         // JIS keyboard かな/英数 keys switch input modes (Mozc-style).
         switch event.keyCode {
         case KeyCodeMap.kanaKeyCode:
-            client.selectMode(Self.japaneseModeID)
+            // Full return to Japanese input, not just selectMode: かな must
+            // also leave the engine-internal alphabet/katakana mode, both on
+            // real JIS keyboards and when a Karabiner-style "command tap →
+            // 英数/かな" rule turns a right-Command tap into this key (the
+            // rule's lazy modifier means RightCommandTapDetector never sees
+            // the tap).
+            returnToJapaneseInput(client: client)
             return true
         case KeyCodeMap.eisuKeyCode:
             // Commit any pending composition before going direct.
@@ -102,10 +108,11 @@ class KarukanInputController: IMKInputController {
     private func returnToJapaneseInput(client: any IMKTextInput) {
         if isRomanMode {
             client.selectMode(Self.japaneseModeID)
-            return
         }
         // Forward Super_R so the engine's mode toggle (alphabet/katakana →
-        // hiragana) runs; a no-op when already in hiragana mode.
+        // hiragana) runs; a no-op when already in hiragana mode. Sent even
+        // when leaving the Roman input mode, so a stale engine-internal
+        // alphabet mode doesn't survive the round trip.
         let key = EngineKeyEvent(keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
         if let result = engineClient.processKeySync(key) {
             apply(actions: result.actions, client: client)
