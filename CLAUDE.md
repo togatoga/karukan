@@ -76,7 +76,7 @@ cmake --install build
 cd karukan-macos
 
 make test      # Swift tests (incl. integration tests against a real karukan-imserver)
-make install   # Build, assemble Karukan.app, install to ~/Library/Input Methods
+make install   # Build, assemble Karukan.app, install to ~/Library/Input Methods (auto-downloads dict.bin to the data dir if missing)
 ```
 
 First install requires logout/login; afterwards `make install` + `killall KarukanIME` suffices.

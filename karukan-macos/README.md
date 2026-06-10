@@ -64,10 +64,15 @@ killall TextInputMenuAgent
 ## システム辞書のインストール
 
 モデル推論だけでは語彙が限られるため、システム辞書の併用を強く推奨します。
-システム辞書は.appに同梱されていないため、ビルド済みの辞書をダウンロードして配置してください:
+`make install` 実行時に、辞書が未インストールであればGitHubリリースのビルド済み辞書
+(`dict.tgz`)を自動でダウンロードして配置します。既に
+`~/Library/Application Support/com.karukan.karukan-im/dict.bin` がある場合は
+何もしません(自前ビルドの辞書が上書きされることはありません)。
+
+手動でインストールする場合:
 
 ```bash
-curl -LO https://github.com/togatoga/karukan/releases/download/v0.1.0/dict.tgz
+curl -LO https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
 tar xzf dict.tgz
 mkdir -p ~/Library/"Application Support"/com.karukan.karukan-im
 cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
