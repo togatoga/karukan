@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleExecutable</key>
+    <string>KarukanIME</string>
+    <key>CFBundleDisplayName</key>
+    <string>Karukan</string>
+    <key>CFBundleName</key>
+    <string>Karukan</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.togatoga.inputmethod.Karukan</string>
+    <key>CFBundleIconFile</key>
+    <string>karukan.icns</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>LSBackgroundOnly</key>
+    <true/>
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>InputMethodConnectionName</key>
+    <string>dev.togatoga.inputmethod.Karukan_Connection</string>
+    <key>InputMethodServerControllerClass</key>
+    <string>KarukanInputController</string>
+
+    <key>TISIntendedLanguage</key>
+    <string>ja</string>
+    <key>TISIconIsTemplate</key>
+    <false/>
+
+    <key>ComponentInputModeDict</key>
+    <dict>
+      <key>tsInputModeListKey</key>
+      <dict>
+
+        <key>dev.togatoga.inputmethod.Karukan.Japanese</key>
+        <dict>
+          <key>TISInputSourceID</key>
+          <string>dev.togatoga.inputmethod.Karukan.Japanese</string>
+          <key>TISIntendedLanguage</key>
+          <string>ja</string>
+          <key>tsInputModeScriptKey</key>
+          <string>smJapanese</string>
+          <key>tsInputModeDefaultStateKey</key>
+          <true/>
+          <key>tsInputModeIsVisibleKey</key>
+          <true/>
+          <key>tsInputModePrimaryInScriptKey</key>
+          <true/>
+          <key>tsInputModeJISKeyboardShortcutKey</key>
+          <integer>1</integer>
+          <key>tsInputModeMenuIconFileKey</key>
+          <string>karukan.tiff</string>
+          <key>tsInputModePaletteIconFileKey</key>
+          <string>karukan.tiff</string>
+        </dict>
+
+        <key>dev.togatoga.inputmethod.Karukan.Roman</key>
+        <dict>
+          <key>TISInputSourceID</key>
+          <string>dev.togatoga.inputmethod.Karukan.Roman</string>
+          <key>TISIntendedLanguage</key>
+          <string>en</string>
+          <key>tsInputModeScriptKey</key>
+          <string>smRoman</string>
+          <key>tsInputModeDefaultStateKey</key>
+          <true/>
+          <key>tsInputModeIsVisibleKey</key>
+          <true/>
+          <key>tsInputModePrimaryInScriptKey</key>
+          <false/>
+          <key>tsInputModeJISKeyboardShortcutKey</key>
+          <integer>3</integer>
+          <key>tsInputModeMenuIconFileKey</key>
+          <string>karukan.tiff</string>
+          <key>tsInputModePaletteIconFileKey</key>
+          <string>karukan.tiff</string>
+        </dict>
+
+      </dict>
+
+      <key>tsVisibleInputModeOrderedArrayKey</key>
+      <array>
+        <string>dev.togatoga.inputmethod.Karukan.Japanese</string>
+        <string>dev.togatoga.inputmethod.Karukan.Roman</string>
+      </array>
+    </dict>
+
+    <key>tsInputMethodCharacterRepertoireKey</key>
+    <array>
+      <string>Latn</string>
+      <string>Hira</string>
+      <string>Kana</string>
+    </array>
+    <key>tsInputMethodIconFileKey</key>
+    <string>karukan.tiff</string>
+
+  </dict>
+</plist>

@@ -39,3 +39,8 @@ data/
 !karukan-engine/data/
 *.json
 *.cache
+
+.fake
+# macOS IME (karukan-macos)
+karukan-macos/.build/
+karukan-macos/out/
