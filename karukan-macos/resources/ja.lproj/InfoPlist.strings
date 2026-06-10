@@ -1,0 +1,5 @@
+/* 入力ソース・入力モードの表示名(キーはTISInputSourceID)。
+   これが無いと入力メニューにIDがそのまま表示される。 */
+"dev.togatoga.inputmethod.Karukan" = "Karukan";
+"dev.togatoga.inputmethod.Karukan.Japanese" = "ひらがな";
+"dev.togatoga.inputmethod.Karukan.Roman" = "英数";

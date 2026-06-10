@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
     <key>CFBundleExecutable</key>
     <string>KarukanIME</string>
     <key>CFBundleDisplayName</key>
@@ -33,8 +35,10 @@
 
     <key>TISIntendedLanguage</key>
     <string>ja</string>
+    <!-- Black-glyph template icons: the system re-tints them for the
+         light/dark menu bar and selection highlight. -->
     <key>TISIconIsTemplate</key>
-    <false/>
+    <true/>
 
     <key>ComponentInputModeDict</key>
     <dict>
@@ -80,9 +84,9 @@
           <key>tsInputModeJISKeyboardShortcutKey</key>
           <integer>3</integer>
           <key>tsInputModeMenuIconFileKey</key>
-          <string>karukan.tiff</string>
+          <string>karukan-roman.tiff</string>
           <key>tsInputModePaletteIconFileKey</key>
-          <string>karukan.tiff</string>
+          <string>karukan-roman.tiff</string>
         </dict>
 
       </dict>

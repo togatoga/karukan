@@ -19,18 +19,36 @@ class KarukanInputController: IMKInputController {
     /// is selected; every key passes through to the application.
     private var isRomanMode = false
 
+    /// Right Command tap = return to Japanese input (Mozc-style; mirrors
+    /// the right-Super mode toggle of the Linux frontend).
+    private var rightCommandTap = RightCommandTapDetector()
+
     private static let japaneseModeID = "dev.togatoga.inputmethod.Karukan.Japanese"
     private static let romanModeID = "dev.togatoga.inputmethod.Karukan.Roman"
 
     // MARK: - Event handling
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue)
+        Int(NSEvent.EventTypeMask.keyDown.union(.flagsChanged).rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        guard let event, event.type == .keyDown else { return false }
+        guard let event else { return false }
         guard let client = sender as? (any IMKTextInput) else { return false }
+
+        // Modifier events only matter for the right-Command tap; never
+        // consume them so the system keeps tracking modifier state.
+        if event.type == .flagsChanged {
+            if rightCommandTap.handleFlagsChanged(
+                keyCode: event.keyCode,
+                rawModifierFlags: event.modifierFlags.rawValue
+            ) {
+                returnToJapaneseInput(client: client)
+            }
+            return false
+        }
+        guard event.type == .keyDown else { return false }
+        rightCommandTap.handleKeyDown()
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // Never swallow Command shortcuts.
@@ -76,6 +94,23 @@ class KarukanInputController: IMKInputController {
     }
 
     // MARK: - Input mode switching
+
+    /// Right Command tap: one-way return to Japanese input, from either
+    /// level of "half-width mode" — the Roman input mode (英数) or the
+    /// engine-internal alphabet/katakana mode (entered via Shift+letter,
+    /// which previously had no way back on macOS).
+    private func returnToJapaneseInput(client: any IMKTextInput) {
+        if isRomanMode {
+            client.selectMode(Self.japaneseModeID)
+            return
+        }
+        // Forward Super_R so the engine's mode toggle (alphabet/katakana →
+        // hiragana) runs; a no-op when already in hiragana mode.
+        let key = EngineKeyEvent(keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
+        if let result = engineClient.processKeySync(key) {
+            apply(actions: result.actions, client: client)
+        }
+    }
 
     /// Called by the system when the user changes the input mode (IME menu,
     /// かな/英数 keys via selectMode, or System Settings).

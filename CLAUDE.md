@@ -148,8 +148,9 @@ cargo clippy --workspace  # Lint all crates
 Swift/InputMethodKit frontend. All IME state lives in karukan-imserver (spawned as a bundled child process); Swift only adapts IMK events and renders UI.
 
 - `main.swift` — IMKServer startup, engine process spawn, wake-from-sleep restart, SIGPIPE handling
-- `KarukanInputController.swift` — IMKInputController; translates keys, applies engine actions (preedit/candidates/commit), JIS かな/英数 mode switching
-- `KeyCodeMap.swift` — NSEvent → XKB keysym translation (same keysym representation as fcitx5)
+- `KarukanInputController.swift` — IMKInputController; translates keys, applies engine actions (preedit/candidates/commit), JIS かな/英数 mode switching, right-Command solitary tap returns to Japanese input (macOS counterpart of the engine's right-Super mode toggle)
+- `KeyCodeMap.swift` — NSEvent → XKB keysym translation (same keysym representation as fcitx5), RightCommandTapDetector
+- `resources/*.tiff` — template menu icons (か / A), regenerated via `swift scripts/generate_icons.swift`; `resources/{ja,en}.lproj/InfoPlist.strings` localize the input mode names shown in the input menu
 - `EngineProcess.swift` — child process lifecycle: crash restart with exponential backoff, EOF-based clean shutdown (lets the server save its learning cache)
 - `EngineClient.swift` — JSON-RPC transport (sync for process_key, async for fire-and-forget)
 - `EngineProtocol.swift` — Swift mirror of `karukan-im/src/server/protocol.rs` (keep in sync; protocol_version guards breaking changes)

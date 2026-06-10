@@ -1,61 +1,90 @@
+import Cocoa
 import XCTest
 
 @testable import KarukanIME
 
 final class KeyCodeMapTests: XCTestCase {
     func testPrintableAscii() {
-        let event = KeyCodeMap.translate(keyCode: 0, charactersIgnoringModifiers: "a", flags: [])
+        let event = KeyCodeMap.translate(
+            keyCode: 0, characters: "a", charactersIgnoringModifiers: "a", flags: [])
         XCTAssertEqual(event?.keysym, 0x61)
         XCTAssertEqual(event?.modifiers.shift, false)
     }
 
     func testShiftedLetter() {
         let event = KeyCodeMap.translate(
-            keyCode: 0, charactersIgnoringModifiers: "A", flags: [.shift])
+            keyCode: 0, characters: "A", charactersIgnoringModifiers: "A", flags: [.shift])
         XCTAssertEqual(event?.keysym, 0x41)
         XCTAssertEqual(event?.modifiers.shift, true)
     }
 
+    func testShiftedPunctuation() {
+        // IMK key events resolve Shift only in `characters`: Shift+/ comes
+        // in as characters="?" but charactersIgnoringModifiers="/". The
+        // shifted form must win or ？ becomes ・.
+        let event = KeyCodeMap.translate(
+            keyCode: 44, characters: "?", charactersIgnoringModifiers: "/", flags: [.shift])
+        XCTAssertEqual(event?.keysym, 0x3f)
+        XCTAssertEqual(event?.modifiers.shift, true)
+    }
+
+    func testControlKeyFallsBackToIgnoringModifiers() {
+        // Ctrl+A: `characters` is the control character U+0001; the engine
+        // wants the plain key plus the control flag (like fcitx5 sends).
+        let event = KeyCodeMap.translate(
+            keyCode: 0, characters: "\u{01}", charactersIgnoringModifiers: "a",
+            flags: [.control])
+        XCTAssertEqual(event?.keysym, 0x61)
+        XCTAssertEqual(event?.modifiers.control, true)
+    }
+
+    func testOptionGlyphFallsBackToIgnoringModifiers() {
+        // Option+a: `characters` is "å"; fall back to the plain key.
+        let event = KeyCodeMap.translate(
+            keyCode: 0, characters: "å", charactersIgnoringModifiers: "a", flags: [.option])
+        XCTAssertEqual(event?.keysym, 0x61)
+        XCTAssertEqual(event?.modifiers.alt, true)
+    }
+
     func testSpace() {
-        let event = KeyCodeMap.translate(keyCode: 49, charactersIgnoringModifiers: " ", flags: [])
+        let event = KeyCodeMap.translate(
+            keyCode: 49, characters: " ", charactersIgnoringModifiers: " ", flags: [])
         XCTAssertEqual(event?.keysym, 0x20)
     }
 
     func testReturnKey() {
-        let event = KeyCodeMap.translate(keyCode: 36, charactersIgnoringModifiers: "\r", flags: [])
+        let event = KeyCodeMap.translate(
+            keyCode: 36, characters: "\r", charactersIgnoringModifiers: "\r", flags: [])
         XCTAssertEqual(event?.keysym, 0xff0d)
     }
 
     func testEscape() {
         let event = KeyCodeMap.translate(
-            keyCode: 53, charactersIgnoringModifiers: "\u{1b}", flags: [])
+            keyCode: 53, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", flags: [])
         XCTAssertEqual(event?.keysym, 0xff1b)
     }
 
     func testBackspace() {
         let event = KeyCodeMap.translate(
-            keyCode: 51, charactersIgnoringModifiers: "\u{7f}", flags: [])
+            keyCode: 51, characters: "\u{7f}", charactersIgnoringModifiers: "\u{7f}", flags: [])
         XCTAssertEqual(event?.keysym, 0xff08)
     }
 
     func testArrowKeys() {
-        XCTAssertEqual(
-            KeyCodeMap.translate(keyCode: 123, charactersIgnoringModifiers: nil, flags: [])?.keysym,
-            0xff51)
-        XCTAssertEqual(
-            KeyCodeMap.translate(keyCode: 124, charactersIgnoringModifiers: nil, flags: [])?.keysym,
-            0xff53)
-        XCTAssertEqual(
-            KeyCodeMap.translate(keyCode: 125, charactersIgnoringModifiers: nil, flags: [])?.keysym,
-            0xff54)
-        XCTAssertEqual(
-            KeyCodeMap.translate(keyCode: 126, charactersIgnoringModifiers: nil, flags: [])?.keysym,
-            0xff52)
+        for (keyCode, keysym) in [(123, 0xff51), (124, 0xff53), (125, 0xff54), (126, 0xff52)] {
+            XCTAssertEqual(
+                KeyCodeMap.translate(
+                    keyCode: UInt16(keyCode), characters: nil,
+                    charactersIgnoringModifiers: nil, flags: []
+                )?.keysym,
+                UInt32(keysym))
+        }
     }
 
     func testControlModifier() {
         let event = KeyCodeMap.translate(
-            keyCode: 0, charactersIgnoringModifiers: "l", flags: [.control, .shift])
+            keyCode: 0, characters: "\u{0c}", charactersIgnoringModifiers: "l",
+            flags: [.control, .shift])
         XCTAssertEqual(event?.keysym, 0x6c)
         XCTAssertEqual(event?.modifiers.control, true)
         XCTAssertEqual(event?.modifiers.shift, true)
@@ -63,8 +92,54 @@ final class KeyCodeMapTests: XCTestCase {
 
     func testNonAsciiNotTranslated() {
         // Kana input layouts produce non-ASCII characters; unsupported.
-        XCTAssertNil(KeyCodeMap.translate(keyCode: 0, charactersIgnoringModifiers: "あ", flags: []))
-        XCTAssertNil(KeyCodeMap.translate(keyCode: 0, charactersIgnoringModifiers: nil, flags: []))
+        XCTAssertNil(
+            KeyCodeMap.translate(
+                keyCode: 0, characters: "あ", charactersIgnoringModifiers: "あ", flags: []))
+        XCTAssertNil(
+            KeyCodeMap.translate(
+                keyCode: 0, characters: nil, charactersIgnoringModifiers: nil, flags: []))
+    }
+}
+
+final class RightCommandTapDetectorTests: XCTestCase {
+    private let rcmd = KeyCodeMap.rightCommandKeyCode
+    private let rcmdFlag = KeyCodeMap.rightCommandFlagMask
+    private let commandFlag = NSEvent.ModifierFlags.command.rawValue
+
+    func testSolitaryTapFiresOnRelease() {
+        var detector = RightCommandTapDetector()
+        XCTAssertFalse(
+            detector.handleFlagsChanged(
+                keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag))
+        XCTAssertTrue(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
+    }
+
+    func testShortcutCancelsTap() {
+        var detector = RightCommandTapDetector()
+        _ = detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag)
+        detector.handleKeyDown()  // e.g. ⌘C
+        XCTAssertFalse(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
+    }
+
+    func testOtherModifierCancelsTap() {
+        var detector = RightCommandTapDetector()
+        _ = detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag)
+        // Shift pressed while right Command is held (⌘⇧ combo).
+        _ = detector.handleFlagsChanged(
+            keyCode: 56, rawModifierFlags: commandFlag | rcmdFlag | NSEvent.ModifierFlags.shift.rawValue)
+        XCTAssertFalse(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
+    }
+
+    func testReleaseWithoutPressDoesNotFire() {
+        var detector = RightCommandTapDetector()
+        XCTAssertFalse(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
+    }
+
+    func testKeyDownBeforePressDoesNotCancelNextTap() {
+        var detector = RightCommandTapDetector()
+        detector.handleKeyDown()
+        _ = detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag)
+        XCTAssertTrue(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
     }
 }
 
