@@ -15,6 +15,13 @@ class KarukanInputController: IMKInputController {
     /// engine actions). Used to decide when to refresh surrounding text.
     private var hasPreedit = false
 
+    /// True while the Roman (direct input) mode from ComponentInputModeDict
+    /// is selected; every key passes through to the application.
+    private var isRomanMode = false
+
+    private static let japaneseModeID = "dev.togatoga.inputmethod.Karukan.Japanese"
+    private static let romanModeID = "dev.togatoga.inputmethod.Karukan.Roman"
+
     // MARK: - Event handling
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -28,6 +35,26 @@ class KarukanInputController: IMKInputController {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // Never swallow Command shortcuts.
         if flags.contains(.command) { return false }
+
+        // JIS keyboard かな/英数 keys switch input modes (Mozc-style).
+        switch event.keyCode {
+        case KeyCodeMap.kanaKeyCode:
+            client.selectMode(Self.japaneseModeID)
+            return true
+        case KeyCodeMap.eisuKeyCode:
+            // Commit any pending composition before going direct.
+            if let result = engineClient.commitSync() {
+                apply(actions: result.actions, client: client)
+            }
+            Self.candidateWindow.hide()
+            client.selectMode(Self.romanModeID)
+            return true
+        default:
+            break
+        }
+
+        // Direct input: everything passes through to the application.
+        if isRomanMode { return false }
 
         guard let key = KeyCodeMap.translate(event: event) else { return false }
 
@@ -46,6 +73,28 @@ class KarukanInputController: IMKInputController {
         }
         apply(actions: result.actions, client: client)
         return result.consumed
+    }
+
+    // MARK: - Input mode switching
+
+    /// Called by the system when the user changes the input mode (IME menu,
+    /// かな/英数 keys via selectMode, or System Settings).
+    override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
+        guard tag == kTextServiceInputModePropertyTag, let modeID = value as? String else {
+            super.setValue(value, forTag: tag, client: sender)
+            return
+        }
+        let wasRomanMode = isRomanMode
+        isRomanMode = (modeID == Self.romanModeID)
+        if isRomanMode && !wasRomanMode {
+            // Leaving Japanese mode: flush the composition into the app.
+            if let client = sender as? (any IMKTextInput),
+                let result = engineClient.commitSync()
+            {
+                apply(actions: result.actions, client: client)
+            }
+            Self.candidateWindow.hide()
+        }
     }
 
     // MARK: - Lifecycle

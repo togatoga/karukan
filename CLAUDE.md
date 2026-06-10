@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-karukan is a Linux Japanese Input Method system consisting of three Rust crates:
+karukan is a Japanese Input Method system for Linux and macOS, consisting of three Rust crates and a Swift package:
 
 - **karukan-engine**: Core library — romaji-to-hiragana conversion, neural kana-kanji conversion via llama.cpp, system dictionary, learning cache, candidate rewriter (width/case/symbol variants)
 - **karukan-cli**: CLI tools and server — dictionary builder, Sudachi converter, dict viewer, AJIMEE-Bench, HTTP API server
-- **karukan-im**: fcitx5 IME addon using karukan-engine for Japanese input on Linux
+- **karukan-im**: fcitx5 IME addon (Linux) and `karukan-imserver` stdio JSON-RPC server (macOS), both wrapping the same engine state machine
+- **karukan-macos**: Swift/InputMethodKit frontend that spawns `karukan-imserver` as a bundled child process
 
 ## Build and Development Commands
 
@@ -69,6 +70,17 @@ cmake --build build -j
 cmake --install build
 ```
 
+### karukan-macos
+
+```bash
+cd karukan-macos
+
+make test      # Swift tests (incl. integration tests against a real karukan-imserver)
+make install   # Build, assemble Karukan.app, install to ~/Library/Input Methods
+```
+
+First install requires logout/login; afterwards `make install` + `killall KarukanIME` suffices.
+
 ### Code Quality
 
 ```bash
@@ -126,9 +138,22 @@ cargo clippy --workspace  # Lint all crates
 - `core/candidate.rs` — Candidate list with pagination support
 - `core/keycode.rs` — Key symbol definitions and key event handling
 - `core/state.rs` — Engine state definitions
-- `config/settings.rs` — User settings (`~/.config/karukan-im/config.toml`)
+- `config/settings.rs` — User settings (`~/.config/karukan-im/config.toml` on Linux, `~/Library/Application Support/com.karukan.karukan-im/` on macOS)
 - `ffi.rs` — C FFI for fcitx5 C++ addon
+- `server/` — stdio JSON-RPC 2.0 server for the macOS frontend (`protocol.rs` defines the wire format; `bin/karukan-imserver.rs` is the entry point)
 - `fcitx5-addon/src/karukan.cpp` — C++ fcitx5 wrapper
+
+### karukan-macos (`karukan-macos/Sources/KarukanIME/`)
+
+Swift/InputMethodKit frontend. All IME state lives in karukan-imserver (spawned as a bundled child process); Swift only adapts IMK events and renders UI.
+
+- `main.swift` — IMKServer startup, engine process spawn, wake-from-sleep restart, SIGPIPE handling
+- `KarukanInputController.swift` — IMKInputController; translates keys, applies engine actions (preedit/candidates/commit), JIS かな/英数 mode switching
+- `KeyCodeMap.swift` — NSEvent → XKB keysym translation (same keysym representation as fcitx5)
+- `EngineProcess.swift` — child process lifecycle: crash restart with exponential backoff, EOF-based clean shutdown (lets the server save its learning cache)
+- `EngineClient.swift` — JSON-RPC transport (sync for process_key, async for fire-and-forget)
+- `EngineProtocol.swift` — Swift mirror of `karukan-im/src/server/protocol.rs` (keep in sync; protocol_version guards breaking changes)
+- `CandidateWindowController.swift` — custom NSPanel candidate window (engine pre-paginates)
 
 ## Key Design Patterns
 

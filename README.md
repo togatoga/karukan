@@ -1,7 +1,7 @@
 <div align="center">
   <img src="icon.png" width="128" alt="karukan" />
   <h1>Karukan</h1>
-  <p>Linux向け日本語入力システム — ニューラルかな漢字変換エンジン + fcitx5</p>
+  <p>Linux・macOS向け日本語入力システム — ニューラルかな漢字変換エンジン</p>
 
   [![CI (engine)](https://github.com/togatoga/karukan/actions/workflows/karukan-engine-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-engine-ci.yml)
   [![CI (im)](https://github.com/togatoga/karukan/actions/workflows/karukan-im-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-im-ci.yml)
@@ -16,7 +16,8 @@
 
 | クレート | 説明 |
 |---------|------|
-| [karukan-im](karukan-im/) | karukan-engineを利用したfcitx5向け日本語入力システム |
+| [karukan-im](karukan-im/) | IMEエンジン本体 — fcitx5アドオン(Linux)と karukan-imserver(macOS向けJSON-RPCサーバー) |
+| [karukan-macos](karukan-macos/) | macOS向けIMEフロントエンド — Swift/InputMethodKit |
 | [karukan-engine](karukan-engine/) | コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換 |
 | [karukan-cli](karukan-cli/) | CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー |
 
@@ -33,7 +34,8 @@
 
 ## インストール
 
-インストール方法は [karukan-im の README](karukan-im/README.md#install) を参照してください。
+- **Linux (fcitx5)**: [karukan-im の README](karukan-im/README.md#install) を参照
+- **macOS**: [karukan-macos の README](karukan-macos/README.md) を参照
 
 ## ライセンス
 
