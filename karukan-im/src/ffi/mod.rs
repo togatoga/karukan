@@ -116,20 +116,7 @@ impl KarukanEngine {
         // Load user settings from config.toml, fall back to defaults
         let settings = Settings::load().unwrap_or_default();
 
-        let config = EngineConfig {
-            num_candidates: settings.conversion.num_candidates,
-            display_context_len: 10,
-            max_api_context_len: if settings.conversion.use_context {
-                settings.conversion.max_context_length
-            } else {
-                0
-            },
-            short_input_threshold: settings.conversion.short_input_threshold,
-            beam_width: settings.conversion.beam_width,
-            max_latency_ms: settings.conversion.max_latency_ms,
-            strategy: settings.conversion.strategy,
-            live_conversion: settings.conversion.live_conversion,
-        };
+        let config = EngineConfig::from_settings(&settings);
         let engine = InputMethodEngine::with_config(config);
         Self {
             engine,

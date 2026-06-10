@@ -1354,6 +1354,7 @@ dependencies = [
  "directories",
  "karukan-engine",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio-test",
  "toml",

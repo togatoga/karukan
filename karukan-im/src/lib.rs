@@ -6,6 +6,7 @@
 pub mod config;
 pub mod core;
 pub mod ffi;
+pub mod server;
 
 pub use core::engine::{EngineAction, EngineResult, InputMethodEngine};
 pub use core::keycode::{KeyEvent, KeyModifiers, Keysym};

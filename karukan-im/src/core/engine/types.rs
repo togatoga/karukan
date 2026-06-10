@@ -85,6 +85,27 @@ pub struct EngineConfig {
     pub live_conversion: bool,
 }
 
+impl EngineConfig {
+    /// Build an engine config from user settings (config.toml).
+    /// Shared by the fcitx5 FFI and the stdio JSON-RPC server.
+    pub fn from_settings(settings: &crate::config::Settings) -> Self {
+        Self {
+            num_candidates: settings.conversion.num_candidates,
+            display_context_len: 10,
+            max_api_context_len: if settings.conversion.use_context {
+                settings.conversion.max_context_length
+            } else {
+                0
+            },
+            short_input_threshold: settings.conversion.short_input_threshold,
+            beam_width: settings.conversion.beam_width,
+            max_latency_ms: settings.conversion.max_latency_ms,
+            strategy: settings.conversion.strategy,
+            live_conversion: settings.conversion.live_conversion,
+        }
+    }
+}
+
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
