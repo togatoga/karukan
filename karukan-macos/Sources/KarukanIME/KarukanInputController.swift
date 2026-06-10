@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 import InputMethodKit
 
@@ -106,9 +107,14 @@ class KarukanInputController: IMKInputController {
     /// engine-internal alphabet/katakana mode (entered via Shift+letter,
     /// which previously had no way back on macOS).
     private func returnToJapaneseInput(client: any IMKTextInput) {
-        if isRomanMode {
-            client.selectMode(Self.japaneseModeID)
-        }
+        // Always selectMode (no-op when already selected) and clear
+        // isRomanMode directly instead of waiting for setValue: when the
+        // system mode is already Japanese but this session's cached
+        // isRomanMode is stale-true (see activateServer), selectMode
+        // changes nothing and setValue never fires — without the direct
+        // reset the session would stay in pass-through forever.
+        client.selectMode(Self.japaneseModeID)
+        isRomanMode = false
         // Forward Super_R so the engine's mode toggle (alphabet/katakana →
         // hiragana) runs; a no-op when already in hiragana mode. Sent even
         // when leaving the Roman input mode, so a stale engine-internal
@@ -146,6 +152,21 @@ class KarukanInputController: IMKInputController {
         // Do not query the client here (client.attributes() during
         // activation can deadlock Chromium); surrounding text and window
         // positioning happen lazily on the first key event.
+        //
+        // Re-sync isRomanMode with the system's actual input source: this
+        // flag is per-session, and a mode switch made while another app's
+        // session was active doesn't reach us via setValue. A stale true
+        // silently passes every key through (typed romaji stays alphabet)
+        // even though the menu bar shows か. TIS is a local API, not a
+        // client query, so it is safe during activation.
+        if let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+            let idPtr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
+        {
+            let id = Unmanaged<CFString>.fromOpaque(idPtr).takeUnretainedValue() as String
+            if id == Self.japaneseModeID || id == Self.romanModeID {
+                isRomanMode = (id == Self.romanModeID)
+            }
+        }
     }
 
     override func deactivateServer(_ sender: Any!) {
