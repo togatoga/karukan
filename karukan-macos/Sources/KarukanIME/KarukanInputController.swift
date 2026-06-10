@@ -277,10 +277,14 @@ class KarukanInputController: IMKInputController {
         let maxContextUTF16 = 40  // engine truncates further per its config
         let start = max(0, selected.location - maxContextUTF16)
         let range = NSRange(location: start, length: selected.location - start)
-        guard let leftContext = client.attributedSubstring(from: range)?.string,
+        // string(from:actualRange:) rather than attributedSubstring(from:):
+        // it's the IMKTextInput document-access method clients actually
+        // implement (azooKey-Desktop settled on the same call).
+        var actualRange = NSRange()
+        guard let leftContext = client.string(from: range, actualRange: &actualRange),
             !leftContext.isEmpty
         else {
-            NSLog("KarukanIME: surrounding text skipped (attributedSubstring unavailable)")
+            NSLog("KarukanIME: surrounding text skipped (string(from:) unavailable)")
             return
         }
 
