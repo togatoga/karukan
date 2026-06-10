@@ -262,19 +262,32 @@ class KarukanInputController: IMKInputController {
     /// Send the text left of the cursor to the engine as conversion
     /// context. Conservative Mozc-style guards: skip clients that don't
     /// report a cursor and large documents (slow attributedSubstring IPC).
+    /// Whether a client supports this at all is app-dependent (Cocoa text
+    /// views do; Electron/Chromium/terminals mostly don't), so the skip
+    /// reasons are logged for dogfooding visibility.
     private func sendSurroundingText(client: any IMKTextInput) {
         let documentLength = client.length()
-        guard documentLength > 0, documentLength < 1000 else { return }
+        guard documentLength > 0, documentLength < 1000 else {
+            NSLog("KarukanIME: surrounding text skipped (documentLength=\(documentLength))")
+            return
+        }
         let selected = client.selectedRange()
-        guard selected.location != NSNotFound, selected.location > 0 else { return }
+        guard selected.location != NSNotFound, selected.location > 0 else {
+            NSLog("KarukanIME: surrounding text skipped (no usable selection)")
+            return
+        }
 
         let maxContextUTF16 = 40  // engine truncates further per its config
         let start = max(0, selected.location - maxContextUTF16)
         let range = NSRange(location: start, length: selected.location - start)
         guard let leftContext = client.attributedSubstring(from: range)?.string,
             !leftContext.isEmpty
-        else { return }
+        else {
+            NSLog("KarukanIME: surrounding text skipped (attributedSubstring unavailable)")
+            return
+        }
 
+        NSLog("KarukanIME: surrounding text captured (\(leftContext.count) chars)")
         engineClient.setSurroundingTextAsync(
             text: leftContext,
             cursorPos: leftContext.unicodeScalars.count
