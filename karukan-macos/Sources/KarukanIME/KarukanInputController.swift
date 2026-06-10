@@ -268,9 +268,16 @@ class KarukanInputController: IMKInputController {
     /// views do; Electron/Chromium/terminals mostly don't), so the skip
     /// reasons are logged for dogfooding visibility.
     private func sendSurroundingText(client: any IMKTextInput) {
+        // When capture isn't possible, CLEAR the engine's context rather
+        // than skipping: leaving the context from a previous cursor
+        // position in place makes the engine condition on (and display)
+        // text that is no longer left of the cursor. No context beats a
+        // wrong one. selectedRange flakiness is per-keystroke in some
+        // apps, so this also self-heals on the next successful capture.
         let selected = client.selectedRange()
         guard selected.location != NSNotFound, selected.location > 0 else {
-            NSLog("KarukanIME: surrounding text skipped (no usable selection)")
+            NSLog("KarukanIME: surrounding text cleared (no usable selection)")
+            engineClient.setSurroundingTextAsync(text: "", cursorPos: 0)
             return
         }
 
@@ -284,7 +291,8 @@ class KarukanInputController: IMKInputController {
         guard let leftContext = client.string(from: range, actualRange: &actualRange),
             !leftContext.isEmpty
         else {
-            NSLog("KarukanIME: surrounding text skipped (string(from:) unavailable)")
+            NSLog("KarukanIME: surrounding text cleared (string(from:) unavailable)")
+            engineClient.setSurroundingTextAsync(text: "", cursorPos: 0)
             return
         }
 
