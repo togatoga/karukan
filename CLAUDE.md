@@ -164,7 +164,8 @@ Swift/InputMethodKit frontend. All IME state lives in karukan-imserver (spawned 
 - Models use jinen format with special Unicode tokens (U+EE00–U+EE02) from the Private Use Area; model input is katakana (hiragana is converted to katakana before inference)
 - Model registry defined in `karukan-engine/models.toml`; default models use Q5_K_M quantization
 - Learning cache records user-selected conversions and boosts them on subsequent conversions; candidate priority: Learning → User Dictionary → Model → System Dictionary → Fallback → Rewriter
-- Learning cache is persisted as TSV (`~/.local/share/karukan-im/learning.tsv`); saved on deactivate and engine free, not on every commit
+- Data files (system dictionary `dict.bin`, user dictionaries `user_dicts/`, learning cache `learning.tsv`) live in the data directory: `~/.local/share/karukan-im/` on Linux, `~/Library/Application Support/com.karukan.karukan-im/` on macOS; a prebuilt `dict.tgz` is published on GitHub releases
+- Learning cache is persisted as TSV (`learning.tsv` in the data directory); saved on deactivate and engine free, not on every commit
 - Learning score uses recency-weighted formula (mozc-inspired): `recency * 10.0 + ln(1 + frequency)`; eviction removes lowest-score entries when over `max_entries` (default: 10,000)
 
 ## Training (karukan-jinen)

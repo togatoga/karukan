@@ -61,6 +61,21 @@ killall TextInputMenuAgent
 - それでも反映されない場合: システム設定 → 入力ソースからKarukanを削除 → 再追加
 - 最終手段: ログアウト → ログイン
 
+## システム辞書のインストール
+
+モデル推論だけでは語彙が限られるため、システム辞書の併用を強く推奨します。
+システム辞書は.appに同梱されていないため、ビルド済みの辞書をダウンロードして配置してください:
+
+```bash
+curl -LO https://github.com/togatoga/karukan/releases/download/v0.1.0/dict.tgz
+tar xzf dict.tgz
+mkdir -p ~/Library/"Application Support"/com.karukan.karukan-im
+cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
+killall KarukanIME  # 起動中の場合は再起動して反映
+```
+
+辞書を自分でビルドする場合は [karukan-cli の README](../karukan-cli/README.md) を参照してください。
+
 ## キー操作
 
 fcitx5版と同じキーバインドに加えて:
@@ -76,7 +91,9 @@ fcitx5版と同じキーバインドに加えて:
 `directories`クレートのmacOS既定パスを使用します:
 
 - 設定: `~/Library/Application Support/com.karukan.karukan-im/config.toml`
-- 学習データ・辞書: `~/Library/Application Support/com.karukan.karukan-im/`
+- システム辞書: `~/Library/Application Support/com.karukan.karukan-im/dict.bin`
+- ユーザー辞書: `~/Library/Application Support/com.karukan.karukan-im/user_dicts/`
+- 学習データ: `~/Library/Application Support/com.karukan.karukan-im/learning.tsv`
 
 ## デバッグ
 
