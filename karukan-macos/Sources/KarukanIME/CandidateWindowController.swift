@@ -6,6 +6,13 @@ import Cocoa
 /// page metadata, so this controller just renders rows. An optional aux
 /// line (reading hint / model info from the engine) is shown as a footer.
 class CandidateWindowController {
+    // Visual scale of the panel. Candidate rows use a larger type size
+    // than the footers (page indicator / aux line), matching the system
+    // Japanese IME's proportions.
+    private static let candidateFontSize: CGFloat = 18
+    private static let footerFontSize: CGFloat = 13
+    private static let minPanelWidth: CGFloat = 160
+
     private let panel: NSPanel
     private let stackView: NSStackView
     private var rowViews: [NSView] = []
@@ -35,8 +42,8 @@ class CandidateWindowController {
         stackView = NSStackView()
         stackView.orientation = .vertical
         stackView.alignment = .leading
-        stackView.spacing = 2
-        stackView.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        stackView.spacing = 4
+        stackView.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         panel.contentView?.addSubview(stackView)
@@ -112,7 +119,7 @@ class CandidateWindowController {
         let text = NSMutableAttributedString(
             string: "\(number). \(candidate.text)",
             attributes: [
-                .font: NSFont.systemFont(ofSize: 14),
+                .font: NSFont.systemFont(ofSize: Self.candidateFontSize),
                 .foregroundColor: selected ? NSColor.white : NSColor.labelColor,
             ]
         )
@@ -121,7 +128,7 @@ class CandidateWindowController {
                 NSAttributedString(
                     string: "  \(description)",
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: 11),
+                        .font: NSFont.systemFont(ofSize: Self.footerFontSize),
                         .foregroundColor: selected
                             ? NSColor.white.withAlphaComponent(0.8)
                             : NSColor.secondaryLabelColor,
@@ -144,7 +151,7 @@ class CandidateWindowController {
 
     private func addFooterLabel(_ text: String) {
         let label = NSTextField(labelWithString: text)
-        label.font = NSFont.systemFont(ofSize: 11)
+        label.font = NSFont.systemFont(ofSize: Self.footerFontSize)
         label.textColor = NSColor.secondaryLabelColor
         label.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(label)
@@ -161,7 +168,7 @@ class CandidateWindowController {
 
         stackView.layoutSubtreeIfNeeded()
         let contentSize = stackView.fittingSize
-        let panelWidth = max(contentSize.width + 16, 120)
+        let panelWidth = max(contentSize.width + 16, Self.minPanelWidth)
         let panelHeight = contentSize.height + 8
 
         guard cursorRect != .zero else {
