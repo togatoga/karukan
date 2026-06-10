@@ -101,6 +101,29 @@ fn test_live_conversion_commit_with_converted_text() {
 }
 
 #[test]
+fn test_commit_composing_hides_candidate_window() {
+    // Committing from Composing (Enter) must close the auto-suggest/live
+    // conversion candidate window. The macOS frontend only closes its
+    // NSPanel on an explicit hide_candidates action, so a commit without
+    // it leaves a stale window on screen.
+    let mut engine = make_live_conversion_engine();
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.live.text = "愛".to_string();
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(result.consumed);
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::HideCandidates)),
+        "commit from Composing must emit HideCandidates"
+    );
+}
+
+#[test]
 fn test_live_conversion_commit_empty_falls_back_to_hiragana() {
     // When live_conversion_text is empty, commit should use hiragana
     let mut engine = make_live_conversion_engine();

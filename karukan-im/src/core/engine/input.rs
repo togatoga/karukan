@@ -62,21 +62,26 @@ impl InputMethodEngine {
         if self.live.enabled && self.input_mode != InputMode::Katakana {
             self.live.text = candidates[0].clone();
             let preedit = self.set_composing_state();
-            let mut result =
-                EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
 
-            // Learning candidates first, then dictionary candidates
+            // Same candidate ordering as normal auto-suggest (learning → model →
+            // dictionary). Including the model candidates guarantees the list is
+            // never empty, so the candidate window — whose aux footer is the only
+            // place the raw reading is visible on macOS once the preedit shows
+            // converted text — stays on screen for the whole live conversion.
             let mut all_candidates = self.lookup_learning_candidates(&reading);
+            let model_candidates: Vec<Candidate> = candidates
+                .into_iter()
+                .map(|s| Candidate::with_reading(s, &reading))
+                .collect();
+            append_candidates_dedup(&mut all_candidates, model_candidates);
             append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
-            if all_candidates.is_empty() {
-                result = result.with_action(EngineAction::HideCandidates);
-            } else {
-                result = result.with_action(EngineAction::ShowCandidates(CandidateList::new(
-                    all_candidates,
-                )));
-            }
             let aux = self.format_aux_suggest(&self.input_buf.text.clone());
-            return result.with_action(EngineAction::UpdateAuxText(aux));
+            return EngineResult::consumed()
+                .with_action(EngineAction::UpdatePreedit(preedit))
+                .with_action(EngineAction::ShowCandidates(CandidateList::new(
+                    all_candidates,
+                )))
+                .with_action(EngineAction::UpdateAuxText(aux));
         }
 
         // Normal auto-suggest: show hiragana preedit + learning/model/dict candidates
@@ -402,7 +407,9 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             self.input_buf.clear();
             self.live.text.clear();
-            return EngineResult::consumed().with_action(EngineAction::HideAuxText);
+            return EngineResult::consumed()
+                .with_action(EngineAction::HideCandidates)
+                .with_action(EngineAction::HideAuxText);
         }
 
         // Record live conversion result in learning cache.
@@ -419,9 +426,14 @@ impl InputMethodEngine {
         self.state = InputState::Empty;
         self.exit_emoji_mode();
 
+        // HideCandidates is required here: the auto-suggest/live-conversion
+        // window may be open while Composing, and the macOS frontend's
+        // NSPanel only closes on an explicit hide (fcitx5 resets its panel
+        // on commit implicitly, which masked this on Linux).
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(Preedit::new()))
             .with_action(EngineAction::Commit(text))
+            .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::HideAuxText)
     }
 
