@@ -70,21 +70,7 @@ pub extern "C" fn karukan_engine_set_surrounding_text(
     // cursor_pos from fcitx5's SurroundingText::cursor() is always a character
     // (code point) offset. Each frontend (Wayland, GTK, Qt) normalizes its native
     // unit to character offset before storing in SurroundingText.
-    let char_offset = cursor_pos as usize;
-    let byte_offset = text_str
-        .char_indices()
-        .nth(char_offset)
-        .map(|(i, _)| i)
-        .unwrap_or(text_str.len());
-
-    let left_context = &text_str[..byte_offset];
-    let right_context = &text_str[byte_offset..];
-    tracing::debug!(
-        "set_surrounding_text: left=\"{}\" right=\"{}\"",
-        left_context,
-        right_context
-    );
     engine
         .engine
-        .set_surrounding_context(left_context, right_context);
+        .set_surrounding_text_at(text_str, cursor_pos as usize);
 }

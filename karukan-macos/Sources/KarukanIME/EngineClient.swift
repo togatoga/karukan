@@ -15,15 +15,11 @@ class EngineClient {
     private let lock = NSLock()
     private var pendingRequests: [Int: (Data?) -> Void] = [:]
 
-    /// True once `init` succeeded on the current server process.
-    private(set) var initialized = false
-
     /// `autoInit` re-sends `init` whenever the server (re)starts. Tests
     /// disable it to avoid loading models.
     init(serverProcess: EngineProcess, autoInit: Bool = true) {
         self.serverProcess = serverProcess
         self.serverProcess.onRestart = { [weak self] in
-            self?.initialized = false
             self?.startReaderLoop()
             if autoInit {
                 self?.initAsync()
@@ -42,7 +38,6 @@ class EngineClient {
                 NSLog("KarukanIME: engine init failed")
                 return
             }
-            self.initialized = true
             self.serverProcess.resetBackoff()
             NSLog(
                 "KarukanIME: engine initialized (protocol v\(result.protocolVersion), model=\(result.modelName))"
@@ -59,17 +54,8 @@ class EngineClient {
         return keyResultSync(method: "process_key", params: params, timeout: 3.0)
     }
 
-    func selectCandidateSync(pageIndex: Int) -> KeyResult? {
-        keyResultSync(
-            method: "select_candidate", params: ["page_index": pageIndex], timeout: 3.0)
-    }
-
     func commitSync() -> KeyResult? {
         keyResultSync(method: "commit", params: [:], timeout: 1.0)
-    }
-
-    func resetAsync() {
-        sendRequest(method: "reset", params: [:]) { _ in }
     }
 
     func saveLearningAsync() {

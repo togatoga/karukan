@@ -314,6 +314,20 @@ impl InputMethodEngine {
         }
     }
 
+    /// Set surrounding context from the full text plus a cursor offset in
+    /// Unicode scalar values (the unit both fcitx5 and the JSON-RPC
+    /// protocol deliver). Splits at the cursor and delegates to
+    /// [`Self::set_surrounding_context`].
+    pub fn set_surrounding_text_at(&mut self, text: &str, cursor_chars: usize) {
+        let byte_offset = text
+            .char_indices()
+            .nth(cursor_chars)
+            .map(|(i, _)| i)
+            .unwrap_or(text.len());
+        let (left, right) = text.split_at(byte_offset);
+        self.set_surrounding_context(left, right);
+    }
+
     /// Set both left and right context from surrounding text (from editor)
     /// left_context: text before cursor
     /// right_context: text after cursor
@@ -491,6 +505,22 @@ impl InputMethodEngine {
                 text
             }
         }
+    }
+
+    /// Commit any pending input as an [`EngineResult`], emitting the same
+    /// UI cleanup actions as the key-driven commit path (Enter), so
+    /// frontends don't have to pair [`Self::commit`] with manual
+    /// preedit/candidate-window teardown.
+    pub fn commit_result(&mut self) -> EngineResult {
+        let text = self.commit();
+        let mut result =
+            EngineResult::consumed().with_action(EngineAction::UpdatePreedit(Preedit::new()));
+        if !text.is_empty() {
+            result = result.with_action(EngineAction::Commit(text));
+        }
+        result
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::HideAuxText)
     }
 
     /// Save the learning cache to disk if it has unsaved changes.

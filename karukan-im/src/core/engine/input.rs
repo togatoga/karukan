@@ -65,9 +65,9 @@ impl InputMethodEngine {
 
             // Same candidate ordering as normal auto-suggest (learning → model →
             // dictionary). Including the model candidates guarantees the list is
-            // never empty, so the candidate window — whose aux footer is the only
-            // place the raw reading is visible on macOS once the preedit shows
-            // converted text — stays on screen for the whole live conversion.
+            // never empty, so the candidate window — whose aux line is where
+            // frontends show the raw reading once the preedit displays converted
+            // text — stays on screen for the whole live conversion.
             let mut all_candidates = self.lookup_learning_candidates(&reading);
             let model_candidates: Vec<Candidate> = candidates
                 .into_iter()

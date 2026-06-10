@@ -35,8 +35,6 @@ pub const PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Deserialize)]
 pub struct Request {
-    #[allow(dead_code)]
-    pub jsonrpc: Option<String>,
     /// Absent for notifications (no response is sent).
     pub id: Option<Value>,
     pub method: String,
@@ -84,6 +82,7 @@ impl RpcError {
     pub const PARSE_ERROR: i32 = -32700;
     pub const METHOD_NOT_FOUND: i32 = -32601;
     pub const INVALID_PARAMS: i32 = -32602;
+    pub const INTERNAL_ERROR: i32 = -32603;
     /// Engine initialization failed (model/dictionary load error).
     pub const INIT_FAILED: i32 = -32000;
 

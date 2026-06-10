@@ -2,13 +2,14 @@ use serde_json::{Value, json};
 
 use super::ImServer;
 use crate::config::Settings;
+use crate::core::keycode::Keysym;
 
-// XKB keysyms for common keys
-const XKB_KEY_K: u32 = 0x6b;
-const XKB_KEY_A: u32 = 0x61;
-const XKB_KEY_LOWER_L: u32 = 0x6c;
-const XKB_KEY_RETURN: u32 = 0xff0d;
-const XKB_KEY_ESCAPE: u32 = 0xff1b;
+// XKB keysyms for common keys (u32 aliases for the JSON payloads below)
+const XKB_KEY_K: u32 = Keysym::KEY_K.0;
+const XKB_KEY_A: u32 = Keysym::KEY_A.0;
+const XKB_KEY_LOWER_L: u32 = Keysym::KEY_L.0;
+const XKB_KEY_RETURN: u32 = Keysym::RETURN.0;
+const XKB_KEY_ESCAPE: u32 = Keysym::ESCAPE.0;
 
 fn test_server() -> ImServer {
     let mut server = ImServer::with_settings(Settings::default());

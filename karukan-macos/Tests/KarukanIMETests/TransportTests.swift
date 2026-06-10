@@ -74,7 +74,17 @@ final class TransportTests: XCTestCase {
     }
 
     func testServerStopAndRestartRecovers() throws {
+        // restart() waits for the old process off the main thread and
+        // completes via onRestart on the main queue; wait(for:) pumps the
+        // run loop so that completion can fire.
+        let restarted = expectation(description: "server restarted")
+        let previousOnRestart = process.onRestart
+        process.onRestart = {
+            previousOnRestart?()
+            restarted.fulfill()
+        }
         process.restart()
+        wait(for: [restarted], timeout: 5.0)
         let data = client.sendRequestSync(method: "status", params: [:], timeout: 5.0)
         XCTAssertNotNil(data)
     }

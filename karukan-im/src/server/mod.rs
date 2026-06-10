@@ -9,6 +9,7 @@ pub mod protocol;
 use serde_json::{Value, json};
 
 use crate::config::Settings;
+use crate::core::candidate::CandidateList;
 use crate::core::engine::{EngineAction, EngineConfig, EngineResult, InputMethodEngine};
 use crate::core::keycode::{KeyEvent, KeyModifiers, Keysym};
 use crate::core::state::InputState;
@@ -97,7 +98,7 @@ impl ImServer {
             }
             "select_candidate" => {
                 let params: SelectCandidateParams = parse_params(params)?;
-                if params.page_index >= 9 {
+                if params.page_index >= CandidateList::DEFAULT_PAGE_SIZE {
                     return Err(RpcError::new(
                         RpcError::INVALID_PARAMS,
                         format!("page_index out of range: {}", params.page_index),
@@ -105,26 +106,13 @@ impl ImServer {
                 }
                 // Mirror the fcitx5 addon: selecting candidate N on the
                 // current page is equivalent to pressing the digit key N+1.
-                let keysym = Keysym(0x31 + params.page_index as u32); // '1' + index
+                let keysym = Keysym(Keysym::KEY_1.0 + params.page_index as u32);
                 let result = self.engine.process_key(&KeyEvent::press(keysym));
                 self.key_result(result)
             }
             "commit" => {
-                // engine.commit() returns the committed text directly
-                // instead of emitting an action; wrap it as one.
-                let text = self.engine.commit();
-                let actions = if text.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![Action::Commit { text }]
-                };
-                serde_json::to_value(KeyResult {
-                    consumed: true,
-                    actions,
-                    conversion_ms: self.engine.last_conversion_ms(),
-                    process_key_ms: self.engine.last_process_key_ms(),
-                })
-                .map_err(internal_error)
+                let result = self.engine.commit_result();
+                self.key_result(result)
             }
             "reset" => {
                 self.engine.reset();
@@ -132,14 +120,8 @@ impl ImServer {
             }
             "set_surrounding_text" => {
                 let params: SurroundingTextParams = parse_params(params)?;
-                let byte_offset = params
-                    .text
-                    .char_indices()
-                    .nth(params.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(params.text.len());
-                let (left, right) = params.text.split_at(byte_offset);
-                self.engine.set_surrounding_context(left, right);
+                self.engine
+                    .set_surrounding_text_at(&params.text, params.cursor_pos);
                 Ok(json!({}))
             }
             "save_learning" => {
@@ -198,7 +180,7 @@ fn parse_params<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, RpcE
 }
 
 fn internal_error(e: serde_json::Error) -> RpcError {
-    RpcError::new(-32603, format!("internal error: {e}"))
+    RpcError::new(RpcError::INTERNAL_ERROR, format!("internal error: {e}"))
 }
 
 fn to_action(action: EngineAction) -> Action {

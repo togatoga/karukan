@@ -115,35 +115,61 @@ class EngineProcess {
         restartCount = 0
     }
 
+    /// True while a forced restart's exit-wait runs on a background queue.
+    private var restartInFlight = false
+
     /// Forced restart (e.g. wake from sleep, which can invalidate pipes).
+    ///
+    /// The exit-wait runs off the main thread: wake is exactly when the old
+    /// process may never see the stdin EOF, and blocking here would freeze
+    /// all key handling for the full timeout. Keys arriving before the
+    /// replacement is up degrade gracefully (`processKeySync` returns nil →
+    /// pass-through). Must be called on the main queue.
     func restart() {
+        guard !restartInFlight else { return }
+        restartInFlight = true
         pendingRestart?.cancel()
         pendingRestart = nil
         shouldRestart = false
-        terminateAndWait()
-        shouldRestart = true
-        restartCount = 0
-        start()
-        onRestart?()
+
+        let oldProcess = process
+        let oldStdin = stdinPipe
+        process = nil
+        stdinPipe = nil
+        stdoutPipe = nil
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            Self.waitForExit(proc: oldProcess, stdin: oldStdin)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.restartInFlight = false
+                self.shouldRestart = true
+                self.restartCount = 0
+                self.start()
+                self.onRestart?()
+            }
+        }
     }
 
     func stop() {
         pendingRestart?.cancel()
         pendingRestart = nil
         shouldRestart = false
-        terminateAndWait()
+        let proc = process
+        let stdin = stdinPipe
+        process = nil
+        stdinPipe = nil
+        stdoutPipe = nil
+        // App termination: block until the server has saved its learning
+        // cache and exited.
+        Self.waitForExit(proc: proc, stdin: stdin)
     }
 
-    private func terminateAndWait() {
-        guard let proc = process, proc.isRunning else {
-            process = nil
-            stdinPipe = nil
-            stdoutPipe = nil
-            return
-        }
-        // Closing stdin sends EOF; the server saves its learning cache and
-        // exits on its own. SIGTERM only as a fallback.
-        try? stdinPipe?.fileHandleForWriting.close()
+    /// Closing stdin sends EOF; the server saves its learning cache and
+    /// exits on its own. SIGTERM only as a fallback. Blocks up to ~2s.
+    private static func waitForExit(proc: Process?, stdin: Pipe?) {
+        guard let proc, proc.isRunning else { return }
+        try? stdin?.fileHandleForWriting.close()
         let deadline = Date().addingTimeInterval(2.0)
         while proc.isRunning && Date() < deadline {
             usleep(50_000)
@@ -153,8 +179,5 @@ class EngineProcess {
             proc.terminate()
             proc.waitUntilExit()
         }
-        process = nil
-        stdinPipe = nil
-        stdoutPipe = nil
     }
 }

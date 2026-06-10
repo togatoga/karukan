@@ -68,10 +68,7 @@ class KarukanInputController: IMKInputController {
             return true
         case KeyCodeMap.eisuKeyCode:
             // Commit any pending composition before going direct.
-            if let result = engineClient.commitSync() {
-                apply(actions: result.actions, client: client)
-            }
-            Self.candidateWindow.hide()
+            flushComposition(client: client)
             client.selectMode(Self.romanModeID)
             return true
         default:
@@ -86,8 +83,11 @@ class KarukanInputController: IMKInputController {
         // Refresh the conversion context while no composition is active
         // (mirrors the fcitx5 addon, which captures surrounding text in the
         // Empty state). Queued before process_key on the same pipe, so the
-        // engine sees it first.
-        if !hasPreedit {
+        // engine sees it first. Skipped for function/navigation keysyms
+        // (0xff00 range): they can't start a composition, and the three
+        // synchronous client IPCs in sendSurroundingText would otherwise
+        // fire on every arrow-key repeat.
+        if !hasPreedit && key.keysym < 0xff00 {
             sendSurroundingText(client: client)
         }
 
@@ -136,12 +136,11 @@ class KarukanInputController: IMKInputController {
         isRomanMode = (modeID == Self.romanModeID)
         if isRomanMode && !wasRomanMode {
             // Leaving Japanese mode: flush the composition into the app.
-            if let client = sender as? (any IMKTextInput),
-                let result = engineClient.commitSync()
-            {
-                apply(actions: result.actions, client: client)
+            if let client = sender as? (any IMKTextInput) {
+                flushComposition(client: client)
+            } else {
+                Self.candidateWindow.hide()
             }
-            Self.candidateWindow.hide()
         }
     }
 
@@ -172,28 +171,58 @@ class KarukanInputController: IMKInputController {
     override func deactivateServer(_ sender: Any!) {
         // Mozc-style: commit the pending preedit on focus loss, then
         // persist what the user taught us.
-        if let client = sender as? (any IMKTextInput),
-            let result = engineClient.commitSync()
-        {
-            apply(actions: result.actions, client: client)
+        if let client = sender as? (any IMKTextInput) {
+            flushComposition(client: client)
+        } else {
+            Self.candidateWindow.hide()
         }
         engineClient.saveLearningAsync()
-        Self.candidateWindow.hide()
         super.deactivateServer(sender)
     }
 
     override func commitComposition(_ sender: Any!) {
-        if let client = sender as? (any IMKTextInput),
-            let result = engineClient.commitSync()
-        {
-            apply(actions: result.actions, client: client)
+        if let client = sender as? (any IMKTextInput) {
+            flushComposition(client: client)
+        } else {
+            Self.candidateWindow.hide()
         }
-        Self.candidateWindow.hide()
+    }
+
+    /// Commit any pending composition via the engine and apply the cleanup
+    /// actions it emits (clear preedit, hide candidates/aux).
+    private func flushComposition(client: any IMKTextInput) {
+        if let result = engineClient.commitSync() {
+            apply(actions: result.actions, client: client)
+        } else {
+            // Engine unavailable: still drop any stale candidate panel.
+            Self.candidateWindow.hide()
+        }
     }
 
     // MARK: - Applying engine actions
 
     private func apply(actions: [EngineAction], client: any IMKTextInput) {
+        // The engine emits ShowCandidates before UpdateAux. Fold aux changes
+        // in first (deferring their render when a candidate update follows)
+        // so the panel is rendered once per batch, not once for the
+        // candidates and again for the aux footer.
+        let updatesCandidates = actions.contains {
+            switch $0 {
+            case .showCandidates, .hideCandidates: return true
+            default: return false
+            }
+        }
+        for action in actions {
+            switch action {
+            case .updateAux(let text):
+                Self.candidateWindow.setAux(text, deferRender: updatesCandidates)
+            case .hideAux:
+                Self.candidateWindow.setAux(nil, deferRender: updatesCandidates)
+            default:
+                break
+            }
+        }
+
         for action in actions {
             switch action {
             case .commit(let text):
@@ -204,24 +233,28 @@ class KarukanInputController: IMKInputController {
                 setMarkedText(text: text, caret: caret, attributes: attributes, client: client)
 
             case .showCandidates(let candidates, let cursor, let page, let totalPages, _):
-                var lineHeightRect = NSRect.zero
-                client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineHeightRect)
+                // Query the composition anchor (a synchronous IPC into the
+                // focused app) only when the panel comes on screen; it
+                // doesn't move while the panel stays visible.
+                var cursorRect: NSRect?
+                if !Self.candidateWindow.isVisible {
+                    var lineHeightRect = NSRect.zero
+                    client.attributes(forCharacterIndex: 0, lineHeightRectangle: &lineHeightRect)
+                    cursorRect = lineHeightRect
+                }
                 Self.candidateWindow.show(
                     candidates: candidates,
                     cursor: cursor,
                     page: page,
                     totalPages: totalPages,
-                    cursorRect: lineHeightRect
+                    cursorRect: cursorRect
                 )
 
             case .hideCandidates:
                 Self.candidateWindow.hide()
 
-            case .updateAux(let text):
-                Self.candidateWindow.setAux(text)
-
-            case .hideAux:
-                Self.candidateWindow.setAux(nil)
+            case .updateAux, .hideAux:
+                break  // applied above
             }
         }
     }
@@ -268,8 +301,6 @@ class KarukanInputController: IMKInputController {
             guard let range = utf16Range(of: attr.start..<attr.end, in: text) else { continue }
             let style: NSUnderlineStyle
             switch attr.style {
-            case "underline":
-                style = .single
             // The focused/highlighted segment is drawn with a thick
             // underline (the convention azooKey/mac-akaza use for marked
             // text, since background colors are unreliable across apps).

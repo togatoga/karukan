@@ -50,8 +50,14 @@ class CandidateWindowController {
         }
     }
 
+    var isVisible: Bool { panel.isVisible }
+
+    /// `cursorRect: nil` reuses the rect from the previous `show` — the
+    /// caller can skip its (synchronous, per-keystroke) client IPC while
+    /// the panel is already on screen, since the composition anchor
+    /// doesn't move mid-composition.
     func show(
-        candidates: [CandidateItem], cursor: Int, page: Int, totalPages: Int, cursorRect: NSRect
+        candidates: [CandidateItem], cursor: Int, page: Int, totalPages: Int, cursorRect: NSRect?
     ) {
         pageState = PageState(
             candidates: candidates, cursor: cursor, page: page, totalPages: totalPages)
@@ -59,9 +65,12 @@ class CandidateWindowController {
     }
 
     /// Update the aux footer; re-renders in place if the window is visible.
-    func setAux(_ text: String?) {
+    /// Pass `deferRender: true` when a `show`/`hide` follows in the same
+    /// action batch, so the panel is rendered once per batch instead of
+    /// once for the aux change and again for the candidates.
+    func setAux(_ text: String?, deferRender: Bool = false) {
         auxText = text
-        if panel.isVisible, pageState != nil {
+        if !deferRender, panel.isVisible, pageState != nil {
             render(cursorRect: nil)
         }
     }
