@@ -17,7 +17,18 @@ class EngineProcess {
     /// re-attach its reader loop and re-send `init`.
     var onRestart: (() -> Void)?
 
+    private let serverPathOverride: String?
+
+    /// `serverPath` overrides the bundled binary location (used by tests
+    /// and `swift run` development).
+    init(serverPath: String? = nil) {
+        self.serverPathOverride = serverPath
+    }
+
     private func serverPath() -> String {
+        if let override = serverPathOverride {
+            return override
+        }
         // Development override: run the IME from `swift run` against a
         // locally built server without assembling the bundle.
         if let override = ProcessInfo.processInfo.environment["KARUKAN_IMSERVER"] {

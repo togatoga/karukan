@@ -18,12 +18,16 @@ class EngineClient {
     /// True once `init` succeeded on the current server process.
     private(set) var initialized = false
 
-    init(serverProcess: EngineProcess) {
+    /// `autoInit` re-sends `init` whenever the server (re)starts. Tests
+    /// disable it to avoid loading models.
+    init(serverProcess: EngineProcess, autoInit: Bool = true) {
         self.serverProcess = serverProcess
         self.serverProcess.onRestart = { [weak self] in
             self?.initialized = false
             self?.startReaderLoop()
-            self?.initAsync()
+            if autoInit {
+                self?.initAsync()
+            }
         }
     }
 

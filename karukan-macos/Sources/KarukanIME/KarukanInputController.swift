@@ -11,6 +11,10 @@ import InputMethodKit
 class KarukanInputController: IMKInputController {
     static let candidateWindow = CandidateWindowController()
 
+    /// Mirrors whether the engine currently shows a preedit (updated from
+    /// engine actions). Used to decide when to refresh surrounding text.
+    private var hasPreedit = false
+
     // MARK: - Event handling
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -26,6 +30,14 @@ class KarukanInputController: IMKInputController {
         if flags.contains(.command) { return false }
 
         guard let key = KeyCodeMap.translate(event: event) else { return false }
+
+        // Refresh the conversion context while no composition is active
+        // (mirrors the fcitx5 addon, which captures surrounding text in the
+        // Empty state). Queued before process_key on the same pipe, so the
+        // engine sees it first.
+        if !hasPreedit {
+            sendSurroundingText(client: client)
+        }
 
         guard let result = engineClient.processKeySync(key) else {
             // Engine busy or dead: let the key pass through rather than
@@ -76,6 +88,7 @@ class KarukanInputController: IMKInputController {
                 client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
 
             case .updatePreedit(let text, let caret, let attributes):
+                hasPreedit = !text.isEmpty
                 setMarkedText(text: text, caret: caret, attributes: attributes, client: client)
 
             case .showCandidates(let candidates, let cursor, let page, let totalPages, _):
@@ -99,6 +112,28 @@ class KarukanInputController: IMKInputController {
                 Self.candidateWindow.setAux(nil)
             }
         }
+    }
+
+    /// Send the text left of the cursor to the engine as conversion
+    /// context. Conservative Mozc-style guards: skip clients that don't
+    /// report a cursor and large documents (slow attributedSubstring IPC).
+    private func sendSurroundingText(client: any IMKTextInput) {
+        let documentLength = client.length()
+        guard documentLength > 0, documentLength < 1000 else { return }
+        let selected = client.selectedRange()
+        guard selected.location != NSNotFound, selected.location > 0 else { return }
+
+        let maxContextUTF16 = 40  // engine truncates further per its config
+        let start = max(0, selected.location - maxContextUTF16)
+        let range = NSRange(location: start, length: selected.location - start)
+        guard let leftContext = client.attributedSubstring(from: range)?.string,
+            !leftContext.isEmpty
+        else { return }
+
+        engineClient.setSurroundingTextAsync(
+            text: leftContext,
+            cursorPos: leftContext.unicodeScalars.count
+        )
     }
 
     private func setMarkedText(
