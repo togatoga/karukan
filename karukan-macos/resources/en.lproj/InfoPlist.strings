@@ -1,5 +1,5 @@
 /* Display names for the input source and its input modes (keys are
    TISInputSourceIDs). Without these the input menu shows the raw IDs. */
 "dev.togatoga.inputmethod.Karukan" = "Karukan";
-"dev.togatoga.inputmethod.Karukan.Japanese" = "Hiragana";
-"dev.togatoga.inputmethod.Karukan.Roman" = "Alphanumeric";
+"dev.togatoga.inputmethod.Karukan.Japanese" = "Hiragana (Karukan)";
+"dev.togatoga.inputmethod.Karukan.Roman" = "Alphanumeric (Karukan)";
