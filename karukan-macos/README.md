@@ -133,6 +133,4 @@ fcitx5版と同じキーバインドに加えて:
 
 ## 参考プロジェクト
 
-- [mac-akaza](https://github.com/akaza-im/mac-akaza) — Akaza の macOS 版。
-  InputMethodKit を使った IME 実装(IMKServer / IMKInputController の構成、
-  .app バンドルの組み立てとインストール方法)を参考にしました。
+- [mac-akaza](https://github.com/akaza-im/mac-akaza)
