@@ -26,6 +26,17 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  lint:
+    name: Swift Format
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install swift-format
+        run: brew install swift-format
+      - name: Swift format lint
+        run: swift-format lint -r Sources/ Tests/
+        working-directory: karukan-macos
+
   test:
     name: Build & Test
     runs-on: macos-latest

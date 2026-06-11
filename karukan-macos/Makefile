@@ -6,7 +6,7 @@ CARGO_TARGET = ../target
 DATA_DIR = $(HOME)/Library/Application Support/com.karukan.karukan-im
 DICT_URL = https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
 
-.PHONY: all build build-universal bundle install install-dict install-models test clean
+.PHONY: all build build-universal bundle install install-dict install-models test fmt lint clean
 
 all: build
 
@@ -76,6 +76,12 @@ install: bundle install-dict install-models
 	-killall KarukanIME 2>/dev/null || true
 	@echo "Installed to $(INSTALL_DIR)/Karukan.app"
 	@echo "First install: log out and back in, then add Karukan in System Settings > Keyboard > Input Sources."
+
+fmt:
+	swift-format format -ri Sources/ Tests/
+
+lint:
+	swift-format lint -r Sources/ Tests/
 
 clean:
 	rm -rf .build/ $(OUTDIR)/
