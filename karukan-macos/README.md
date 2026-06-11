@@ -130,3 +130,9 @@ fcitx5版と同じキーバインドに加えて:
 
 - ローマ字入力のみ対応(かな入力レイアウトは未対応)
 - 候補ウィンドウはマウス操作不可(数字キー・矢印キーで選択)
+
+## 参考プロジェクト
+
+- [mac-akaza](https://github.com/akaza-im/mac-akaza) — Akaza の macOS 版。
+  InputMethodKit を使った IME 実装(IMKServer / IMKInputController の構成、
+  .app バンドルの組み立てとインストール方法)を参考にしました。
