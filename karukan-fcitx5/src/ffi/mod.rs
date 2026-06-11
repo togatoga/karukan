@@ -44,8 +44,8 @@ macro_rules! ffi_mut {
 pub(crate) use ffi_mut;
 pub(crate) use ffi_ref;
 
-use crate::config::Settings;
-use crate::core::engine::{EngineAction, EngineConfig, InputMethodEngine};
+use karukan_im::config::Settings;
+use karukan_im::core::engine::{EngineAction, EngineConfig, InputMethodEngine};
 
 static INIT_LOGGING: Once = Once::new();
 
@@ -113,9 +113,7 @@ pub struct KarukanEngine {
 
 impl KarukanEngine {
     fn new() -> Self {
-        // Load user settings from config.toml, fall back to defaults
         let settings = Settings::load().unwrap_or_default();
-
         let config = EngineConfig::from_settings(&settings);
         let engine = InputMethodEngine::with_config(config);
         Self {

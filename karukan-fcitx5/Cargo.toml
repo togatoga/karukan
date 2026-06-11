@@ -1,0 +1,20 @@
+[package]
+name = "karukan-fcitx5"
+version = "0.1.0"
+edition.workspace = true
+description = "fcitx5 addon for the Karukan Japanese IME (Linux)"
+license.workspace = true
+authors = ["togatoga"]
+repository.workspace = true
+homepage.workspace = true
+keywords = ["japanese", "ime", "fcitx5", "input-method"]
+categories = ["text-processing", "internationalization"]
+
+[lib]
+name = "karukan_fcitx5"
+crate-type = ["cdylib"]
+
+[dependencies]
+karukan-im.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

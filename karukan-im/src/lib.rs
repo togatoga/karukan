@@ -1,14 +1,12 @@
-//! karukan-im: A Japanese Input Method Engine for Linux and macOS
+//! karukan-im: Japanese IME engine shared by the fcitx5 (Linux) and
+//! macOS frontends.
 //!
-//! This crate provides a Japanese IME engine consumed by two frontends:
-//! the fcitx5 addon on Linux (via the C FFI in [`ffi`]) and the macOS
-//! Swift/InputMethodKit frontend (via the stdio JSON-RPC server in
-//! [`server`]). It uses karukan-engine for romaji-to-hiragana and
-//! hiragana-to-kanji conversion.
+//! - fcitx5 C FFI lives in the separate `karukan-fcitx5` crate.
+//! - The macOS stdio JSON-RPC server lives in [`server`] and is built
+//!   as the `karukan-imserver` binary, bundled inside `karukan-macos`.
 
 pub mod config;
 pub mod core;
-pub mod ffi;
 pub mod server;
 
 pub use core::engine::{EngineAction, EngineResult, InputMethodEngine};

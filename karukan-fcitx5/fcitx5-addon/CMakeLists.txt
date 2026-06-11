@@ -23,15 +23,15 @@ include(ECMUninstallTarget)
 include("${FCITX_INSTALL_CMAKECONFIG_DIR}/Fcitx5Utils/Fcitx5CompilerSettings.cmake")
 
 # Path to the Rust library
-set(KARUKAN_RUST_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../target/release/libkarukan_im.so")
+set(KARUKAN_RUST_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../../target/release/libkarukan_fcitx5.so")
 set(KARUKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
 # Build Rust library as a custom target
 find_program(CARGO cargo REQUIRED)
 add_custom_target(karukan_rust_lib ALL
-    COMMAND ${CARGO} build --release -p karukan-im
+    COMMAND ${CARGO} build --release -p karukan-fcitx5
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-    COMMENT "Building karukan-im Rust library"
+    COMMENT "Building karukan-fcitx5 Rust library"
     BYPRODUCTS "${KARUKAN_RUST_LIB}"
 )
 
@@ -62,7 +62,7 @@ target_link_libraries(karukan
 # Remove lib prefix (fcitx5 expects "karukan.so" not "libkarukan.so")
 set_target_properties(karukan PROPERTIES PREFIX "")
 
-# Set RPATH so fcitx5 can find libkarukan_im.so at runtime
+# Set RPATH so fcitx5 can find libkarukan_fcitx5.so at runtime
 # $ORIGIN means "same directory as this library"
 set_target_properties(karukan PROPERTIES
     BUILD_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/../../target/release"

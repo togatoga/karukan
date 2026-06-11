@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-karukan is a Japanese Input Method system for Linux and macOS, consisting of three Rust crates and a Swift package:
+karukan is a Japanese Input Method system for Linux and macOS, consisting of four Rust crates and a Swift package:
 
 - **karukan-engine**: Core library — romaji-to-hiragana conversion, neural kana-kanji conversion via llama.cpp, system dictionary, learning cache, candidate rewriter (width/case/symbol variants)
 - **karukan-cli**: CLI tools and server — dictionary builder, Sudachi converter, dict viewer, AJIMEE-Bench, HTTP API server
-- **karukan-im**: fcitx5 IME addon (Linux) and `karukan-imserver` stdio JSON-RPC server (macOS), both wrapping the same engine state machine
+- **karukan-im**: Shared IME engine state machine (Empty → Composing → Conversion) and `karukan-imserver` stdio JSON-RPC server (macOS binary bundled in karukan-macos)
+- **karukan-fcitx5**: fcitx5 Linux frontend — C FFI (`src/ffi/`) and C++ addon (`fcitx5-addon/`) that wrap karukan-im
 - **karukan-macos**: Swift/InputMethodKit frontend that spawns `karukan-imserver` as a bundled child process
 
 ## Build and Development Commands
@@ -55,9 +56,16 @@ cargo run --release --bin ajimee-bench -- evaluation_items.json
 ```bash
 cargo build -p karukan-im --release
 cargo test -p karukan-im
+```
+
+### karukan-fcitx5
+
+```bash
+cargo build -p karukan-fcitx5 --release
+cargo test -p karukan-fcitx5
 
 # Build and install fcitx5 addon
-cd karukan-im/fcitx5-addon
+cd karukan-fcitx5/fcitx5-addon
 
 # Option A: System install (sudo required, no FCITX_ADDON_DIRS needed)
 cmake -B build -DCMAKE_INSTALL_PREFIX=/usr
@@ -139,8 +147,17 @@ cargo clippy --workspace  # Lint all crates
 - `core/keycode.rs` — Key symbol definitions and key event handling
 - `core/state.rs` — Engine state definitions
 - `config/settings.rs` — User settings (`~/.config/karukan-im/config.toml` on Linux, `~/Library/Application Support/com.karukan.karukan-im/` on macOS)
-- `ffi.rs` — C FFI for fcitx5 C++ addon
 - `server/` — stdio JSON-RPC 2.0 server for the macOS frontend (`protocol.rs` defines the wire format; `bin/karukan-imserver.rs` is the entry point)
+
+### karukan-fcitx5 (`karukan-fcitx5/`)
+
+Linux fcitx5 frontend. Wraps karukan-im via C FFI and exposes the engine to the C++ addon.
+
+- `src/ffi/mod.rs` — `KarukanEngine` opaque struct, action dispatch, cache structs, FFI macros
+- `src/ffi/lifecycle.rs` — `karukan_engine_new/init/free`
+- `src/ffi/input.rs` — `karukan_engine_process_key/reset/set_surrounding_text`
+- `src/ffi/query.rs` — All getter functions (preedit, commit, candidates, aux, timing)
+- `include/karukan.h` — C header for the fcitx5 C++ addon
 - `fcitx5-addon/src/karukan.cpp` — C++ fcitx5 wrapper
 
 ### karukan-macos (`karukan-macos/Sources/KarukanIME/`)

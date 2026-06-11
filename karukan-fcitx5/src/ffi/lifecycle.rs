@@ -31,7 +31,6 @@ pub extern "C" fn karukan_engine_init(engine: *mut KarukanEngine) -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_free(engine: *mut KarukanEngine) {
     if !engine.is_null() {
-        // Save learning cache before dropping
         let engine_ref = unsafe { &mut *engine };
         engine_ref.engine.save_learning();
         // SAFETY: Pointer is non-null (checked above) and was created by Box::into_raw in karukan_engine_new

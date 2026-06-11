@@ -162,21 +162,16 @@ pub extern "C" fn karukan_engine_save_learning(engine: *mut KarukanEngine) {
     engine.engine.save_learning();
 }
 
-/// Commit any pending input and return the committed text
-/// This is used when the IME is deactivated (focus lost) to commit preedit
 /// Check if the engine is in the Empty (idle) state.
 /// Returns 1 if empty, 0 if composing or converting.
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_is_empty(engine: *const KarukanEngine) -> c_int {
     let engine = ffi_ref!(engine, 0);
-    if engine.engine.state().is_empty() {
-        1
-    } else {
-        0
-    }
+    if engine.engine.state().is_empty() { 1 } else { 0 }
 }
 
-/// Returns 1 if text was committed, 0 otherwise
+/// Commit any pending input.
+/// Returns 1 if text was committed, 0 otherwise.
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_commit(engine: *mut KarukanEngine) -> c_int {
     let engine = ffi_mut!(engine, 0);

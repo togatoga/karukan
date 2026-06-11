@@ -1347,6 +1347,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "karukan-fcitx5"
+version = "0.1.0"
+dependencies = [
+ "karukan-im",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "karukan-im"
 version = "0.1.0"
 dependencies = [

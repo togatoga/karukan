@@ -2,7 +2,7 @@
 
 use std::ffi::{c_char, c_int, c_uint};
 
-use crate::core::keycode::{KeyEvent, KeyModifiers, Keysym};
+use karukan_im::core::keycode::{KeyEvent, KeyModifiers, Keysym};
 
 use super::{KarukanEngine, ffi_mut};
 
@@ -18,9 +18,7 @@ pub extern "C" fn karukan_engine_process_key(
     let engine = ffi_mut!(engine, 0);
     engine.clear_flags();
 
-    // Convert modifier state
     let modifiers = KeyModifiers::from_modifier_state(state);
-
     let key_event = KeyEvent::new(Keysym(keysym), modifiers, is_release == 0);
     let result = engine.engine.process_key(&key_event);
 
@@ -60,7 +58,6 @@ pub extern "C" fn karukan_engine_set_surrounding_text(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!("set_surrounding_text: invalid UTF-8: {}", e);
-                // Clear context on invalid input to avoid stale data
                 engine.engine.set_surrounding_context("", "");
                 return;
             }

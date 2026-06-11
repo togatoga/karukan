@@ -14,8 +14,8 @@ const XKB_KEY_ESCAPE: u32 = 0xff1b;
 const XKB_KEY_BACKSPACE: u32 = 0xff08;
 const XKB_KEY_SHIFT_L: u32 = 0xffe1;
 const XKB_KEY_LOWER_L: u32 = 0x6c;
-const SHIFT_MASK: u32 = crate::core::keycode::KeyModifiers::SHIFT_MASK;
-const CONTROL_MASK: u32 = crate::core::keycode::KeyModifiers::CONTROL_MASK;
+const SHIFT_MASK: u32 = karukan_im::core::keycode::KeyModifiers::SHIFT_MASK;
+const CONTROL_MASK: u32 = karukan_im::core::keycode::KeyModifiers::CONTROL_MASK;
 
 /// Send Ctrl+Shift+L to disable live conversion. Tests that exercise the
 /// manual hiragana flow rely on the preedit staying as hiragana, so they

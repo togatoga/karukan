@@ -2,18 +2,17 @@
 name = "karukan-im"
 version = "0.1.0"
 edition.workspace = true
-description = "A Japanese Input Method Engine for Linux and macOS"
+description = "Japanese IME engine shared by the fcitx5 and macOS frontends"
 license.workspace = true
 authors = ["togatoga"]
 repository.workspace = true
 homepage.workspace = true
-keywords = ["japanese", "ime", "fcitx5", "input-method"]
+keywords = ["japanese", "ime", "input-method"]
 categories = ["text-processing", "internationalization"]
 
 [lib]
 name = "karukan_im"
 path = "src/lib.rs"
-crate-type = ["lib", "cdylib"]  # Build both rlib and shared library
 
 # stdio JSON-RPC engine server for the macOS (Swift/InputMethodKit) frontend
 [[bin]]
