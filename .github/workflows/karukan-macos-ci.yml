@@ -1,0 +1,54 @@
+name: karukan-macos CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'karukan-macos/**'
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/karukan-macos-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'karukan-macos/**'
+      - 'karukan-im/**'
+      - 'karukan-engine/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/karukan-macos-ci.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      # Rust-side coverage on macOS (karukan-imserver is the macOS engine path)
+      - name: Run Rust tests (karukan-im)
+        run: cargo test -p karukan-im
+
+      # target/debug/karukan-imserver is required by the Swift
+      # TransportTests (they skip when the binary is missing)
+      - name: Build karukan-imserver
+        run: cargo build -p karukan-im --bin karukan-imserver
+
+      - name: Swift build
+        run: swift build
+        working-directory: karukan-macos
+
+      - name: Swift test
+        run: swift test
+        working-directory: karukan-macos
