@@ -69,6 +69,25 @@ pub fn get_tokenizer_path_by_id(variant_id: &str) -> Result<PathBuf> {
     get_tokenizer_path(family)
 }
 
+/// Download every model variant (GGUF + tokenizer) listed in `models.toml`
+/// into the HuggingFace cache, without loading any of them.
+///
+/// Used by `karukan-imserver --prefetch-models` so installers can warm the
+/// cache up front instead of blocking the first conversion on a download.
+pub fn prefetch_all_models() -> Result<()> {
+    for (family, variant) in registry().iter_variants() {
+        let model_path = get_variant_path(family, variant)?;
+        let tokenizer_path = get_tokenizer_path(family)?;
+        tracing::info!(
+            "Model '{}' ready: {} (tokenizer: {})",
+            variant.id,
+            model_path.display(),
+            tokenizer_path.display()
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

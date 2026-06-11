@@ -5,6 +5,10 @@
 //! filter; defaults to `info`). The learning cache is saved on EOF, so the
 //! frontend should close the child's stdin (or send `save_learning`) before
 //! terminating it.
+//!
+//! `--prefetch-models` downloads every conversion model listed in
+//! `models.toml` into the HuggingFace cache and exits (used by `make install`
+//! to avoid a multi-minute download on first launch).
 
 use std::io::{BufRead, Write};
 
@@ -18,6 +22,14 @@ fn main() {
         )
         .with_writer(std::io::stderr)
         .init();
+
+    if std::env::args().any(|arg| arg == "--prefetch-models") {
+        if let Err(e) = karukan_engine::kanji::hf_download::prefetch_all_models() {
+            tracing::error!("model prefetch failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
 
     let mut server = ImServer::new();
     let stdin = std::io::stdin().lock();

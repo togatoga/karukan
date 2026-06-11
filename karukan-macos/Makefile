@@ -6,7 +6,7 @@ CARGO_TARGET = ../target
 DATA_DIR = $(HOME)/Library/Application Support/com.karukan.karukan-im
 DICT_URL = https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
 
-.PHONY: all build build-universal bundle install install-dict test clean
+.PHONY: all build build-universal bundle install install-dict install-models test clean
 
 all: build
 
@@ -62,7 +62,15 @@ install-dict:
 		rm -rf "$$tmp"; \
 	fi
 
-install: bundle install-dict
+# Prefetch the conversion models into the HuggingFace cache so the first
+# launch doesn't block for minutes on the download.
+# Non-fatal on failure (e.g. offline) — the engine downloads on first launch.
+install-models: build
+	@echo "Prefetching conversion models (HuggingFace cache) ..."
+	@$(CARGO_TARGET)/release/karukan-imserver --prefetch-models || \
+		echo "WARNING: model prefetch failed; models will be downloaded on first launch"
+
+install: bundle install-dict install-models
 	rm -rf "$(INSTALL_DIR)/Karukan.app"
 	cp -a $(APP) "$(INSTALL_DIR)/"
 	-killall KarukanIME 2>/dev/null || true
