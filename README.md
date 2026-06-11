@@ -5,6 +5,7 @@
 
   [![CI (engine)](https://github.com/togatoga/karukan/actions/workflows/karukan-engine-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-engine-ci.yml)
   [![CI (im)](https://github.com/togatoga/karukan/actions/workflows/karukan-im-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-im-ci.yml)
+  [![CI (fcitx5)](https://github.com/togatoga/karukan/actions/workflows/karukan-fcitx5-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-fcitx5-ci.yml)
   [![CI (macos)](https://github.com/togatoga/karukan/actions/workflows/karukan-macos-ci.yml/badge.svg)](https://github.com/togatoga/karukan/actions/workflows/karukan-macos-ci.yml)
   [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 </div>
@@ -17,8 +18,9 @@
 
 | クレート | 説明 |
 |---------|------|
-| [karukan-im](karukan-im/) | IMEエンジン本体 — fcitx5アドオン(Linux)と karukan-imserver(macOS向けJSON-RPCサーバー) |
+| [karukan-fcitx5](karukan-fcitx5/) | Linux向けIMEフロントエンド — fcitx5アドオン + C FFI |
 | [karukan-macos](karukan-macos/) | macOS向けIMEフロントエンド — Swift/InputMethodKit |
+| [karukan-im](karukan-im/) | 共有IMEエンジン — ステートマシン、ローマ字変換、karukan-imserver(macOS向けJSON-RPCサーバー) |
 | [karukan-engine](karukan-engine/) | コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換 |
 | [karukan-cli](karukan-cli/) | CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー |
 
@@ -35,7 +37,7 @@
 
 ## インストール
 
-- **Linux (fcitx5)**: [karukan-im の README](karukan-im/README.md#install) を参照
+- **Linux (fcitx5)**: [karukan-fcitx5 の README](karukan-fcitx5/README.md#install) を参照
 - **macOS**: [karukan-macos の README](karukan-macos/README.md) を参照
 
 ## ライセンス
