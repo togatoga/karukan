@@ -10,6 +10,7 @@ const XKB_KEY_A: u32 = Keysym::KEY_A.0;
 const XKB_KEY_LOWER_L: u32 = Keysym::KEY_L.0;
 const XKB_KEY_RETURN: u32 = Keysym::RETURN.0;
 const XKB_KEY_ESCAPE: u32 = Keysym::ESCAPE.0;
+const XKB_KEY_SPACE: u32 = Keysym::SPACE.0;
 
 fn test_server() -> ImServer {
     let mut server = ImServer::with_settings(Settings::default());
@@ -146,6 +147,54 @@ fn test_explicit_commit_method() {
         json!({"jsonrpc":"2.0","id":8,"method":"commit"}),
     );
     assert!(actions_of(&resp, "commit").is_empty());
+}
+
+#[test]
+fn test_select_candidate_commits_page_candidate() {
+    let mut server = test_server();
+    press(&mut server, XKB_KEY_K);
+    press(&mut server, XKB_KEY_A);
+
+    // Space starts conversion; without a model the candidates come from
+    // the hiragana/katakana fallback and the rewriter.
+    let resp = press(&mut server, XKB_KEY_SPACE);
+    let shows = actions_of(&resp, "show_candidates");
+    let first_text = shows.last().unwrap()["candidates"][0]["text"].clone();
+
+    let resp = request(
+        &mut server,
+        json!({"jsonrpc":"2.0","id":20,"method":"select_candidate","params":{"page_index":0}}),
+    );
+    assert_eq!(resp["result"]["consumed"], true);
+    let commits = actions_of(&resp, "commit");
+    assert_eq!(commits.last().unwrap()["text"], first_text);
+    assert!(!actions_of(&resp, "hide_candidates").is_empty());
+
+    let resp = request(
+        &mut server,
+        json!({"jsonrpc":"2.0","id":21,"method":"status"}),
+    );
+    assert_eq!(resp["result"]["state"], "empty");
+}
+
+#[test]
+fn test_select_candidate_out_of_range() {
+    let mut server = test_server();
+    let resp = request(
+        &mut server,
+        json!({"jsonrpc":"2.0","id":22,"method":"select_candidate","params":{"page_index":9}}),
+    );
+    assert_eq!(resp["error"]["code"], -32602);
+}
+
+#[test]
+fn test_select_candidate_without_candidates_not_consumed() {
+    let mut server = test_server();
+    let resp = request(
+        &mut server,
+        json!({"jsonrpc":"2.0","id":23,"method":"select_candidate","params":{"page_index":0}}),
+    );
+    assert_eq!(resp["result"]["consumed"], false);
 }
 
 #[test]

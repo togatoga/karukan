@@ -159,11 +159,19 @@ impl fmt::Display for Keysym {
 }
 
 /// Key modifier flags
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+///
+/// Also the `process_key` wire format of the stdio JSON-RPC server
+/// (`server::protocol`), where the fields are named `shift` / `control` /
+/// `alt` / `super`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
 pub struct KeyModifiers {
+    #[serde(default, rename = "shift")]
     pub shift_key: bool,
+    #[serde(default, rename = "control")]
     pub control_key: bool,
+    #[serde(default, rename = "alt")]
     pub alt_key: bool,
+    #[serde(default, rename = "super")]
     pub super_key: bool,
 }
 

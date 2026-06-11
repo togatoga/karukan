@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use crate::config::Settings;
 use crate::core::candidate::CandidateList;
 use crate::core::engine::{EngineAction, EngineConfig, EngineResult, InputMethodEngine};
-use crate::core::keycode::{KeyEvent, KeyModifiers, Keysym};
+use crate::core::keycode::{KeyEvent, Keysym};
 use crate::core::state::InputState;
 
 use protocol::{
@@ -25,7 +25,8 @@ use protocol::{
 /// (Empty → Composing → Conversion) lives here across requests.
 pub struct ImServer {
     engine: InputMethodEngine,
-    settings: Settings,
+    /// Pending settings, consumed by the first successful `init`.
+    settings: Option<Settings>,
     initialized: bool,
 }
 
@@ -46,7 +47,7 @@ impl ImServer {
         let config = EngineConfig::from_settings(&settings);
         Self {
             engine: InputMethodEngine::with_config(config),
-            settings,
+            settings: Some(settings),
             initialized: false,
         }
     }
@@ -86,13 +87,8 @@ impl ImServer {
             "init" => self.handle_init(),
             "process_key" => {
                 let params: ProcessKeyParams = parse_params(params)?;
-                let modifiers = KeyModifiers {
-                    shift_key: params.modifiers.shift,
-                    control_key: params.modifiers.control,
-                    alt_key: params.modifiers.alt,
-                    super_key: params.modifiers.super_,
-                };
-                let event = KeyEvent::new(Keysym(params.keysym), modifiers, !params.is_release);
+                let event =
+                    KeyEvent::new(Keysym(params.keysym), params.modifiers, !params.is_release);
                 let result = self.engine.process_key(&event);
                 self.key_result(result)
             }
@@ -104,10 +100,7 @@ impl ImServer {
                         format!("page_index out of range: {}", params.page_index),
                     ));
                 }
-                // Mirror the fcitx5 addon: selecting candidate N on the
-                // current page is equivalent to pressing the digit key N+1.
-                let keysym = Keysym(Keysym::KEY_1.0 + params.page_index as u32);
-                let result = self.engine.process_key(&KeyEvent::press(keysym));
+                let result = self.engine.select_candidate_on_page(params.page_index);
                 self.key_result(result)
             }
             "commit" => {
@@ -150,9 +143,15 @@ impl ImServer {
 
     fn handle_init(&mut self) -> Result<Value, RpcError> {
         if !self.initialized {
-            self.engine
-                .init_from_settings(&self.settings)
-                .map_err(|e| RpcError::new(RpcError::INIT_FAILED, format!("{e:#}")))?;
+            let settings = self
+                .settings
+                .take()
+                .unwrap_or_else(|| Settings::load().unwrap_or_default());
+            if let Err(e) = self.engine.init_from_settings(&settings) {
+                // Keep the settings so a retried `init` uses the same ones.
+                self.settings = Some(settings);
+                return Err(RpcError::new(RpcError::INIT_FAILED, format!("{e:#}")));
+            }
             self.initialized = true;
         }
         serde_json::to_value(InitResult {
@@ -217,7 +216,6 @@ fn to_action(action: EngineAction) -> Action {
             cursor: list.page_cursor(),
             page: list.current_page(),
             total_pages: list.total_pages(),
-            total: list.len(),
         },
         EngineAction::HideCandidates => Action::HideCandidates,
         EngineAction::Commit(text) => Action::Commit { text },

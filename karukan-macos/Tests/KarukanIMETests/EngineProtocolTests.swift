@@ -24,11 +24,11 @@ final class EngineProtocolTests: XCTestCase {
 
     func testDecodeShowCandidates() throws {
         let json = """
-            {"consumed":true,"actions":[{"candidates":[{"description":"[全]カタカナ","text":"カ"},{"text":"か"}],"cursor":0,"page":0,"total":20,"total_pages":3,"type":"show_candidates"}],"conversion_ms":11,"process_key_ms":42}
+            {"consumed":true,"actions":[{"candidates":[{"description":"[全]カタカナ","text":"カ"},{"text":"か"}],"cursor":0,"page":0,"total_pages":3,"type":"show_candidates"}],"conversion_ms":11,"process_key_ms":42}
             """
         let result = try decodeKeyResult(json)
         guard
-            case .showCandidates(let candidates, let cursor, let page, let totalPages, let total) =
+            case .showCandidates(let candidates, let cursor, let page, let totalPages) =
                 result.actions[0]
         else {
             return XCTFail("expected show_candidates")
@@ -40,7 +40,6 @@ final class EngineProtocolTests: XCTestCase {
         XCTAssertEqual(cursor, 0)
         XCTAssertEqual(page, 0)
         XCTAssertEqual(totalPages, 3)
-        XCTAssertEqual(total, 20)
         XCTAssertEqual(result.conversionMs, 11)
     }
 

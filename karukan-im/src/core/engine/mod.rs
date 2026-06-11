@@ -180,7 +180,9 @@ impl InputMethodEngine {
         }
     }
 
-    /// Get last conversion time in milliseconds (inference only)
+    /// Conversion (inference) time of the last `process_key` /
+    /// `select_candidate_on_page` call in milliseconds; 0 when that call
+    /// ran no conversion.
     pub fn last_conversion_ms(&self) -> u64 {
         self.metrics.conversion_ms
     }
@@ -456,6 +458,8 @@ impl InputMethodEngine {
         );
 
         let start = std::time::Instant::now();
+        // conversion_ms reports this key only: 0 unless a conversion runs below
+        self.metrics.conversion_ms = 0;
 
         let shift_active = key.modifiers.shift_key;
 

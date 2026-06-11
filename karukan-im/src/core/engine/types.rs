@@ -195,7 +195,9 @@ pub(in crate::core) enum ConversionStrategy {
 /// Timing and adaptive model selection metrics for conversion
 #[derive(Debug, Clone, Default)]
 pub(in crate::core) struct ConversionMetrics {
-    /// Last conversion time in milliseconds (inference only)
+    /// Conversion time of the current call in milliseconds (inference only);
+    /// reset to 0 at the start of each key/selection so it never carries
+    /// over from a previous keystroke
     pub conversion_ms: u64,
     /// Last process_key time in milliseconds (input to result, end-to-end)
     pub process_key_ms: u64,

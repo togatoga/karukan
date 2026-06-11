@@ -28,6 +28,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::core::keycode::KeyModifiers;
+
 /// Protocol version reported by `init`. Bump on breaking changes.
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -100,22 +102,11 @@ impl RpcError {
 pub struct ProcessKeyParams {
     /// XKB keysym value (e.g. 0x0061 = 'a', 0xff0d = Return).
     pub keysym: u32,
+    /// Wire fields: `shift` / `control` / `alt` / `super`, all optional.
     #[serde(default)]
-    pub modifiers: ModifiersParam,
+    pub modifiers: KeyModifiers,
     #[serde(default)]
     pub is_release: bool,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub struct ModifiersParam {
-    #[serde(default)]
-    pub shift: bool,
-    #[serde(default)]
-    pub control: bool,
-    #[serde(default)]
-    pub alt: bool,
-    #[serde(default, rename = "super")]
-    pub super_: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,9 +135,10 @@ pub struct InitResult {
 pub struct KeyResult {
     pub consumed: bool,
     pub actions: Vec<Action>,
-    /// Last conversion (inference) time in milliseconds.
+    /// Conversion (inference) time for this request in milliseconds;
+    /// 0 when no conversion ran.
     pub conversion_ms: u64,
-    /// Last end-to-end process_key time in milliseconds.
+    /// End-to-end engine processing time for this request in milliseconds.
     pub process_key_ms: u64,
 }
 
@@ -179,8 +171,6 @@ pub enum Action {
         /// Current page (0-based).
         page: usize,
         total_pages: usize,
-        /// Total candidate count across all pages.
-        total: usize,
     },
     HideCandidates,
     Commit {

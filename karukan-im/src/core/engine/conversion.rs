@@ -766,6 +766,17 @@ impl InputMethodEngine {
         self.navigate_candidate(CandidateList::prev_page)
     }
 
+    /// Select and commit the candidate at `page_index` (0-based) within the
+    /// current page, like pressing the digit key `page_index + 1`. Not
+    /// consumed unless a candidate list is active (Conversion state).
+    pub fn select_candidate_on_page(&mut self, page_index: usize) -> EngineResult {
+        let start = std::time::Instant::now();
+        self.metrics.conversion_ms = 0;
+        let result = self.select_candidate_by_digit(page_index + 1);
+        self.metrics.process_key_ms = start.elapsed().as_millis() as u64;
+        result
+    }
+
     /// Select candidate by digit (1-9)
     fn select_candidate_by_digit(&mut self, digit: usize) -> EngineResult {
         let (selected_text, reading) = {

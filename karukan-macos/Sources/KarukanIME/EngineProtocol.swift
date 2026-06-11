@@ -29,15 +29,14 @@ struct InitResult: Decodable {
 
 enum EngineAction: Decodable {
     case updatePreedit(text: String, caret: Int, attributes: [PreeditAttr])
-    case showCandidates(
-        candidates: [CandidateItem], cursor: Int, page: Int, totalPages: Int, total: Int)
+    case showCandidates(candidates: [CandidateItem], cursor: Int, page: Int, totalPages: Int)
     case hideCandidates
     case commit(text: String)
     case updateAux(text: String)
     case hideAux
 
     private enum CodingKeys: String, CodingKey {
-        case type, text, caret, attributes, candidates, cursor, page, totalPages, total
+        case type, text, caret, attributes, candidates, cursor, page, totalPages
     }
 
     init(from decoder: Decoder) throws {
@@ -56,8 +55,7 @@ enum EngineAction: Decodable {
                 candidates: try container.decode([CandidateItem].self, forKey: .candidates),
                 cursor: try container.decode(Int.self, forKey: .cursor),
                 page: try container.decode(Int.self, forKey: .page),
-                totalPages: try container.decode(Int.self, forKey: .totalPages),
-                total: try container.decode(Int.self, forKey: .total)
+                totalPages: try container.decode(Int.self, forKey: .totalPages)
             )
         case "hide_candidates":
             self = .hideCandidates
