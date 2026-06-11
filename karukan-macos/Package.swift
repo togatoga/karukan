@@ -10,7 +10,7 @@ let package = Package(
             name: "KarukanIME",
             path: "Sources/KarukanIME",
             linkerSettings: [
-                .unsafeFlags(["-framework", "InputMethodKit"])
+                .linkedFramework("InputMethodKit")
             ]
         ),
         .testTarget(
