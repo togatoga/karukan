@@ -101,47 +101,6 @@ final class KeyCodeMapTests: XCTestCase {
     }
 }
 
-final class RightCommandTapDetectorTests: XCTestCase {
-    private let rcmd = KeyCodeMap.rightCommandKeyCode
-    private let rcmdFlag = KeyCodeMap.rightCommandFlagMask
-    private let commandFlag = NSEvent.ModifierFlags.command.rawValue
-
-    func testSolitaryTapFiresOnRelease() {
-        var detector = RightCommandTapDetector()
-        XCTAssertFalse(
-            detector.handleFlagsChanged(
-                keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag))
-        XCTAssertTrue(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
-    }
-
-    func testShortcutCancelsTap() {
-        var detector = RightCommandTapDetector()
-        _ = detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag)
-        detector.handleKeyDown()  // e.g. ⌘C
-        XCTAssertFalse(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
-    }
-
-    func testOtherModifierCancelsTap() {
-        var detector = RightCommandTapDetector()
-        _ = detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag)
-        // Shift pressed while right Command is held (⌘⇧ combo).
-        _ = detector.handleFlagsChanged(
-            keyCode: 56, rawModifierFlags: commandFlag | rcmdFlag | NSEvent.ModifierFlags.shift.rawValue)
-        XCTAssertFalse(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
-    }
-
-    func testReleaseWithoutPressDoesNotFire() {
-        var detector = RightCommandTapDetector()
-        XCTAssertFalse(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
-    }
-
-    func testKeyDownBeforePressDoesNotCancelNextTap() {
-        var detector = RightCommandTapDetector()
-        detector.handleKeyDown()
-        _ = detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: commandFlag | rcmdFlag)
-        XCTAssertTrue(detector.handleFlagsChanged(keyCode: rcmd, rawModifierFlags: 0))
-    }
-}
 
 final class Utf16ConversionTests: XCTestCase {
     func testAsciiOffsets() {

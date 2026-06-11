@@ -44,17 +44,11 @@ enum KeyCodeMap {
         101: 0xffc6, 109: 0xffc7, 103: 0xffc8, 111: 0xffc9,
     ]
 
-    /// JIS keyboard かな key.
+    /// JIS keyboard かな key (kVK_JIS_Kana).
     static let kanaKeyCode: UInt16 = 104
-    /// JIS keyboard 英数 key.
+    /// JIS keyboard 英数 key (kVK_JIS_Eisu).
     static let eisuKeyCode: UInt16 = 102
-    /// Right Command key (kVK_RightCommand).
-    static let rightCommandKeyCode: UInt16 = 54
-    /// Device-dependent modifier bit for the right Command key
-    /// (NX_DEVICERCMDKEYMASK), distinguishing it from the left one.
-    static let rightCommandFlagMask: UInt = 0x0010
-    /// XKB Super_R, the engine's "return to hiragana" mode toggle key
-    /// (karukan-im/src/core/keycode.rs is_mode_toggle_key).
+    /// XKB Super_R keysym — the engine's katakana→hiragana toggle.
     static let superRKeysym: UInt32 = 0xffec
 
     static func modifiers(from flags: NSEvent.ModifierFlags) -> KeyModifiers {
@@ -109,40 +103,5 @@ enum KeyCodeMap {
             charactersIgnoringModifiers: event.charactersIgnoringModifiers,
             flags: event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         )
-    }
-}
-
-/// Detects a solitary right-Command tap (press → release with no other key
-/// in between), the macOS equivalent of the right-Super "return to
-/// Japanese input" key the Linux frontend gets for free as a key event.
-/// Modifier keys only arrive as flagsChanged events, and Command doubles
-/// as a shortcut modifier (⌘C), so the tap must only fire when nothing
-/// else was pressed while it was held — the same heuristic Mozc uses.
-struct RightCommandTapDetector {
-    private var isDown = false
-    private var sawOtherKey = false
-
-    /// Feed a flagsChanged event. Returns true when a solitary right-Command
-    /// tap completed (fire the mode switch on release).
-    mutating func handleFlagsChanged(keyCode: UInt16, rawModifierFlags: UInt) -> Bool {
-        guard keyCode == KeyCodeMap.rightCommandKeyCode else {
-            // Another modifier (Shift, left Command, …) moved while right
-            // Command is held: treat it as a combo, not a tap.
-            if isDown { sawOtherKey = true }
-            return false
-        }
-        if rawModifierFlags & KeyCodeMap.rightCommandFlagMask != 0 {
-            isDown = true
-            sawOtherKey = false
-            return false
-        }
-        let tapped = isDown && !sawOtherKey
-        isDown = false
-        return tapped
-    }
-
-    /// Feed any keyDown event (shortcut keys like ⌘C cancel the tap).
-    mutating func handleKeyDown() {
-        if isDown { sawOtherKey = true }
     }
 }

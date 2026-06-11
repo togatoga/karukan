@@ -1,4 +1,3 @@
-import Carbon
 import Cocoa
 import InputMethodKit
 
@@ -16,67 +15,38 @@ class KarukanInputController: IMKInputController {
     /// engine actions). Used to decide when to refresh surrounding text.
     private var hasPreedit = false
 
-    /// True while the Roman (direct input) mode from ComponentInputModeDict
-    /// is selected; every key passes through to the application.
-    private var isRomanMode = false
-
-    /// Right Command tap = return to Japanese input (Mozc-style; mirrors
-    /// the right-Super mode toggle of the Linux frontend).
-    private var rightCommandTap = RightCommandTapDetector()
-
-    private static let japaneseModeID = "dev.togatoga.inputmethod.Karukan.Japanese"
-    private static let romanModeID = "dev.togatoga.inputmethod.Karukan.Roman"
-
     // MARK: - Event handling
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.union(.flagsChanged).rawValue)
+        Int(NSEvent.EventTypeMask.keyDown.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event else { return false }
-        guard let client = sender as? (any IMKTextInput) else { return false }
-
-        // Modifier events only matter for the right-Command tap; never
-        // consume them so the system keeps tracking modifier state.
-        if event.type == .flagsChanged {
-            if rightCommandTap.handleFlagsChanged(
-                keyCode: event.keyCode,
-                rawModifierFlags: event.modifierFlags.rawValue
-            ) {
-                returnToJapaneseInput(client: client)
-            }
-            return false
-        }
         guard event.type == .keyDown else { return false }
-        rightCommandTap.handleKeyDown()
+        guard let client = sender as? (any IMKTextInput) else { return false }
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // Never swallow Command shortcuts.
         if flags.contains(.command) { return false }
 
-        // JIS keyboard かな/英数 keys switch input modes (Mozc-style).
-        switch event.keyCode {
-        case KeyCodeMap.kanaKeyCode:
-            // Full return to Japanese input, not just selectMode: かな must
-            // also leave the engine-internal alphabet/katakana mode, both on
-            // real JIS keyboards and when a Karabiner-style "command tap →
-            // 英数/かな" rule turns a right-Command tap into this key (the
-            // rule's lazy modifier means RightCommandTapDetector never sees
-            // the tap).
-            returnToJapaneseInput(client: client)
+        // JIS かな key (and Karabiner right-Command tap → かな): always
+        // consume so the system doesn't process keyCode 104 after the engine
+        // returns not_consumed (already in hiragana mode).
+        if event.keyCode == KeyCodeMap.kanaKeyCode {
+            let key = EngineKeyEvent(keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
+            if let result = engineClient.processKeySync(key) {
+                apply(actions: result.actions, client: client)
+            }
             return true
-        case KeyCodeMap.eisuKeyCode:
-            // Commit any pending composition before going direct.
-            flushComposition(client: client)
-            client.selectMode(Self.romanModeID)
-            return true
-        default:
-            break
         }
 
-        // Direct input: everything passes through to the application.
-        if isRomanMode { return false }
+        // JIS 英数 key: flush pending composition so preedit doesn't linger
+        // after macOS switches to the English input source.
+        if event.keyCode == KeyCodeMap.eisuKeyCode {
+            flushComposition(client: client)
+            return false
+        }
 
         guard let key = KeyCodeMap.translate(event: event) else { return false }
 
@@ -100,73 +70,7 @@ class KarukanInputController: IMKInputController {
         return result.consumed
     }
 
-    // MARK: - Input mode switching
-
-    /// Right Command tap: one-way return to Japanese input, from either
-    /// level of "half-width mode" — the Roman input mode (英数) or the
-    /// engine-internal alphabet/katakana mode (entered via Shift+letter,
-    /// which previously had no way back on macOS).
-    private func returnToJapaneseInput(client: any IMKTextInput) {
-        // Always selectMode (no-op when already selected) and clear
-        // isRomanMode directly instead of waiting for setValue: when the
-        // system mode is already Japanese but this session's cached
-        // isRomanMode is stale-true (see activateServer), selectMode
-        // changes nothing and setValue never fires — without the direct
-        // reset the session would stay in pass-through forever.
-        client.selectMode(Self.japaneseModeID)
-        isRomanMode = false
-        // Forward Super_R so the engine's mode toggle (alphabet/katakana →
-        // hiragana) runs; a no-op when already in hiragana mode. Sent even
-        // when leaving the Roman input mode, so a stale engine-internal
-        // alphabet mode doesn't survive the round trip.
-        let key = EngineKeyEvent(keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
-        if let result = engineClient.processKeySync(key) {
-            apply(actions: result.actions, client: client)
-        }
-    }
-
-    /// Called by the system when the user changes the input mode (IME menu,
-    /// かな/英数 keys via selectMode, or System Settings).
-    override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
-        guard tag == kTextServiceInputModePropertyTag, let modeID = value as? String else {
-            super.setValue(value, forTag: tag, client: sender)
-            return
-        }
-        let wasRomanMode = isRomanMode
-        isRomanMode = (modeID == Self.romanModeID)
-        if isRomanMode && !wasRomanMode {
-            // Leaving Japanese mode: flush the composition into the app.
-            if let client = sender as? (any IMKTextInput) {
-                flushComposition(client: client)
-            } else {
-                Self.candidateWindow.hide()
-            }
-        }
-    }
-
     // MARK: - Lifecycle
-
-    override func activateServer(_ sender: Any!) {
-        super.activateServer(sender)
-        // Do not query the client here (client.attributes() during
-        // activation can deadlock Chromium); surrounding text and window
-        // positioning happen lazily on the first key event.
-        //
-        // Re-sync isRomanMode with the system's actual input source: this
-        // flag is per-session, and a mode switch made while another app's
-        // session was active doesn't reach us via setValue. A stale true
-        // silently passes every key through (typed romaji stays alphabet)
-        // even though the menu bar shows か. TIS is a local API, not a
-        // client query, so it is safe during activation.
-        if let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-            let idPtr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
-        {
-            let id = Unmanaged<CFString>.fromOpaque(idPtr).takeUnretainedValue() as String
-            if id == Self.japaneseModeID || id == Self.romanModeID {
-                isRomanMode = (id == Self.romanModeID)
-            }
-        }
-    }
 
     override func deactivateServer(_ sender: Any!) {
         // Mozc-style: commit the pending preedit on focus loss, then

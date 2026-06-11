@@ -67,34 +67,11 @@
           <string>karukan.tiff</string>
         </dict>
 
-        <key>dev.togatoga.inputmethod.Karukan.Roman</key>
-        <dict>
-          <key>TISInputSourceID</key>
-          <string>dev.togatoga.inputmethod.Karukan.Roman</string>
-          <key>TISIntendedLanguage</key>
-          <string>en</string>
-          <key>tsInputModeScriptKey</key>
-          <string>smRoman</string>
-          <key>tsInputModeDefaultStateKey</key>
-          <true/>
-          <key>tsInputModeIsVisibleKey</key>
-          <true/>
-          <key>tsInputModePrimaryInScriptKey</key>
-          <false/>
-          <key>tsInputModeJISKeyboardShortcutKey</key>
-          <integer>3</integer>
-          <key>tsInputModeMenuIconFileKey</key>
-          <string>karukan-roman.tiff</string>
-          <key>tsInputModePaletteIconFileKey</key>
-          <string>karukan-roman.tiff</string>
-        </dict>
-
       </dict>
 
       <key>tsVisibleInputModeOrderedArrayKey</key>
       <array>
         <string>dev.togatoga.inputmethod.Karukan.Japanese</string>
-        <string>dev.togatoga.inputmethod.Karukan.Roman</string>
       </array>
     </dict>
 
