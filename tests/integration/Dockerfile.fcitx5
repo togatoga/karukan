@@ -40,8 +40,8 @@ WORKDIR /karukan
 COPY . .
 
 # Build and install fcitx5 addon (system install)
-# Note: CMake's karukan_rust_lib target runs `cargo build --release -p karukan-im`
-WORKDIR /karukan/karukan-im/fcitx5-addon
+# Note: CMake's karukan_rust_lib target runs `cargo build --release -p karukan-fcitx5`
+WORKDIR /karukan/karukan-fcitx5/fcitx5-addon
 RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr \
     && cmake --build build -j"$(nproc)" \
     && cmake --install build

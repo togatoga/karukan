@@ -40,10 +40,10 @@ else
     fail "karukan.so not found at $ADDON_DIR/karukan.so"
 fi
 
-if [ -f "$ADDON_DIR/libkarukan_im.so" ]; then
-    pass "libkarukan_im.so installed at $ADDON_DIR/libkarukan_im.so"
+if [ -f "$ADDON_DIR/libkarukan_fcitx5.so" ]; then
+    pass "libkarukan_fcitx5.so installed at $ADDON_DIR/libkarukan_fcitx5.so"
 else
-    fail "libkarukan_im.so not found at $ADDON_DIR/libkarukan_im.so"
+    fail "libkarukan_fcitx5.so not found at $ADDON_DIR/libkarukan_fcitx5.so"
 fi
 
 if [ -f "$FCITX5_DATA/addon/karukan.conf" ]; then
@@ -64,10 +64,10 @@ fi
 echo ""
 echo "[2/4] Checking shared library linkage..."
 
-if ldd "$ADDON_DIR/karukan.so" | grep -q "libkarukan_im.so"; then
-    pass "karukan.so links to libkarukan_im.so"
+if ldd "$ADDON_DIR/karukan.so" | grep -q "libkarukan_fcitx5.so"; then
+    pass "karukan.so links to libkarukan_fcitx5.so"
 else
-    fail "karukan.so does not link to libkarukan_im.so"
+    fail "karukan.so does not link to libkarukan_fcitx5.so"
 fi
 
 if ldd "$ADDON_DIR/karukan.so" | grep -q "libFcitx5Core"; then
@@ -76,7 +76,7 @@ else
     fail "karukan.so does not link to libFcitx5Core"
 fi
 
-# Verify RPATH is set to $ORIGIN so it can find libkarukan_im.so
+# Verify RPATH is set to $ORIGIN so it can find libkarukan_fcitx5.so
 RPATH_INFO=$(readelf -d "$ADDON_DIR/karukan.so" 2>/dev/null | grep -E "RPATH|RUNPATH" || true)
 if echo "$RPATH_INFO" | grep -q '\$ORIGIN'; then
     pass "karukan.so has \$ORIGIN RPATH"

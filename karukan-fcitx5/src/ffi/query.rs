@@ -167,7 +167,11 @@ pub extern "C" fn karukan_engine_save_learning(engine: *mut KarukanEngine) {
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_is_empty(engine: *const KarukanEngine) -> c_int {
     let engine = ffi_ref!(engine, 0);
-    if engine.engine.state().is_empty() { 1 } else { 0 }
+    if engine.engine.state().is_empty() {
+        1
+    } else {
+        0
+    }
 }
 
 /// Commit any pending input.
