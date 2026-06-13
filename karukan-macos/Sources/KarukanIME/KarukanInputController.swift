@@ -116,7 +116,7 @@ class KarukanInputController: IMKInputController {
             default: return false
             }
         }
-        for action: EngineAction in actions {
+        for action in actions {
             switch action {
             case .updateAux(let text):
                 Self.candidateWindow.setAux(text, deferRender: updatesCandidates)
