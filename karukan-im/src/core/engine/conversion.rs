@@ -23,6 +23,22 @@ fn width_annotation(text: &str) -> Option<&'static str> {
     }
 }
 
+/// Number of leading chars shared by `a` and `b`.
+fn common_prefix_len(a: &[char], b: &[char]) -> usize {
+    a.iter().zip(b.iter()).take_while(|(x, y)| x == y).count()
+}
+
+/// Number of trailing chars shared by `a` and `b`, capped so it never overlaps
+/// the already-counted common prefix of length `prefix_len`.
+fn common_suffix_len(a: &[char], b: &[char], prefix_len: usize) -> usize {
+    let max = a.len().min(b.len()) - prefix_len;
+    let mut n = 0;
+    while n < max && a[a.len() - 1 - n] == b[b.len() - 1 - n] {
+        n += 1;
+    }
+    n
+}
+
 /// Helper for building a deduplicated list of conversion candidates.
 ///
 /// Two push paths exist: [`push`] dedups by text (skips duplicates), and
@@ -169,24 +185,32 @@ impl InputMethodEngine {
         candidates
     }
 
-    /// Auto-suggest over the whole composing buffer, split into segments of at
-    /// most `config.composing_segment_len` reading characters so each model call
+    /// Auto-suggest over the composing buffer, split into segments of at most
+    /// `config.composing_segment_len` reading characters so each model call
     /// stays bounded for long input.
     ///
-    /// Each segment's left context is the editor surrounding text followed by
-    /// the converted text of all preceding segments (truncated to
-    /// `max_api_context_len`), so the concatenated result still reads
-    /// coherently. Unchanged segments are reused from `self.segments` (cache
-    /// keyed by reading + left context), so a keystroke at the end of the buffer
-    /// only reconverts the final segment.
+    /// Re-segmentation is *incremental* and content-anchored: the new buffer is
+    /// diffed against the previous segmentation (`self.segments`) by common
+    /// character prefix/suffix. Segments that fall entirely in the unchanged
+    /// prefix are reused as-is, segments entirely in the unchanged suffix keep
+    /// their cached conversion, and only the changed middle span is re-chunked
+    /// and re-run through the model. So a keystroke at the end reconverts only
+    /// the final segment, and an edit/deletion in the middle reconverts only the
+    /// segment(s) it touched — not everything downstream.
+    ///
+    /// Trade-off: a middle edit changes the left context of the segments to its
+    /// right, but those suffix segments are *not* reconverted (that is the whole
+    /// point — bounded cost). Their displayed conversion stays as last computed
+    /// until they are themselves edited or the text is committed. Each segment's
+    /// left context is still the editor surrounding text plus the converted text
+    /// of all preceding segments, truncated to `max_api_context_len`.
     ///
     /// Returns the concatenated conversion of the whole buffer, or `None` when
-    /// it equals the raw reading (no useful model suggestion) — matching the
-    /// `run_auto_suggest` "fall back to the reading" contract.
+    /// it equals the raw reading (no useful model suggestion).
     ///
     /// Note: for input no longer than one segment (the common case, default
     /// N=50) this produces exactly one model call over the whole buffer, i.e.
-    /// identical behavior to the previous whole-buffer auto-suggest.
+    /// identical behavior to a whole-buffer conversion.
     pub(super) fn segmented_auto_suggest(&mut self) -> Option<String> {
         let full_reading = self.input_buf.text.clone();
         if full_reading.is_empty() {
@@ -206,38 +230,81 @@ impl InputMethodEngine {
         }
 
         let seg_len = self.config.composing_segment_len.max(1);
-        let chars: Vec<char> = full_reading.chars().collect();
+        let text: Vec<char> = full_reading.chars().collect();
         let base_ctx = self.truncate_context_for_api();
 
-        let mut new_segments: Vec<ComposingSegment> = Vec::with_capacity(chars.len() / seg_len + 1);
+        // Previous segmentation (covers the pre-edit text). Move it out so the
+        // model calls below don't conflict with borrowing `self.segments`.
+        let old = std::mem::take(&mut self.segments);
+        let old_lens: Vec<usize> = old.iter().map(|s| s.reading.chars().count()).collect();
+        let old_text: Vec<char> = old.iter().flat_map(|s| s.reading.chars()).collect();
+
+        // Diff the old text against the new one at the character level.
+        let cp = common_prefix_len(&old_text, &text);
+        let cs = common_suffix_len(&old_text, &text, cp);
+
+        // Leading segments fully inside the common prefix are reused verbatim.
+        let mut lead_count = 0;
+        let mut lead_chars = 0;
+        while lead_count < old.len() && lead_chars + old_lens[lead_count] <= cp {
+            lead_chars += old_lens[lead_count];
+            lead_count += 1;
+        }
+        // Reopen the last leading segment when it sits right at the edit and is
+        // not yet full, so an append/edit merges into it instead of spawning a
+        // stray short segment (keeps forward typing at one growing segment).
+        if lead_count > 0
+            && lead_chars == cp
+            && cp < text.len()
+            && old_lens[lead_count - 1] < seg_len
+        {
+            lead_count -= 1;
+            lead_chars -= old_lens[lead_count];
+        }
+
+        // Trailing segments fully inside the common suffix keep their cached
+        // conversion (not reconverted), without crossing the leading region.
+        let mut trail_count = 0;
+        let mut trail_chars = 0;
+        while trail_count < old.len() - lead_count {
+            let idx = old.len() - 1 - trail_count;
+            if trail_chars + old_lens[idx] <= cs {
+                trail_chars += old_lens[idx];
+                trail_count += 1;
+            } else {
+                break;
+            }
+        }
+
+        let mut new_segments: Vec<ComposingSegment> = Vec::with_capacity(old.len() + 1);
         let mut converted_so_far = String::new();
+        let mut model_calls = 0usize;
+
+        // 1. Reused leading segments (reading, lctx, converted all still valid).
+        let mut old = old;
+        for seg in old.drain(..lead_count) {
+            converted_so_far.push_str(&seg.converted);
+            new_segments.push(seg);
+        }
+        // `old` now starts at the first non-leading segment; the trailing
+        // segments to keep are its last `trail_count` entries.
+        let trail_start = old.len() - trail_count;
+
+        // 2. Changed middle span: re-chunk into <= N chars and reconvert.
+        let mid = &text[lead_chars..text.len() - trail_chars];
         let mut start = 0;
-        while start < chars.len() {
-            let end = (start + seg_len).min(chars.len());
-            let reading: String = chars[start..end].iter().collect();
-
-            // Left context for this segment = surrounding text + everything
-            // converted so far, truncated to the model's context budget. The
-            // truncation keeps the tail, so the immediately-preceding segment
-            // dominates — exactly the "value of the left segment" relationship.
+        while start < mid.len() {
+            let end = (start + seg_len).min(mid.len());
+            let reading: String = mid[start..end].iter().collect();
+            // Left context = surrounding text + everything converted so far,
+            // truncated (keeps the tail, so the nearest left segment dominates).
             let lctx = self.truncate_context(&format!("{base_ctx}{converted_so_far}"));
-
-            // Reuse the cached conversion when both the reading and the left
-            // context for this segment are unchanged. Clone out first so the
-            // immutable borrow of `self.segments` ends before the model call.
-            let seg_index = new_segments.len();
-            let cached = self.segments.get(seg_index).and_then(|seg| {
-                (seg.reading == reading && seg.lctx == lctx).then(|| seg.converted.clone())
-            });
-            let converted = match cached {
-                Some(text) => text,
-                None => self
-                    .run_kana_kanji_conversion(&reading, &lctx, 1)
-                    .into_iter()
-                    .next()
-                    .unwrap_or_else(|| reading.clone()),
-            };
-
+            let converted = self
+                .run_kana_kanji_conversion(&reading, &lctx, 1)
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| reading.clone());
+            model_calls += 1;
             converted_so_far.push_str(&converted);
             new_segments.push(ComposingSegment {
                 reading,
@@ -247,8 +314,18 @@ impl InputMethodEngine {
             start = end;
         }
 
+        // 3. Reused trailing segments (cached conversion kept; lctx may be stale).
+        for seg in old.drain(trail_start..) {
+            converted_so_far.push_str(&seg.converted);
+            new_segments.push(seg);
+        }
+
         self.segments = new_segments;
         self.log_segment_state("convert");
+        debug!(
+            "segmented_auto_suggest: reused {} leading + {} trailing segment(s), reconverted {} middle segment(s)",
+            lead_count, trail_count, model_calls
+        );
 
         if converted_so_far == full_reading {
             None

@@ -158,16 +158,24 @@ fn test_delete_all_chars_clears_segments() {
     assert!(engine.live.text.is_empty(), "live text must be cleared");
 }
 
+/// Type `あいうえおか` (6 hiragana chars) via romaji.
+fn type_aiueoka(engine: &mut InputMethodEngine) {
+    for k in ['a', 'i', 'u', 'e', 'o', 'k', 'a'] {
+        engine.process_key(&press(k));
+    }
+}
+
 #[test]
-fn test_delete_middle_segment_repartitions_remainder() {
-    // Deleting all characters of one segment (here the first) re-partitions the
-    // surviving text from the left: the remaining characters collapse into new
-    // segments and the segment count drops accordingly.
+fn test_delete_first_segment_reuses_remaining_suffix() {
+    // Deleting the first segment leaves the rest as an unchanged common suffix,
+    // so the surviving segment is REUSED (not reconverted) to save cost — its
+    // cached conversion is kept even though it is now the leading segment.
     let mut engine = make_segment_engine(2);
     type_aiue(&mut engine); // "あいうえ" → ["あい", "うえ"]
     assert_eq!(engine.segments.len(), 2);
+    engine.segments[1].converted = "SENTINEL".to_string();
 
-    // Move to the start and delete the first segment's two chars ("あい").
+    // Delete the first segment's two chars ("あい") from the front.
     engine.process_key(&press_key(Keysym::HOME));
     engine.process_key(&press_key(Keysym::DELETE));
     engine.process_key(&press_key(Keysym::DELETE));
@@ -175,7 +183,46 @@ fn test_delete_middle_segment_repartitions_remainder() {
     assert_eq!(engine.input_buf.text, "うえ");
     let readings: Vec<&str> = engine.segments.iter().map(|s| s.reading.as_str()).collect();
     assert_eq!(readings, vec!["うえ"]);
-    // The surviving segment is now segment 0, so its left context resets to the
-    // (empty) surrounding context.
-    assert_eq!(engine.segments[0].lctx, "");
+    // Reused from the suffix → cached conversion survives (no reconvert).
+    assert_eq!(engine.segments[0].converted, "SENTINEL");
+}
+
+#[test]
+fn test_middle_delete_reconverts_only_touched_segment() {
+    // Deleting a character inside the middle segment reconverts ONLY that
+    // segment; the leading and trailing neighbors are reused untouched.
+    let mut engine = make_segment_engine(2);
+    type_aiueoka(&mut engine); // "あいうえおか" → ["あい", "うえ", "おか"]
+    assert_eq!(engine.segments.len(), 3);
+    engine.segments[0].converted = "S0".to_string();
+    engine.segments[2].converted = "S2".to_string();
+
+    // Cursor after う (pos 3), backspace deletes う — inside the middle segment.
+    engine.process_key(&press_key(Keysym::HOME));
+    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+
+    assert_eq!(engine.input_buf.text, "あいえおか");
+    let readings: Vec<&str> = engine.segments.iter().map(|s| s.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あい", "え", "おか"]);
+    // Neighbors reused (sentinels survive); only the middle segment reconverted.
+    assert_eq!(engine.segments[0].converted, "S0");
+    assert_eq!(engine.segments[2].converted, "S2");
+}
+
+#[test]
+fn test_append_reuses_leading_segments() {
+    // Typing at the end reuses every existing segment and only converts the new
+    // tail segment.
+    let mut engine = make_segment_engine(2);
+    type_aiue(&mut engine); // ["あい", "うえ"]
+    engine.segments[0].converted = "KEEP0".to_string();
+
+    engine.process_key(&press('o')); // "あいうえお"
+    let readings: Vec<&str> = engine.segments.iter().map(|s| s.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あい", "うえ", "お"]);
+    // The leading segment was reused, not reconverted.
+    assert_eq!(engine.segments[0].converted, "KEEP0");
 }
