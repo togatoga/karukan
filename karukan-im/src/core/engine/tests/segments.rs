@@ -213,9 +213,10 @@ fn test_middle_delete_reconverts_only_touched_segment() {
 }
 
 #[test]
-fn test_aux_text_shows_current_segment_and_lctx() {
-    // The aux line surfaces which segment the cursor is in and that segment's
-    // model left context, so the effective per-segment lctx is observable.
+fn test_aux_text_lctx_is_current_segment_lctx() {
+    // The aux line shows a single `lctx:` — the current segment's actual left
+    // context (here the conversion of the first segment) — not a separate
+    // per-segment fragment on top of the editor surrounding context.
     let mut engine = make_segment_engine(2);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -230,7 +231,15 @@ fn test_aux_text_shows_current_segment_and_lctx() {
             _ => None,
         })
         .expect("aux text action");
-    assert!(aux.contains("seg 2/2 lctx:"), "aux was: {aux}");
+
+    let seg_lctx = engine.segments[engine.current_segment_index()].lctx.clone();
+    assert!(!seg_lctx.is_empty());
+    assert!(aux.contains(&format!("lctx: {seg_lctx}")), "aux was: {aux}");
+    // No redundant separate segment fragment.
+    assert!(
+        !aux.contains("seg "),
+        "aux should have a single lctx: {aux}"
+    );
 }
 
 #[test]

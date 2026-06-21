@@ -60,16 +60,15 @@ impl InputMethodEngine {
         preedit
     }
 
-    /// Get combined context display string (lctx: ... rctx: ...)
-    /// Only displays context when surrounding text has been set from the editor.
-    pub(super) fn display_context(&self) -> String {
+    /// Format an `lctx: … rctx: …` line from explicit left/right context
+    /// strings, each truncated to `display_context_len` (left keeps its tail,
+    /// right keeps its head). Empty when both are absent or the limit is 0.
+    fn context_line(&self, left: Option<&str>, right: Option<&str>) -> String {
         let max_len = self.config.display_context_len;
         if max_len == 0 {
             return String::new();
         }
-        let ctx = self.surrounding_context.as_ref();
-
-        let lctx = ctx.and_then(|c| c.left.as_deref()).map(|left| {
+        let lctx = left.filter(|s| !s.is_empty()).map(|left| {
             let char_count = left.chars().count();
             if char_count > max_len {
                 let start = char_count - max_len;
@@ -79,7 +78,7 @@ impl InputMethodEngine {
             }
         });
 
-        let rctx = ctx.and_then(|c| c.right.as_deref()).map(|right| {
+        let rctx = right.filter(|s| !s.is_empty()).map(|right| {
             let char_count = right.chars().count();
             if char_count > max_len {
                 format!("{}...", right.chars().take(max_len).collect::<String>())
@@ -94,6 +93,37 @@ impl InputMethodEngine {
             (None, Some(r)) => format!("rctx: {}", r),
             (None, None) => String::new(),
         }
+    }
+
+    /// Surrounding-text context line (editor left/right). Used by conversion-mode
+    /// aux text, where there is no live segmentation.
+    pub(super) fn display_context(&self) -> String {
+        let ctx = self.surrounding_context.as_ref();
+        self.context_line(
+            ctx.and_then(|c| c.left.as_deref()),
+            ctx.and_then(|c| c.right.as_deref()),
+        )
+    }
+
+    /// Context line for live conversion (composing / auto-suggest). The single
+    /// `lctx:` shown is the *current segment's* actual left context — the editor
+    /// surrounding text plus the converted text of the preceding segments — so
+    /// the model context that segment really used is what gets displayed, rather
+    /// than a second redundant lctx. Falls back to the editor surrounding left
+    /// context when no segmented conversion is active. The right side stays the
+    /// editor surrounding right context.
+    pub(super) fn display_context_segmented(&self) -> String {
+        let ctx = self.surrounding_context.as_ref();
+        let surrounding_left = ctx.and_then(|c| c.left.as_deref());
+        let seg_lctx = self
+            .segments
+            .get(self.current_segment_index())
+            .map(|s| s.lctx.as_str())
+            .filter(|s| !s.is_empty());
+        self.context_line(
+            seg_lctx.or(surrounding_left),
+            ctx.and_then(|c| c.right.as_deref()),
+        )
     }
 
     /// Get the current mode indicator string
@@ -117,24 +147,20 @@ impl InputMethodEngine {
 
     /// Format aux text for composing input mode
     pub(super) fn format_aux_composing(&self) -> String {
-        let ctx = self.display_context();
+        let ctx = self.display_context_segmented();
         let model = self.model_name();
         let indicator = self.mode_indicator();
         // Show reading + unconverted romaji buffer (e.g. "わせだd")
         let romaji_buf = self.converters.romaji.buffer();
-        let seg = self.format_aux_segments();
         let reading = if self.input_buf.text.is_empty() && romaji_buf.is_empty() {
             String::new()
         } else {
             format!(" {}{}", self.input_buf.text, romaji_buf)
         };
         if ctx.is_empty() {
-            format!("{}{} Karukan ({}){}", indicator, reading, model, seg)
+            format!("{}{} Karukan ({})", indicator, reading, model)
         } else {
-            format!(
-                "{}{} Karukan ({}) | {}{}",
-                indicator, reading, model, ctx, seg
-            )
+            format!("{}{} Karukan ({}) | {}", indicator, reading, model, ctx)
         }
     }
 
@@ -195,37 +221,20 @@ impl InputMethodEngine {
         }
     }
 
-    /// Aux-text fragment describing the live-conversion segmentation: which
-    /// segment the cursor is in (1-based / total) and the left context actually
-    /// fed to the model for that segment — i.e. the editor surrounding text plus
-    /// the converted text of the preceding segments. Empty (and omitted) when no
-    /// segmented conversion is active. The leading ` | ` lets callers append it
-    /// directly to their aux line.
-    fn format_aux_segments(&self) -> String {
-        if self.segments.is_empty() {
-            return String::new();
-        }
-        let idx = self.current_segment_index();
-        let lctx = self
-            .segments
-            .get(idx)
-            .map(|s| s.lctx.as_str())
-            .unwrap_or("");
-        format!(" | seg {}/{} lctx: {}", idx + 1, self.segments.len(), lctx)
-    }
-
     /// Format aux text for auto-suggest mode
     /// Note: token count is not shown here to avoid performance overhead on every keystroke
     /// Timing shows inference_ms/process_key_ms (process_key_ms is from previous keystroke)
     pub(super) fn format_aux_suggest(&self, reading: &str) -> String {
-        let ctx = self.display_context();
+        // Single context block: the lctx is the current segment's actual left
+        // context (see `display_context_segmented`), so there is no separate
+        // per-segment lctx fragment widening the candidate window.
+        let ctx = self.display_context_segmented();
         let timing = format!(
             "{}ms/{}ms",
             self.metrics.conversion_ms, self.metrics.process_key_ms
         );
         let model = self.last_used_model();
         let indicator = self.mode_indicator();
-        let seg = self.format_aux_segments();
         // Append unconverted romaji buffer to reading (e.g. "わせだ" + "d" → "わせだd")
         let romaji_buf = self.converters.romaji.buffer();
         let display_reading = if romaji_buf.is_empty() {
@@ -234,14 +243,11 @@ impl InputMethodEngine {
             format!("{}{}", reading, romaji_buf)
         };
         if ctx.is_empty() {
-            format!(
-                "{} {} | {} | {}{}",
-                indicator, display_reading, timing, model, seg
-            )
+            format!("{} {} | {} | {}", indicator, display_reading, timing, model)
         } else {
             format!(
-                "{} {} | ctx: {} | {} | {}{}",
-                indicator, display_reading, ctx, timing, model, seg
+                "{} {} | ctx: {} | {} | {}",
+                indicator, display_reading, ctx, timing, model
             )
         }
     }
