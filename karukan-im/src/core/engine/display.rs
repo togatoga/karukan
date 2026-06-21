@@ -122,15 +122,19 @@ impl InputMethodEngine {
         let indicator = self.mode_indicator();
         // Show reading + unconverted romaji buffer (e.g. "わせだd")
         let romaji_buf = self.converters.romaji.buffer();
+        let seg = self.format_aux_segments();
         let reading = if self.input_buf.text.is_empty() && romaji_buf.is_empty() {
             String::new()
         } else {
             format!(" {}{}", self.input_buf.text, romaji_buf)
         };
         if ctx.is_empty() {
-            format!("{}{} Karukan ({})", indicator, reading, model)
+            format!("{}{} Karukan ({}){}", indicator, reading, model, seg)
         } else {
-            format!("{}{} Karukan ({}) | {}", indicator, reading, model, ctx)
+            format!(
+                "{}{} Karukan ({}) | {}{}",
+                indicator, reading, model, ctx, seg
+            )
         }
     }
 
@@ -191,6 +195,25 @@ impl InputMethodEngine {
         }
     }
 
+    /// Aux-text fragment describing the live-conversion segmentation: which
+    /// segment the cursor is in (1-based / total) and the left context actually
+    /// fed to the model for that segment — i.e. the editor surrounding text plus
+    /// the converted text of the preceding segments. Empty (and omitted) when no
+    /// segmented conversion is active. The leading ` | ` lets callers append it
+    /// directly to their aux line.
+    fn format_aux_segments(&self) -> String {
+        if self.segments.is_empty() {
+            return String::new();
+        }
+        let idx = self.current_segment_index();
+        let lctx = self
+            .segments
+            .get(idx)
+            .map(|s| s.lctx.as_str())
+            .unwrap_or("");
+        format!(" | seg {}/{} lctx: {}", idx + 1, self.segments.len(), lctx)
+    }
+
     /// Format aux text for auto-suggest mode
     /// Note: token count is not shown here to avoid performance overhead on every keystroke
     /// Timing shows inference_ms/process_key_ms (process_key_ms is from previous keystroke)
@@ -202,6 +225,7 @@ impl InputMethodEngine {
         );
         let model = self.last_used_model();
         let indicator = self.mode_indicator();
+        let seg = self.format_aux_segments();
         // Append unconverted romaji buffer to reading (e.g. "わせだ" + "d" → "わせだd")
         let romaji_buf = self.converters.romaji.buffer();
         let display_reading = if romaji_buf.is_empty() {
@@ -210,11 +234,14 @@ impl InputMethodEngine {
             format!("{}{}", reading, romaji_buf)
         };
         if ctx.is_empty() {
-            format!("{} {} | {} | {}", indicator, display_reading, timing, model)
+            format!(
+                "{} {} | {} | {}{}",
+                indicator, display_reading, timing, model, seg
+            )
         } else {
             format!(
-                "{} {} | ctx: {} | {} | {}",
-                indicator, display_reading, ctx, timing, model
+                "{} {} | ctx: {} | {} | {}{}",
+                indicator, display_reading, ctx, timing, model, seg
             )
         }
     }

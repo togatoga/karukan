@@ -213,6 +213,27 @@ fn test_middle_delete_reconverts_only_touched_segment() {
 }
 
 #[test]
+fn test_aux_text_shows_current_segment_and_lctx() {
+    // The aux line surfaces which segment the cursor is in and that segment's
+    // model left context, so the effective per-segment lctx is observable.
+    let mut engine = make_segment_engine(2);
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press('u'));
+    let result = engine.process_key(&press('e')); // "あいうえ" → 2 segments, cursor in #2
+
+    let aux = result
+        .actions
+        .iter()
+        .find_map(|a| match a {
+            EngineAction::UpdateAuxText(t) => Some(t.clone()),
+            _ => None,
+        })
+        .expect("aux text action");
+    assert!(aux.contains("seg 2/2 lctx:"), "aux was: {aux}");
+}
+
+#[test]
 fn test_append_reuses_leading_segments() {
     // Typing at the end reuses every existing segment and only converts the new
     // tail segment.
