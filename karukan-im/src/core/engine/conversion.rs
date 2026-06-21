@@ -39,6 +39,75 @@ fn common_suffix_len(a: &[char], b: &[char], prefix_len: usize) -> usize {
     n
 }
 
+/// How to re-segment the buffer after an edit, derived purely from the previous
+/// segmentation and the new text — no engine or model needed (so it is unit
+/// tested directly).
+///
+/// The new buffer is diffed against the old segmentation by common character
+/// prefix/suffix: whole segments inside the unchanged prefix/suffix are kept,
+/// and only the `mid_start..mid_end` span (in chars of the new text) has to be
+/// re-chunked and reconverted.
+#[derive(Debug, PartialEq, Eq)]
+struct SegmentPlan {
+    /// Leading old segments to reuse verbatim.
+    lead_count: usize,
+    /// Trailing old segments to reuse (cached conversion kept).
+    trail_count: usize,
+    /// Char offset in the new text where the changed span begins (= leading chars).
+    mid_start: usize,
+    /// Char offset in the new text where the changed span ends (= len - trailing chars).
+    mid_end: usize,
+}
+
+impl SegmentPlan {
+    /// Diff `old_text` (the concatenated readings of the previous segments,
+    /// whose individual char lengths are `old_lens`) against the new `text`.
+    fn compute(old_lens: &[usize], old_text: &[char], text: &[char], seg_len: usize) -> Self {
+        let cp = common_prefix_len(old_text, text);
+        let cs = common_suffix_len(old_text, text, cp);
+
+        // Leading whole segments that lie entirely inside the unchanged prefix.
+        let mut lead_count = 0;
+        let mut lead_chars = 0;
+        while lead_count < old_lens.len() && lead_chars + old_lens[lead_count] <= cp {
+            lead_chars += old_lens[lead_count];
+            lead_count += 1;
+        }
+        // Reopen the last leading segment when it sits right at the edit and is
+        // not yet full, so an append/edit merges into it instead of spawning a
+        // stray short segment (keeps forward typing at one growing segment).
+        if lead_count > 0
+            && lead_chars == cp
+            && cp < text.len()
+            && old_lens[lead_count - 1] < seg_len
+        {
+            lead_count -= 1;
+            lead_chars -= old_lens[lead_count];
+        }
+
+        // Trailing whole segments inside the unchanged suffix, without crossing
+        // into the leading region.
+        let mut trail_count = 0;
+        let mut trail_chars = 0;
+        while trail_count < old_lens.len() - lead_count {
+            let idx = old_lens.len() - 1 - trail_count;
+            if trail_chars + old_lens[idx] <= cs {
+                trail_chars += old_lens[idx];
+                trail_count += 1;
+            } else {
+                break;
+            }
+        }
+
+        Self {
+            lead_count,
+            trail_count,
+            mid_start: lead_chars,
+            mid_end: text.len() - trail_chars,
+        }
+    }
+}
+
 /// Helper for building a deduplicated list of conversion candidates.
 ///
 /// Two push paths exist: [`push`] dedups by text (skips duplicates), and
@@ -217,121 +286,91 @@ impl InputMethodEngine {
             self.segments.clear();
             return None;
         }
+        self.ensure_kanji_converter();
 
-        // Best-effort lazy init of the converter. Segmentation proceeds even on
-        // failure so `self.segments` always mirrors the current buffer (which
-        // segment the cursor is in, etc.); `run_kana_kanji_conversion` handles a
-        // missing converter by yielding nothing, and each segment then falls
-        // back to its own reading.
-        if self.converters.kanji.is_none()
-            && let Err(e) = self.init_kanji_converter()
-        {
-            debug!("Failed to initialize kanji converter: {}", e);
-        }
-
-        let seg_len = self.config.composing_segment_len.max(1);
+        let seg_len = self.segment_len();
         let text: Vec<char> = full_reading.chars().collect();
         let base_ctx = self.truncate_context_for_api();
 
         // Previous segmentation (covers the pre-edit text). Move it out so the
         // model calls below don't conflict with borrowing `self.segments`.
-        let old = std::mem::take(&mut self.segments);
+        let mut old = std::mem::take(&mut self.segments);
         let old_lens: Vec<usize> = old.iter().map(|s| s.reading.chars().count()).collect();
         let old_text: Vec<char> = old.iter().flat_map(|s| s.reading.chars()).collect();
 
-        // Diff the old text against the new one at the character level.
-        let cp = common_prefix_len(&old_text, &text);
-        let cs = common_suffix_len(&old_text, &text, cp);
+        let plan = SegmentPlan::compute(&old_lens, &old_text, &text, seg_len);
 
-        // Leading segments fully inside the common prefix are reused verbatim.
-        let mut lead_count = 0;
-        let mut lead_chars = 0;
-        while lead_count < old.len() && lead_chars + old_lens[lead_count] <= cp {
-            lead_chars += old_lens[lead_count];
-            lead_count += 1;
-        }
-        // Reopen the last leading segment when it sits right at the edit and is
-        // not yet full, so an append/edit merges into it instead of spawning a
-        // stray short segment (keeps forward typing at one growing segment).
-        if lead_count > 0
-            && lead_chars == cp
-            && cp < text.len()
-            && old_lens[lead_count - 1] < seg_len
-        {
-            lead_count -= 1;
-            lead_chars -= old_lens[lead_count];
-        }
-
-        // Trailing segments fully inside the common suffix keep their cached
-        // conversion (not reconverted), without crossing the leading region.
-        let mut trail_count = 0;
-        let mut trail_chars = 0;
-        while trail_count < old.len() - lead_count {
-            let idx = old.len() - 1 - trail_count;
-            if trail_chars + old_lens[idx] <= cs {
-                trail_chars += old_lens[idx];
-                trail_count += 1;
-            } else {
-                break;
-            }
-        }
-
-        let mut new_segments: Vec<ComposingSegment> = Vec::with_capacity(old.len() + 1);
-        let mut converted_so_far = String::new();
-        let mut model_calls = 0usize;
+        let mut segments: Vec<ComposingSegment> = Vec::with_capacity(old.len() + 1);
+        let mut combined = String::new();
 
         // 1. Reused leading segments (reading, lctx, converted all still valid).
-        let mut old = old;
-        for seg in old.drain(..lead_count) {
-            converted_so_far.push_str(&seg.converted);
-            new_segments.push(seg);
+        for seg in old.drain(..plan.lead_count) {
+            combined.push_str(&seg.converted);
+            segments.push(seg);
         }
         // `old` now starts at the first non-leading segment; the trailing
         // segments to keep are its last `trail_count` entries.
-        let trail_start = old.len() - trail_count;
+        let trail_start = old.len() - plan.trail_count;
 
-        // 2. Changed middle span: re-chunk into <= N chars and reconvert.
-        let mid = &text[lead_chars..text.len() - trail_chars];
-        let mut start = 0;
-        while start < mid.len() {
-            let end = (start + seg_len).min(mid.len());
-            let reading: String = mid[start..end].iter().collect();
-            // Left context = surrounding text + everything converted so far,
-            // truncated (keeps the tail, so the nearest left segment dominates).
-            let lctx = self.truncate_context(&format!("{base_ctx}{converted_so_far}"));
-            let converted = self
-                .run_kana_kanji_conversion(&reading, &lctx, 1)
-                .into_iter()
-                .next()
-                .unwrap_or_else(|| reading.clone());
-            model_calls += 1;
-            converted_so_far.push_str(&converted);
-            new_segments.push(ComposingSegment {
+        // 2. Changed middle span: re-chunk into <= N chars and reconvert. Each
+        //    segment's left context is the surrounding text plus everything
+        //    converted so far, truncated (the tail wins, so the nearest left
+        //    segment dominates).
+        let middle = &text[plan.mid_start..plan.mid_end];
+        for chunk in middle.chunks(seg_len) {
+            let reading: String = chunk.iter().collect();
+            let lctx = self.truncate_context(&format!("{base_ctx}{combined}"));
+            let converted = self.convert_segment(&reading, &lctx);
+            combined.push_str(&converted);
+            segments.push(ComposingSegment {
                 reading,
                 lctx,
                 converted,
             });
-            start = end;
         }
 
         // 3. Reused trailing segments (cached conversion kept; lctx may be stale).
         for seg in old.drain(trail_start..) {
-            converted_so_far.push_str(&seg.converted);
-            new_segments.push(seg);
+            combined.push_str(&seg.converted);
+            segments.push(seg);
         }
 
-        self.segments = new_segments;
+        let reconverted = segments.len() - plan.lead_count - plan.trail_count;
+        self.segments = segments;
         self.log_segment_state("convert");
         debug!(
             "segmented_auto_suggest: reused {} leading + {} trailing segment(s), reconverted {} middle segment(s)",
-            lead_count, trail_count, model_calls
+            plan.lead_count, plan.trail_count, reconverted
         );
 
-        if converted_so_far == full_reading {
-            None
-        } else {
-            Some(converted_so_far)
+        (combined != full_reading).then_some(combined)
+    }
+
+    /// Configured maximum segment length in chars, clamped to at least 1.
+    fn segment_len(&self) -> usize {
+        self.config.composing_segment_len.max(1)
+    }
+
+    /// Best-effort lazy init of the kanji converter. Segmentation proceeds even
+    /// on failure so `self.segments` always mirrors the current buffer (which
+    /// segment the cursor is in, etc.); `run_kana_kanji_conversion` handles a
+    /// missing converter by yielding nothing, and each segment falls back to its
+    /// own reading.
+    fn ensure_kanji_converter(&mut self) {
+        if self.converters.kanji.is_none()
+            && let Err(e) = self.init_kanji_converter()
+        {
+            debug!("Failed to initialize kanji converter: {}", e);
         }
+    }
+
+    /// Model conversion of one segment's `reading` given `lctx`, falling back to
+    /// the reading itself when the model yields nothing.
+    fn convert_segment(&mut self, reading: &str, lctx: &str) -> String {
+        self.run_kana_kanji_conversion(reading, lctx, 1)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| reading.to_string())
     }
 
     /// Index of the segment the cursor currently sits in, derived from the
@@ -340,8 +379,7 @@ impl InputMethodEngine {
     /// (and therefore the one whose conversion is recomputed). Returns 0 for an
     /// empty buffer or a cursor at the very start.
     pub(super) fn current_segment_index(&self) -> usize {
-        let seg_len = self.config.composing_segment_len.max(1);
-        self.input_buf.cursor_pos.saturating_sub(1) / seg_len
+        self.input_buf.cursor_pos.saturating_sub(1) / self.segment_len()
     }
 
     /// Emit a debug line describing the current segmentation: how many segments
@@ -1029,5 +1067,114 @@ impl InputMethodEngine {
     fn backspace_conversion(&mut self) -> EngineResult {
         // Return to hiragana mode with the reading
         self.cancel_conversion()
+    }
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::SegmentPlan;
+
+    /// Build a `SegmentPlan` from segment char-lengths and the new text. The old
+    /// text is reconstructed as `0..old_len` filler chars, and the new text as
+    /// `new` — only the diff positions matter, so distinct chars suffice.
+    fn plan(old_lens: &[usize], old_text: &str, new_text: &str, seg_len: usize) -> SegmentPlan {
+        let old: Vec<char> = old_text.chars().collect();
+        let new: Vec<char> = new_text.chars().collect();
+        assert_eq!(
+            old.len(),
+            old_lens.iter().sum::<usize>(),
+            "old_lens vs old_text"
+        );
+        SegmentPlan::compute(old_lens, &old, &new, seg_len)
+    }
+
+    #[test]
+    fn fresh_buffer_reconverts_everything() {
+        // No previous segmentation → whole buffer is the changed middle.
+        let p = plan(&[], "", "abcd", 2);
+        assert_eq!(
+            p,
+            SegmentPlan {
+                lead_count: 0,
+                trail_count: 0,
+                mid_start: 0,
+                mid_end: 4
+            }
+        );
+    }
+
+    #[test]
+    fn append_after_full_segment_reuses_all_leading() {
+        // [ab][cd] + "e": both full segments reused, only "e" is middle.
+        let p = plan(&[2, 2], "abcd", "abcde", 2);
+        assert_eq!(
+            p,
+            SegmentPlan {
+                lead_count: 2,
+                trail_count: 0,
+                mid_start: 4,
+                mid_end: 5
+            }
+        );
+    }
+
+    #[test]
+    fn append_after_nonfull_segment_reopens_it() {
+        // [ab][c] + "d": the non-full last segment is reopened so "cd" merges.
+        let p = plan(&[2, 1], "abc", "abcd", 2);
+        assert_eq!(
+            p,
+            SegmentPlan {
+                lead_count: 1,
+                trail_count: 0,
+                mid_start: 2,
+                mid_end: 4
+            }
+        );
+    }
+
+    #[test]
+    fn middle_insert_reuses_both_neighbors() {
+        // [ab][cd][ef], insert X at pos 3 → only the middle segment is rebuilt.
+        let p = plan(&[2, 2, 2], "abcdef", "abcXdef", 2);
+        assert_eq!(
+            p,
+            SegmentPlan {
+                lead_count: 1,
+                trail_count: 1,
+                mid_start: 2,
+                mid_end: 5
+            }
+        );
+    }
+
+    #[test]
+    fn delete_leading_char_keeps_suffix() {
+        // [ab][cd], delete 'a' → "bcd": "cd" stays as a reused suffix segment.
+        let p = plan(&[2, 2], "abcd", "bcd", 2);
+        assert_eq!(
+            p,
+            SegmentPlan {
+                lead_count: 0,
+                trail_count: 1,
+                mid_start: 0,
+                mid_end: 1
+            }
+        );
+    }
+
+    #[test]
+    fn unchanged_text_reconverts_nothing() {
+        // Same text (e.g. a refresh with no edit) → empty middle, all reused.
+        let p = plan(&[2, 2], "abcd", "abcd", 2);
+        assert_eq!(
+            p,
+            SegmentPlan {
+                lead_count: 2,
+                trail_count: 0,
+                mid_start: 4,
+                mid_end: 4
+            }
+        );
     }
 }
