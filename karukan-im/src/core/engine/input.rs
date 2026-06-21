@@ -14,25 +14,36 @@ fn append_candidates_dedup(target: &mut Vec<Candidate>, source: Vec<Candidate>) 
 impl InputMethodEngine {
     /// Refresh the input state: rebuild preedit and run auto-suggest for candidates.
     pub(super) fn refresh_input_state(&mut self) -> EngineResult {
-        // Alphabet mode with active live conversion: preserve the conversion display
-        if self.input_mode == InputMode::Alphabet && !self.live.text.is_empty() {
+        // Alphabet mode with active live conversion but no kana left to convert:
+        // preserve the existing conversion display without re-running the model.
+        // (When the buffer still contains kana we fall through and reconvert below,
+        // so a mixed reading like `きょうはABC` keeps live-converting.)
+        if self.input_mode == InputMode::Alphabet
+            && !self.live.text.is_empty()
+            && !karukan_engine::contains_kana(&self.input_buf.text)
+        {
             let preedit = self.set_composing_state();
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Run auto-suggest (skip in alphabet mode — no hiragana to convert).
-        // The buffer is converted via `segmented_auto_suggest`, which splits long
-        // input into bounded-length segments so per-keystroke latency stays flat;
-        // for input within one segment this is identical to a whole-buffer call.
-        let candidates =
-            if self.input_mode != InputMode::Alphabet && !self.input_buf.text.is_empty() {
-                let reading = self.input_buf.text.clone();
-                self.segmented_auto_suggest()
-                    .map(|converted| (vec![converted], reading))
-            } else {
-                self.segments.clear();
-                None
-            };
+        // Run auto-suggest via segmented conversion. Normally skipped in alphabet
+        // mode (raw latin has no hiragana to convert), but if the buffer still
+        // contains kana — e.g. the user typed hiragana, switched to alphabet mode,
+        // and kept typing — keep converting the mixed reading so live conversion
+        // stays alive. `segmented_auto_suggest` splits long input into
+        // bounded-length segments so per-keystroke latency stays flat; for input
+        // within one segment this is identical to a whole-buffer call.
+        let convert = !self.input_buf.text.is_empty()
+            && (self.input_mode != InputMode::Alphabet
+                || karukan_engine::contains_kana(&self.input_buf.text));
+        let candidates = if convert {
+            let reading = self.input_buf.text.clone();
+            self.segmented_auto_suggest()
+                .map(|converted| (vec![converted], reading))
+        } else {
+            self.segments.clear();
+            None
+        };
 
         let Some((candidates, reading)) = candidates else {
             // No useful AI suggestion — still show learning + dictionary + rule-based
