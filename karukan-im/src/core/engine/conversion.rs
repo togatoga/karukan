@@ -209,7 +209,7 @@ impl InputMethodEngine {
     /// it equals the raw reading (no useful model suggestion).
     ///
     /// Note: for input no longer than one segment (the common case, default
-    /// N=50) this produces exactly one model call over the whole buffer, i.e.
+    /// N=40) this produces exactly one model call over the whole buffer, i.e.
     /// identical behavior to a whole-buffer conversion.
     pub(super) fn segmented_auto_suggest(&mut self) -> Option<String> {
         let full_reading = self.input_buf.text.clone();

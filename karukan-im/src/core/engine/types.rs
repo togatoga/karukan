@@ -118,7 +118,7 @@ impl Default for EngineConfig {
             num_candidates: 3, // Space conversion: beam search with 3 candidates
             display_context_len: 10,
             max_api_context_len: 10,
-            composing_segment_len: 50,
+            composing_segment_len: 40,
             short_input_threshold: 10,
             beam_width: 3,
             max_latency_ms: 100,

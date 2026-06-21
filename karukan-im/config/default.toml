@@ -14,7 +14,7 @@ max_context_length = 20
 # 入力をこの長さごとのセグメントに内部分割し、各セグメントを個別に変換することで
 # 長文入力でも1キーあたりの変換レイテンシを一定以内に抑える。
 # 各セグメントの左コンテキストは直前までのセグメントの変換結果になる。
-composing_segment_len = 50
+composing_segment_len = 40
 # ビームサーチを使うトークン数の上限（それ以上はgreedy）
 short_input_threshold = 10
 # 短い入力のビーム幅
