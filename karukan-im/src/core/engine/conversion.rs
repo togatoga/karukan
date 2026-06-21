@@ -248,18 +248,7 @@ impl InputMethodEngine {
         }
 
         self.segments = new_segments;
-        let current = self.current_segment_index();
-        let current_len = self
-            .segments
-            .get(current)
-            .map(|seg| seg.reading.chars().count())
-            .unwrap_or(0);
-        debug!(
-            "segmented_auto_suggest: {} segment(s); cursor in segment {} ({} char(s))",
-            self.segments.len(),
-            current,
-            current_len
-        );
+        self.log_segment_state("convert");
 
         if converted_so_far == full_reading {
             None
@@ -276,6 +265,28 @@ impl InputMethodEngine {
     pub(super) fn current_segment_index(&self) -> usize {
         let seg_len = self.config.composing_segment_len.max(1);
         self.input_buf.cursor_pos.saturating_sub(1) / seg_len
+    }
+
+    /// Emit a debug line describing the current segmentation: how many segments
+    /// exist and which one — and how long — the cursor currently sits in. `at`
+    /// labels the call site (e.g. `"convert"` after re-segmenting, `"cursor"`
+    /// after a caret move) so the log shows segment changes on cursor movement,
+    /// not just on conversion.
+    pub(super) fn log_segment_state(&self, at: &str) {
+        let current = self.current_segment_index();
+        let current_len = self
+            .segments
+            .get(current)
+            .map(|seg| seg.reading.chars().count())
+            .unwrap_or(0);
+        debug!(
+            "segments [{}]: {} segment(s); cursor at pos {} in segment {} ({} char(s))",
+            at,
+            self.segments.len(),
+            self.input_buf.cursor_pos,
+            current,
+            current_len
+        );
     }
 
     /// Start kanji conversion for the current input buffer.
