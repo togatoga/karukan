@@ -20,7 +20,7 @@ short_input_threshold = 10
 # 短い入力のビーム幅
 beam_width = 3
 # メインモデルの推論がこの時間(ms)を超えたらlight_modelに自動切替(0で無効)
-max_latency_ms = 80
+max_latency_ms = 200
 # Model variant id or GGUF path (uses registry default if unset)
 model = "jinen-v1-small-q5"
 # Beam search model for Space conversion (uses default model only if unset)

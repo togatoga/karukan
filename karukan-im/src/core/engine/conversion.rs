@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
-use tracing::{debug, trace};
+use tracing::debug;
 
 use super::*;
 
@@ -248,10 +248,17 @@ impl InputMethodEngine {
         }
 
         self.segments = new_segments;
-        trace!(
-            "segmented_auto_suggest: {} segment(s), cursor in segment {}",
+        let current = self.current_segment_index();
+        let current_len = self
+            .segments
+            .get(current)
+            .map(|seg| seg.reading.chars().count())
+            .unwrap_or(0);
+        debug!(
+            "segmented_auto_suggest: {} segment(s); cursor in segment {} ({} char(s))",
             self.segments.len(),
-            self.current_segment_index()
+            current,
+            current_len
         );
 
         if converted_so_far == full_reading {
