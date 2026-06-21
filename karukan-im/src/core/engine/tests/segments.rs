@@ -139,3 +139,43 @@ fn test_segments_cleared_on_commit() {
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(engine.segments.is_empty());
 }
+
+#[test]
+fn test_delete_all_chars_clears_segments() {
+    // Erasing every character ends the composition (back to Empty). The segment
+    // cache and live-conversion text must be cleared too, so nothing from the
+    // previous composition leaks into the next one's preedit.
+    let mut engine = make_segment_engine(2);
+    type_aiue(&mut engine);
+    assert!(!engine.segments.is_empty());
+
+    for _ in 0..4 {
+        engine.process_key(&press_key(Keysym::BACKSPACE));
+    }
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert_eq!(engine.input_buf.text, "");
+    assert!(engine.segments.is_empty(), "segment cache must be cleared");
+    assert!(engine.live.text.is_empty(), "live text must be cleared");
+}
+
+#[test]
+fn test_delete_middle_segment_repartitions_remainder() {
+    // Deleting all characters of one segment (here the first) re-partitions the
+    // surviving text from the left: the remaining characters collapse into new
+    // segments and the segment count drops accordingly.
+    let mut engine = make_segment_engine(2);
+    type_aiue(&mut engine); // "あいうえ" → ["あい", "うえ"]
+    assert_eq!(engine.segments.len(), 2);
+
+    // Move to the start and delete the first segment's two chars ("あい").
+    engine.process_key(&press_key(Keysym::HOME));
+    engine.process_key(&press_key(Keysym::DELETE));
+    engine.process_key(&press_key(Keysym::DELETE));
+
+    assert_eq!(engine.input_buf.text, "うえ");
+    let readings: Vec<&str> = engine.segments.iter().map(|s| s.reading.as_str()).collect();
+    assert_eq!(readings, vec!["うえ"]);
+    // The surviving segment is now segment 0, so its left context resets to the
+    // (empty) surrounding context.
+    assert_eq!(engine.segments[0].lctx, "");
+}

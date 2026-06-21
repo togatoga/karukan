@@ -265,6 +265,12 @@ impl InputMethodEngine {
         if self.build_input_display().is_empty() {
             self.state = InputState::Empty;
             self.input_buf.clear();
+            // Erasing the whole buffer ends the composition: drop the live
+            // conversion text and the segment cache so neither leaks into the
+            // next composing session's preedit (build_composing_preedit renders
+            // a stale live.text, and the segment cache is keyed by index).
+            self.live.text.clear();
+            self.segments.clear();
             // Emoji mode is per-session and bound to the typed `:` —
             // if the user erased back to an empty buffer, the session
             // is over. Restore whatever mode the user was in before
