@@ -96,7 +96,7 @@ impl InputMethodEngine {
     }
 
     /// Surrounding-text context line (editor left/right). Used by conversion-mode
-    /// aux text, where there is no live segmentation.
+    /// aux text, where there is no live chunking.
     pub(super) fn display_context(&self) -> String {
         let ctx = self.surrounding_context.as_ref();
         self.context_line(
@@ -106,22 +106,22 @@ impl InputMethodEngine {
     }
 
     /// Context line for live conversion (composing / auto-suggest). The single
-    /// `lctx:` shown is the *current segment's* actual left context — the editor
-    /// surrounding text plus the converted text of the preceding segments — so
-    /// the model context that segment really used is what gets displayed, rather
+    /// `lctx:` shown is the *current chunk's* actual left context — the editor
+    /// surrounding text plus the converted text of the preceding chunks — so
+    /// the model context that chunk really used is what gets displayed, rather
     /// than a second redundant lctx. Falls back to the editor surrounding left
-    /// context when no segmented conversion is active. The right side stays the
+    /// context when no chunked conversion is active. The right side stays the
     /// editor surrounding right context.
-    pub(super) fn display_context_segmented(&self) -> String {
+    pub(super) fn display_context_chunked(&self) -> String {
         let ctx = self.surrounding_context.as_ref();
         let surrounding_left = ctx.and_then(|c| c.left.as_deref());
-        let seg_lctx = self
-            .segments
-            .get(self.current_segment_index())
+        let chunk_lctx = self
+            .chunks
+            .get(self.current_chunk_index())
             .map(|s| s.lctx.as_str())
             .filter(|s| !s.is_empty());
         self.context_line(
-            seg_lctx.or(surrounding_left),
+            chunk_lctx.or(surrounding_left),
             ctx.and_then(|c| c.right.as_deref()),
         )
     }
@@ -147,7 +147,7 @@ impl InputMethodEngine {
 
     /// Format aux text for composing input mode
     pub(super) fn format_aux_composing(&self) -> String {
-        let ctx = self.display_context_segmented();
+        let ctx = self.display_context_chunked();
         let model = self.model_name();
         let indicator = self.mode_indicator();
         // Show reading + unconverted romaji buffer (e.g. "わせだd")
@@ -225,10 +225,10 @@ impl InputMethodEngine {
     /// Note: token count is not shown here to avoid performance overhead on every keystroke
     /// Timing shows inference_ms/process_key_ms (process_key_ms is from previous keystroke)
     pub(super) fn format_aux_suggest(&self, reading: &str) -> String {
-        // Single context block: the lctx is the current segment's actual left
-        // context (see `display_context_segmented`), so there is no separate
-        // per-segment lctx fragment widening the candidate window.
-        let ctx = self.display_context_segmented();
+        // Single context block: the lctx is the current chunk's actual left
+        // context (see `display_context_chunked`), so there is no separate
+        // per-chunk lctx fragment widening the candidate window.
+        let ctx = self.display_context_chunked();
         let timing = format!(
             "{}ms/{}ms",
             self.metrics.conversion_ms, self.metrics.process_key_ms

@@ -142,11 +142,11 @@ pub struct InputMethodEngine {
     input_buf: InputBuffer,
     /// Live conversion state
     live: LiveConversion,
-    /// Internal segmentation of the composing buffer used by
-    /// `segmented_auto_suggest`: a cache of the per-segment model conversions
+    /// Internal chunking of the composing buffer used by
+    /// `chunked_auto_suggest`: a cache of the per-chunk model conversions
     /// (keyed by reading + left context) so a keystroke only reconverts the
-    /// segment it touched instead of the whole buffer. Empty when not composing.
-    segments: Vec<ComposingSegment>,
+    /// chunk it touched instead of the whole buffer. Empty when not composing.
+    chunks: Vec<ComposingChunk>,
     /// Dictionaries (system, user)
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
@@ -171,7 +171,7 @@ impl InputMethodEngine {
             pre_emoji_mode: None,
             input_buf: InputBuffer::new(),
             live: LiveConversion::default(),
-            segments: Vec::new(),
+            chunks: Vec::new(),
             dicts: Dictionaries::default(),
             learning: None,
         }
@@ -244,7 +244,7 @@ impl InputMethodEngine {
         self.pre_emoji_mode = None;
         self.input_buf.clear();
         self.live.text.clear();
-        self.segments.clear();
+        self.chunks.clear();
         self.metrics = ConversionMetrics::default();
     }
 
@@ -266,11 +266,11 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             self.input_buf.clear();
             // Erasing the whole buffer ends the composition: drop the live
-            // conversion text and the segment cache so neither leaks into the
+            // conversion text and the chunk cache so neither leaks into the
             // next composing session's preedit (build_composing_preedit renders
-            // a stale live.text, and the segment cache is keyed by index).
+            // a stale live.text, and the chunk cache is keyed by index).
             self.live.text.clear();
-            self.segments.clear();
+            self.chunks.clear();
             // Emoji mode is per-session and bound to the typed `:` —
             // if the user erased back to an empty buffer, the session
             // is over. Restore whatever mode the user was in before

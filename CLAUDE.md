@@ -135,7 +135,7 @@ cargo clippy --workspace  # Lint all crates
   - `types.rs` — EngineConfig, EngineResult, EngineAction, Converters, ConversionStrategy
   - `input.rs` — Key input handling for Composing state
   - `input_buffer.rs` — Input buffer (hiragana text + cursor position)
-  - `conversion.rs` — Conversion mode handling, plus the segmented live-conversion / auto-suggest path (`segmented_auto_suggest`, the pure `SegmentPlan` diff)
+  - `conversion.rs` — Conversion mode handling, plus the chunked live-conversion / auto-suggest path (`chunked_auto_suggest`, the pure `ChunkPlan` diff)
   - `cursor.rs` — Cursor movement
   - `display.rs` — Preedit text display
   - `mode.rs` — Mode switching (katakana, alphabet, live conversion)
@@ -186,7 +186,7 @@ The engine-internal `InputMode::Alphabet` (entered via Shift+letter on Linux/fci
 - RomajiConverter accumulates output; consumed into input_buf via delta tracking
 - Models use jinen format with special Unicode tokens (U+EE00–U+EE02) from the Private Use Area; model input is katakana (hiragana is converted to katakana before inference)
 - Model registry defined in `karukan-engine/models.toml`; default models use Q5_K_M quantization
-- Live conversion (auto-suggest) splits the composing buffer into internal segments of at most `composing_segment_len` reading chars (default 40, configurable) so each model call stays bounded for long input. `segmented_auto_suggest` re-segments incrementally: it diffs the new buffer against the previous segmentation by common character prefix/suffix and reconverts only the changed span (`SegmentPlan` decides which leading/trailing segments to reuse). Each segment's left context (lctx) is the editor surrounding text plus the converted text of the preceding segments, truncated to `max_context_length`. Segments are internal — the user sees one continuous preedit, and the aux text shows the current segment's lctx as its single `lctx:`
+- Live conversion (auto-suggest) splits the composing buffer into internal chunks of at most `composing_chunk_len` reading chars (default 40, configurable) so each model call stays bounded for long input. `chunked_auto_suggest` re-chunks incrementally: it diffs the new buffer against the previous chunking by common character prefix/suffix and reconverts only the changed span (`ChunkPlan` decides which leading/trailing chunks to reuse). Each chunk's left context (lctx) is the editor surrounding text plus the converted text of the preceding chunks, truncated to `max_context_length`. Chunks are internal — the user sees one continuous preedit, and the aux text shows the current chunk's lctx as its single `lctx:`
 - Learning cache records user-selected conversions and boosts them on subsequent conversions; candidate priority: Learning → User Dictionary → Model → System Dictionary → Fallback → Rewriter
 - Data files (system dictionary `dict.bin`, user dictionaries `user_dicts/`, learning cache `learning.tsv`) live in the data directory: `~/.local/share/karukan-im/` on Linux, `~/Library/Application Support/com.karukan.karukan-im/` on macOS; a prebuilt `dict.tgz` is published on GitHub releases
 - Learning cache is persisted as TSV (`learning.tsv` in the data directory); saved on deactivate and engine free, not on every commit
