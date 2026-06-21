@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
-use tracing::debug;
+use tracing::{debug, trace};
 
 use super::*;
 
@@ -75,7 +75,16 @@ impl InputMethodEngine {
     /// model is trained on kana → kanji and hallucinates garbage (e.g. `「` → `w`)
     /// for symbol- or alphabet-only inputs. Rule-based variants from
     /// `SymbolRewriter` cover those cases instead.
-    fn run_kana_kanji_conversion(&mut self, reading: &str, num_candidates: usize) -> Vec<String> {
+    ///
+    /// `api_context` is the left context (lctx) fed to the model. Callers pass
+    /// `truncate_context_for_api()` for a whole-buffer conversion, or — for
+    /// segmented live conversion — the converted text of the preceding segments.
+    fn run_kana_kanji_conversion(
+        &mut self,
+        reading: &str,
+        api_context: &str,
+        num_candidates: usize,
+    ) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return vec![];
         }
@@ -83,7 +92,6 @@ impl InputMethodEngine {
             return vec![];
         };
         let katakana = karukan_engine::hiragana_to_katakana(reading);
-        let api_context = self.truncate_context_for_api();
         let main_model_name = converter.model_display_name().to_string();
 
         let strategy = self.determine_strategy(reading, num_candidates);
@@ -103,12 +111,12 @@ impl InputMethodEngine {
                 let (default_top1, light_candidates) = std::thread::scope(|s| {
                     let h_default = s.spawn(|| {
                         converter
-                            .convert(&katakana, &api_context, 1)
+                            .convert(&katakana, api_context, 1)
                             .unwrap_or_default()
                     });
                     let h_beam = s.spawn(|| {
                         light_converter
-                            .convert(&katakana, &api_context, bw)
+                            .convert(&katakana, api_context, bw)
                             .unwrap_or_default()
                     });
                     (
@@ -123,14 +131,14 @@ impl InputMethodEngine {
                     return vec![];
                 };
                 light_converter
-                    .convert(&katakana, &api_context, 1)
+                    .convert(&katakana, api_context, 1)
                     .unwrap_or_default()
             }
             ConversionStrategy::MainModelOnly => converter
-                .convert(&katakana, &api_context, 1)
+                .convert(&katakana, api_context, 1)
                 .unwrap_or_default(),
             ConversionStrategy::MainModelBeam { beam_width } => converter
-                .convert(&katakana, &api_context, *beam_width)
+                .convert(&katakana, api_context, *beam_width)
                 .unwrap_or_default(),
         };
 
@@ -161,25 +169,106 @@ impl InputMethodEngine {
         candidates
     }
 
-    /// Run inference for auto-suggest and return candidates (raw strings).
-    /// Initializes the kanji converter lazily. Falls back to the reading itself
-    /// if no candidates are produced.
-    pub(super) fn run_auto_suggest(&mut self, reading: &str, num_candidates: usize) -> Vec<String> {
-        // Ensure kanji converter is initialized
+    /// Auto-suggest over the whole composing buffer, split into segments of at
+    /// most `config.composing_segment_len` reading characters so each model call
+    /// stays bounded for long input.
+    ///
+    /// Each segment's left context is the editor surrounding text followed by
+    /// the converted text of all preceding segments (truncated to
+    /// `max_api_context_len`), so the concatenated result still reads
+    /// coherently. Unchanged segments are reused from `self.segments` (cache
+    /// keyed by reading + left context), so a keystroke at the end of the buffer
+    /// only reconverts the final segment.
+    ///
+    /// Returns the concatenated conversion of the whole buffer, or `None` when
+    /// it equals the raw reading (no useful model suggestion) — matching the
+    /// `run_auto_suggest` "fall back to the reading" contract.
+    ///
+    /// Note: for input no longer than one segment (the common case, default
+    /// N=50) this produces exactly one model call over the whole buffer, i.e.
+    /// identical behavior to the previous whole-buffer auto-suggest.
+    pub(super) fn segmented_auto_suggest(&mut self) -> Option<String> {
+        let full_reading = self.input_buf.text.clone();
+        if full_reading.is_empty() {
+            self.segments.clear();
+            return None;
+        }
+
+        // Best-effort lazy init of the converter. Segmentation proceeds even on
+        // failure so `self.segments` always mirrors the current buffer (which
+        // segment the cursor is in, etc.); `run_kana_kanji_conversion` handles a
+        // missing converter by yielding nothing, and each segment then falls
+        // back to its own reading.
         if self.converters.kanji.is_none()
             && let Err(e) = self.init_kanji_converter()
         {
             debug!("Failed to initialize kanji converter: {}", e);
-            return vec![reading.to_string()];
         }
 
-        let candidates = self.run_kana_kanji_conversion(reading, num_candidates);
+        let seg_len = self.config.composing_segment_len.max(1);
+        let chars: Vec<char> = full_reading.chars().collect();
+        let base_ctx = self.truncate_context_for_api();
 
-        if candidates.is_empty() {
-            vec![reading.to_string()]
+        let mut new_segments: Vec<ComposingSegment> = Vec::with_capacity(chars.len() / seg_len + 1);
+        let mut converted_so_far = String::new();
+        let mut start = 0;
+        while start < chars.len() {
+            let end = (start + seg_len).min(chars.len());
+            let reading: String = chars[start..end].iter().collect();
+
+            // Left context for this segment = surrounding text + everything
+            // converted so far, truncated to the model's context budget. The
+            // truncation keeps the tail, so the immediately-preceding segment
+            // dominates — exactly the "value of the left segment" relationship.
+            let lctx = self.truncate_context(&format!("{base_ctx}{converted_so_far}"));
+
+            // Reuse the cached conversion when both the reading and the left
+            // context for this segment are unchanged. Clone out first so the
+            // immutable borrow of `self.segments` ends before the model call.
+            let seg_index = new_segments.len();
+            let cached = self.segments.get(seg_index).and_then(|seg| {
+                (seg.reading == reading && seg.lctx == lctx).then(|| seg.converted.clone())
+            });
+            let converted = match cached {
+                Some(text) => text,
+                None => self
+                    .run_kana_kanji_conversion(&reading, &lctx, 1)
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| reading.clone()),
+            };
+
+            converted_so_far.push_str(&converted);
+            new_segments.push(ComposingSegment {
+                reading,
+                lctx,
+                converted,
+            });
+            start = end;
+        }
+
+        self.segments = new_segments;
+        trace!(
+            "segmented_auto_suggest: {} segment(s), cursor in segment {}",
+            self.segments.len(),
+            self.current_segment_index()
+        );
+
+        if converted_so_far == full_reading {
+            None
         } else {
-            candidates
+            Some(converted_so_far)
         }
+    }
+
+    /// Index of the segment the cursor currently sits in, derived from the
+    /// composing-buffer cursor position and the configured segment length.
+    /// This is the segment a character insert/delete at the cursor will land in
+    /// (and therefore the one whose conversion is recomputed). Returns 0 for an
+    /// empty buffer or a cursor at the very start.
+    pub(super) fn current_segment_index(&self) -> usize {
+        let seg_len = self.config.composing_segment_len.max(1);
+        self.input_buf.cursor_pos.saturating_sub(1) / seg_len
     }
 
     /// Start kanji conversion for the current input buffer.
@@ -360,7 +449,8 @@ impl InputMethodEngine {
             debug!("Failed to initialize kanji converter: {}", e);
         }
 
-        let candidates = self.run_kana_kanji_conversion(reading, num_candidates);
+        let api_context = self.truncate_context_for_api();
+        let candidates = self.run_kana_kanji_conversion(reading, &api_context, num_candidates);
 
         let hiragana = reading.to_string();
         let katakana = karukan_engine::hiragana_to_katakana(reading);

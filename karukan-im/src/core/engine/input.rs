@@ -20,17 +20,17 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Run auto-suggest (skip in alphabet mode — no hiragana to convert)
+        // Run auto-suggest (skip in alphabet mode — no hiragana to convert).
+        // The buffer is converted via `segmented_auto_suggest`, which splits long
+        // input into bounded-length segments so per-keystroke latency stays flat;
+        // for input within one segment this is identical to a whole-buffer call.
         let candidates =
             if self.input_mode != InputMode::Alphabet && !self.input_buf.text.is_empty() {
                 let reading = self.input_buf.text.clone();
-                let result = self.run_auto_suggest(&reading, 1);
-                if !result.is_empty() && result[0] != self.input_buf.text {
-                    Some((result, reading))
-                } else {
-                    None
-                }
+                self.segmented_auto_suggest()
+                    .map(|converted| (vec![converted], reading))
             } else {
+                self.segments.clear();
                 None
             };
 
@@ -407,6 +407,7 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             self.input_buf.clear();
             self.live.text.clear();
+            self.segments.clear();
             return EngineResult::consumed()
                 .with_action(EngineAction::HideCandidates)
                 .with_action(EngineAction::HideAuxText);
@@ -423,6 +424,7 @@ impl InputMethodEngine {
         self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
+        self.segments.clear();
         self.state = InputState::Empty;
         self.exit_emoji_mode();
 
@@ -467,6 +469,7 @@ impl InputMethodEngine {
         self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
+        self.segments.clear();
         self.state = InputState::Empty;
         // Emoji mode is per-session: leaving it returns the user to
         // whatever mode they were in before typing `:` so their next

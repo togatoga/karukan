@@ -142,6 +142,11 @@ pub struct InputMethodEngine {
     input_buf: InputBuffer,
     /// Live conversion state
     live: LiveConversion,
+    /// Internal segmentation of the composing buffer used by
+    /// `segmented_auto_suggest`: a cache of the per-segment model conversions
+    /// (keyed by reading + left context) so a keystroke only reconverts the
+    /// segment it touched instead of the whole buffer. Empty when not composing.
+    segments: Vec<ComposingSegment>,
     /// Dictionaries (system, user)
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
@@ -166,6 +171,7 @@ impl InputMethodEngine {
             pre_emoji_mode: None,
             input_buf: InputBuffer::new(),
             live: LiveConversion::default(),
+            segments: Vec::new(),
             dicts: Dictionaries::default(),
             learning: None,
         }
@@ -238,6 +244,7 @@ impl InputMethodEngine {
         self.pre_emoji_mode = None;
         self.input_buf.clear();
         self.live.text.clear();
+        self.segments.clear();
         self.metrics = ConversionMetrics::default();
     }
 

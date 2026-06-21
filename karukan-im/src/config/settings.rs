@@ -47,6 +47,12 @@ pub struct ConversionSettings {
     pub use_context: bool,
     /// Maximum number of surrounding text characters passed to the conversion API
     pub max_context_length: usize,
+    /// Maximum reading length (in characters) converted by the model in a single
+    /// call during live conversion. The composing buffer is split into segments
+    /// of at most this many characters so per-keystroke latency stays bounded
+    /// for long input; each segment's left context is the converted text of the
+    /// preceding segments.
+    pub composing_segment_len: usize,
     /// Path to dictionary binary file (optional, defaults to data_dir/dict.bin)
     pub dict_path: Option<String>,
     /// Model variant id (optional, defaults to registry default)

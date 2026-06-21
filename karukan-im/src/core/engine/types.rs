@@ -72,6 +72,11 @@ pub struct EngineConfig {
     pub display_context_len: usize,
     /// Maximum context length for API calls (to avoid overflow)
     pub max_api_context_len: usize,
+    /// Maximum reading length (chars) converted by the model in a single call.
+    /// The composing buffer is split into segments of at most this many chars so
+    /// live-conversion latency stays bounded for long input. See
+    /// [`ComposingSegment`] and `segmented_auto_suggest`.
+    pub composing_segment_len: usize,
     /// Token count threshold for beam search (at or below → beam, above → greedy)
     pub short_input_threshold: usize,
     /// Beam width for short input
@@ -97,6 +102,7 @@ impl EngineConfig {
             } else {
                 0
             },
+            composing_segment_len: settings.conversion.composing_segment_len,
             short_input_threshold: settings.conversion.short_input_threshold,
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
@@ -112,6 +118,7 @@ impl Default for EngineConfig {
             num_candidates: 3, // Space conversion: beam search with 3 candidates
             display_context_len: 10,
             max_api_context_len: 10,
+            composing_segment_len: 50,
             short_input_threshold: 10,
             beam_width: 3,
             max_latency_ms: 100,
@@ -150,6 +157,29 @@ pub(crate) enum InputMode {
     /// `:`-prefixed input from the candidate-build pipeline and surfaces
     /// emoji candidates as the user types.
     Emoji,
+}
+
+/// One internal chunk of the composing buffer (at most
+/// `EngineConfig::composing_segment_len` reading chars) together with its cached
+/// model conversion.
+///
+/// Segments are an internal optimization only — the user always sees the
+/// concatenation of every segment's `converted` text as one continuous preedit;
+/// there are no visible bunsetsu boundaries. Splitting the reading bounds each
+/// model call to N chars so live-conversion latency stays flat for long input,
+/// and unchanged segments are reused across keystrokes (cache keyed by
+/// `reading` + `lctx`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(in crate::core) struct ComposingSegment {
+    /// Hiragana reading for this chunk (≤ N chars).
+    pub reading: String,
+    /// Left context used when converting this chunk: the editor surrounding
+    /// text followed by the converted text of all preceding chunks, truncated
+    /// to `max_api_context_len`. This is the "value of the left segment(s)".
+    pub lctx: String,
+    /// Model conversion of `reading` given `lctx` — this chunk's slice of the
+    /// live preedit. Falls back to `reading` when the model yields nothing.
+    pub converted: String,
 }
 
 /// Live conversion state: enabled flag and current converted text
