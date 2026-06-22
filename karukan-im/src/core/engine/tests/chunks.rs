@@ -40,6 +40,20 @@ fn test_buffer_split_into_chunks_of_n_chars() {
 }
 
 #[test]
+fn test_chunks_break_at_punctuation() {
+    // With a large chunk length nothing is split by char count, so the only
+    // boundaries come from punctuation: each clause becomes its own chunk while
+    // consecutive marks stay attached.
+    let mut engine = make_chunk_engine(40);
+    engine.input_buf.clear();
+    engine.input_buf.insert("あ、いう。え");
+    engine.chunked_auto_suggest();
+
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あ、", "いう。", "え"]);
+}
+
+#[test]
 fn test_short_buffer_is_a_single_chunk() {
     // With the default chunk length, short input is one chunk — identical
     // to a whole-buffer conversion (no behavior change for the common case).

@@ -39,6 +39,45 @@ fn common_suffix_len(a: &[char], b: &[char], prefix_len: usize) -> usize {
     n
 }
 
+/// Punctuation that ends a chunk (clause / sentence boundary). A chunk is cut
+/// right after a run of these so the model converts whole clauses instead of
+/// being split mid-word.
+fn is_chunk_break_punct(c: char) -> bool {
+    matches!(
+        c,
+        '。' | '、' | '！' | '？' | '，' | '．' | '…' | '!' | '?' | '.' | ','
+    )
+}
+
+/// Split `chars` into chunks of at most `max` chars.
+///
+/// Growing a chunk char by char: while the previous char is *not* punctuation,
+/// keep appending to the current chunk as long as it has room (< `max`);
+/// once a punctuation run ends (the next char is a non-punctuation char after a
+/// punctuation), start a new chunk. Consecutive punctuation stays attached to
+/// the chunk while it fits, so runs like `！？` or `。。。` are not scattered.
+/// With no punctuation this degrades to fixed `max`-char chunks.
+fn punct_chunks(chars: &[char], max: usize) -> Vec<&[char]> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < chars.len() {
+        let limit = (start + max).min(chars.len());
+        let mut i = start;
+        // Grow through ordinary (non-punctuation) chars up to the cap.
+        while i < limit && !is_chunk_break_punct(chars[i]) {
+            i += 1;
+        }
+        // Absorb the trailing punctuation run (capped at `max`) so the clause —
+        // and consecutive marks — stay together in this chunk.
+        while i < limit && is_chunk_break_punct(chars[i]) {
+            i += 1;
+        }
+        out.push(&chars[start..i]);
+        start = i;
+    }
+    out
+}
+
 /// How to re-chunk the buffer after an edit, derived purely from the previous
 /// chunking and the new text — no engine or model needed (so it is unit
 /// tested directly).
@@ -75,11 +114,14 @@ impl ChunkPlan {
         }
         // Reopen the last leading chunk when it sits right at the edit and is
         // not yet full, so an append/edit merges into it instead of spawning a
-        // stray short chunk (keeps forward typing at one growing chunk).
+        // stray short chunk (keeps forward typing at one growing chunk). But not
+        // when that chunk ends in punctuation: a completed clause should stay
+        // put and the new char should start a fresh chunk.
         if lead_count > 0
             && lead_chars == cp
             && cp < text.len()
             && old_lens[lead_count - 1] < chunk_len
+            && !is_chunk_break_punct(old_text[lead_chars - 1])
         {
             lead_count -= 1;
             lead_chars -= old_lens[lead_count];
@@ -317,7 +359,7 @@ impl InputMethodEngine {
         //    converted so far, truncated (the tail wins, so the nearest left
         //    chunk dominates).
         let middle = &text[plan.mid_start..plan.mid_end];
-        for chunk in middle.chunks(chunk_len) {
+        for chunk in punct_chunks(middle, chunk_len) {
             let reading: String = chunk.iter().collect();
             let lctx = self.truncate_context(&format!("{base_ctx}{combined}"));
             let converted = self.convert_chunk(&reading, &lctx);
@@ -1067,6 +1109,50 @@ impl InputMethodEngine {
     fn backspace_conversion(&mut self) -> EngineResult {
         // Return to hiragana mode with the reading
         self.cancel_conversion()
+    }
+}
+
+#[cfg(test)]
+mod punct_chunk_tests {
+    use super::punct_chunks;
+
+    fn split(s: &str, max: usize) -> Vec<String> {
+        let chars: Vec<char> = s.chars().collect();
+        punct_chunks(&chars, max)
+            .into_iter()
+            .map(|c| c.iter().collect())
+            .collect()
+    }
+
+    #[test]
+    fn no_punctuation_falls_back_to_fixed_chunks() {
+        assert_eq!(split("あいうえお", 2), vec!["あい", "うえ", "お"]);
+    }
+
+    #[test]
+    fn breaks_after_a_comma() {
+        assert_eq!(split("あ、いう", 10), vec!["あ、", "いう"]);
+    }
+
+    #[test]
+    fn consecutive_punctuation_stays_together() {
+        assert_eq!(split("あ！？い", 10), vec!["あ！？", "い"]);
+    }
+
+    #[test]
+    fn punctuation_run_spills_when_over_cap() {
+        // Only what fits stays attached; the rest spills to the next chunk.
+        assert_eq!(split("。。。", 2), vec!["。。", "。"]);
+    }
+
+    #[test]
+    fn clause_longer_than_cap_hard_breaks() {
+        assert_eq!(split("あいうえお、", 3), vec!["あいう", "えお、"]);
+    }
+
+    #[test]
+    fn multiple_clauses_each_become_a_chunk() {
+        assert_eq!(split("あ、い。う", 10), vec!["あ、", "い。", "う"]);
     }
 }
 
