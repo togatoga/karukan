@@ -143,9 +143,10 @@ pub struct InputMethodEngine {
     /// Live conversion state
     live: LiveConversion,
     /// Internal chunking of the composing buffer used by
-    /// `chunked_auto_suggest`: a cache of the per-chunk model conversions
-    /// (keyed by reading + left context) so a keystroke only reconverts the
-    /// chunk it touched instead of the whole buffer. Empty when not composing.
+    /// `chunked_auto_suggest`: a cache of the per-chunk model conversions.
+    /// Re-chunking diffs the new buffer against this by common prefix/suffix so
+    /// a keystroke only reconverts the chunk it touched, not the whole buffer.
+    /// Empty when not composing.
     chunks: Vec<ComposingChunk>,
     /// Dictionaries (system, user)
     dicts: Dictionaries,
@@ -267,8 +268,9 @@ impl InputMethodEngine {
             self.input_buf.clear();
             // Erasing the whole buffer ends the composition: drop the live
             // conversion text and the chunk cache so neither leaks into the
-            // next composing session's preedit (build_composing_preedit renders
-            // a stale live.text, and the chunk cache is keyed by index).
+            // next composing session (build_composing_preedit would otherwise
+            // render a stale live.text, and the chunk cache would be diffed
+            // against a buffer it no longer matches).
             self.live.text.clear();
             self.chunks.clear();
             // Emoji mode is per-session and bound to the typed `:` —

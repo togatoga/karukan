@@ -345,7 +345,8 @@ impl InputMethodEngine {
         let mut chunks: Vec<ComposingChunk> = Vec::with_capacity(old.len() + 1);
         let mut combined = String::new();
 
-        // 1. Reused leading chunks (reading, lctx, converted all still valid).
+        // 1. Reused leading chunks — reading + converted still valid (their left
+        //    context is unchanged because everything before them is unchanged).
         for chunk in old.drain(..plan.lead_count) {
             combined.push_str(&chunk.converted);
             chunks.push(chunk);
@@ -367,7 +368,8 @@ impl InputMethodEngine {
             chunks.push(ComposingChunk { reading, converted });
         }
 
-        // 3. Reused trailing chunks (cached conversion kept; lctx may be stale).
+        // 3. Reused trailing chunks — cached conversion kept (the left context
+        //    it was converted with may have drifted, but we don't reconvert).
         for chunk in old.drain(trail_start..) {
             combined.push_str(&chunk.converted);
             chunks.push(chunk);
