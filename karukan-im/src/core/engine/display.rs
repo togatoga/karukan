@@ -106,24 +106,20 @@ impl InputMethodEngine {
     }
 
     /// Context line for live conversion (composing / auto-suggest). The single
-    /// `lctx:` shown is the *current chunk's* actual left context — the editor
-    /// surrounding text plus the converted text of the preceding chunks — so
-    /// the model context that chunk really used is what gets displayed, rather
-    /// than a second redundant lctx. Falls back to the editor surrounding left
-    /// context when no chunked conversion is active. The right side stays the
-    /// editor surrounding right context.
+    /// `lctx:` shown is the *current chunk's* left context — the editor
+    /// surrounding text plus the converted text of the preceding chunks, derived
+    /// via `chunk_lctx` — so the model context that chunk uses is what gets
+    /// displayed, rather than a second redundant lctx. It already folds in the
+    /// editor surrounding left context (so an empty buffer shows it as-is). The
+    /// right side stays the editor surrounding right context.
     pub(super) fn display_context_chunked(&self) -> String {
-        let ctx = self.surrounding_context.as_ref();
-        let surrounding_left = ctx.and_then(|c| c.left.as_deref());
-        let chunk_lctx = self
-            .chunks
-            .get(self.current_chunk_index())
-            .map(|s| s.lctx.as_str())
-            .filter(|s| !s.is_empty());
-        self.context_line(
-            chunk_lctx.or(surrounding_left),
-            ctx.and_then(|c| c.right.as_deref()),
-        )
+        let lctx = self.chunk_lctx(self.current_chunk_index());
+        let left = (!lctx.is_empty()).then_some(lctx.as_str());
+        let right = self
+            .surrounding_context
+            .as_ref()
+            .and_then(|c| c.right.as_deref());
+        self.context_line(left, right)
     }
 
     /// Get the current mode indicator string

@@ -106,11 +106,12 @@ fn test_chunk_lctx_is_left_chunk_value() {
 
     let budget = engine.config.max_api_context_len;
     let mut left = String::new();
-    for chunk in &engine.chunks {
-        assert_eq!(chunk.lctx, ctx_tail(&left, budget));
-        left.push_str(&chunk.converted);
+    for i in 0..engine.chunks.len() {
+        // lctx is derived on demand from the preceding chunks' converted text.
+        assert_eq!(engine.chunk_lctx(i), ctx_tail(&left, budget));
+        left.push_str(&engine.chunks[i].converted);
     }
-    assert_eq!(engine.chunks[0].lctx, "");
+    assert_eq!(engine.chunk_lctx(0), "");
 }
 
 #[test]
@@ -163,8 +164,8 @@ fn test_backspace_reconverts_last_chunk_partition() {
     assert_eq!(readings, vec!["あい", "う"]);
     // First chunk keeps an empty left context; the surviving last chunk's
     // left context is the first chunk's converted value.
-    assert_eq!(engine.chunks[0].lctx, "");
-    assert_eq!(engine.chunks[1].lctx, engine.chunks[0].converted);
+    assert_eq!(engine.chunk_lctx(0), "");
+    assert_eq!(engine.chunk_lctx(1), engine.chunks[0].converted);
 }
 
 #[test]
@@ -280,7 +281,7 @@ fn test_aux_text_lctx_is_current_chunk_lctx() {
         })
         .expect("aux text action");
 
-    let chunk_lctx = engine.chunks[engine.current_chunk_index()].lctx.clone();
+    let chunk_lctx = engine.chunk_lctx(engine.current_chunk_index());
     assert!(!chunk_lctx.is_empty());
     assert!(
         aux.contains(&format!("lctx: {chunk_lctx}")),

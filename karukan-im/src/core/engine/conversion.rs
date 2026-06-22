@@ -364,11 +364,7 @@ impl InputMethodEngine {
             let lctx = self.truncate_context(&format!("{base_ctx}{combined}"));
             let converted = self.convert_chunk(&reading, &lctx);
             combined.push_str(&converted);
-            chunks.push(ComposingChunk {
-                reading,
-                lctx,
-                converted,
-            });
+            chunks.push(ComposingChunk { reading, converted });
         }
 
         // 3. Reused trailing chunks (cached conversion kept; lctx may be stale).
@@ -391,6 +387,19 @@ impl InputMethodEngine {
     /// Configured maximum chunk length in chars, clamped to at least 1.
     fn chunk_len(&self) -> usize {
         self.config.composing_chunk_len.max(1)
+    }
+
+    /// Left context for the chunk at `index`: the editor surrounding text plus
+    /// the converted text of every preceding chunk, truncated to the context
+    /// budget. Derived on demand (the chunk doesn't store it) — it is just "the
+    /// value of the chunks to the left".
+    pub(super) fn chunk_lctx(&self, index: usize) -> String {
+        let base = self.truncate_context_for_api();
+        let preceding: String = self.chunks[..index.min(self.chunks.len())]
+            .iter()
+            .map(|c| c.converted.as_str())
+            .collect();
+        self.truncate_context(&format!("{base}{preceding}"))
     }
 
     /// Best-effort lazy init of the kanji converter. Chunking proceeds even

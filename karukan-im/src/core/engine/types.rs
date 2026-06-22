@@ -166,19 +166,18 @@ pub(crate) enum InputMode {
 /// Chunks are an internal optimization only — the user always sees the
 /// concatenation of every chunk's `converted` text as one continuous preedit;
 /// there are no visible bunsetsu boundaries. Splitting the reading bounds each
-/// model call to N chars so live-conversion latency stays flat for long input,
-/// and unchanged chunks are reused across keystrokes (cache keyed by
-/// `reading` + `lctx`).
+/// model call to N chars so live-conversion latency stays flat for long input.
+///
+/// The left context (lctx) a chunk was converted with is *not* stored: it is
+/// just the editor surrounding text plus the `converted` text of the preceding
+/// chunks, so it is derived on demand via `chunk_lctx` instead of duplicated
+/// here.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(in crate::core) struct ComposingChunk {
     /// Hiragana reading for this chunk (≤ N chars).
     pub reading: String,
-    /// Left context used when converting this chunk: the editor surrounding
-    /// text followed by the converted text of all preceding chunks, truncated
-    /// to `max_api_context_len`. This is the "value of the left chunk(s)".
-    pub lctx: String,
-    /// Model conversion of `reading` given `lctx` — this chunk's slice of the
-    /// live preedit. Falls back to `reading` when the model yields nothing.
+    /// Model conversion of `reading` — this chunk's slice of the live preedit.
+    /// Falls back to `reading` when the model yields nothing.
     pub converted: String,
 }
 
