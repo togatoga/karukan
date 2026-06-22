@@ -393,7 +393,7 @@ impl InputMethodEngine {
         self.config.composing_chunk_len.max(1)
     }
 
-    /// Best-effort lazy init of the kanji converter. Chunkation proceeds even
+    /// Best-effort lazy init of the kanji converter. Chunking proceeds even
     /// on failure so `self.chunks` always mirrors the current buffer (which
     /// chunk the cursor is in, etc.); `run_kana_kanji_conversion` handles a
     /// missing converter by yielding nothing, and each chunk falls back to its
@@ -415,13 +415,21 @@ impl InputMethodEngine {
             .unwrap_or_else(|| reading.to_string())
     }
 
-    /// Index of the chunk the cursor currently sits in, derived from the
-    /// composing-buffer cursor position and the configured chunk length.
-    /// This is the chunk a character insert/delete at the cursor will land in
-    /// (and therefore the one whose conversion is recomputed). Returns 0 for an
-    /// empty buffer or a cursor at the very start.
+    /// Index of the chunk the cursor currently sits in, found by walking the
+    /// actual chunk lengths (chunks are variable-length once punctuation
+    /// splitting is in play, so a fixed `cursor / chunk_len` is wrong). This is
+    /// the chunk a character insert/delete at the cursor lands in. Returns 0 for
+    /// an empty buffer or a cursor at the very start.
     pub(super) fn current_chunk_index(&self) -> usize {
-        self.input_buf.cursor_pos.saturating_sub(1) / self.chunk_len()
+        let pos = self.input_buf.cursor_pos.saturating_sub(1);
+        let mut end = 0;
+        for (i, chunk) in self.chunks.iter().enumerate() {
+            end += chunk.reading.chars().count();
+            if pos < end {
+                return i;
+            }
+        }
+        self.chunks.len().saturating_sub(1)
     }
 
     /// Emit a debug line describing the current chunking: how many chunks

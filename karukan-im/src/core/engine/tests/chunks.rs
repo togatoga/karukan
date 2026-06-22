@@ -129,6 +129,27 @@ fn test_current_chunk_index_tracks_cursor() {
 }
 
 #[test]
+fn test_current_chunk_index_with_variable_length_chunks() {
+    // Punctuation produces variable-length chunks, so the index must be found by
+    // walking actual chunk lengths — not a fixed cursor / chunk_len division.
+    let mut engine = make_chunk_engine(40);
+    engine.input_buf.clear();
+    engine.input_buf.insert("は、じ。め"); // chunks ["は、", "じ。", "め"]
+    engine.chunked_auto_suggest();
+    assert_eq!(engine.chunks.len(), 3);
+
+    // cursor pos → expected chunk index
+    for (pos, expected) in [(0, 0), (1, 0), (2, 0), (3, 1), (4, 1), (5, 2)] {
+        engine.input_buf.cursor_pos = pos;
+        assert_eq!(
+            engine.current_chunk_index(),
+            expected,
+            "cursor pos {pos} should be in chunk {expected}"
+        );
+    }
+}
+
+#[test]
 fn test_backspace_reconverts_last_chunk_partition() {
     // Deleting a char at the end re-partitions: the final chunk shrinks while
     // earlier chunks keep their readings (and are served from cache).
