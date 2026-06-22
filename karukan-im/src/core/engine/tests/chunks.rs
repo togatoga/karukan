@@ -40,6 +40,19 @@ fn test_buffer_split_into_chunks_of_n_chars() {
 }
 
 #[test]
+fn test_typed_punctuation_splits_chunks() {
+    // Real keystroke path: "," → "、" and "." → "。" via romaji, so typing a
+    // punctuated sentence produces chunk boundaries at the punctuation.
+    let mut engine = make_chunk_engine(40);
+    for k in ['h', 'a', ',', 'j', 'i', '.', 'm', 'e'] {
+        engine.process_key(&press(k));
+    }
+    assert_eq!(engine.input_buf.text, "は、じ。め");
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["は、", "じ。", "め"]);
+}
+
+#[test]
 fn test_chunks_break_at_punctuation() {
     // With a large chunk length nothing is split by char count, so the only
     // boundaries come from punctuation: each clause becomes its own chunk while
