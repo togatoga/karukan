@@ -182,7 +182,7 @@ impl InputMethodEngine {
     /// it equals the raw reading (no useful model suggestion).
     ///
     /// Note: for input no longer than one chunk (the common case, default
-    /// N=40) this produces exactly one model call over the whole buffer, i.e.
+    /// N=30) this produces exactly one model call over the whole buffer, i.e.
     /// identical behavior to a whole-buffer conversion.
     pub(super) fn chunked_auto_suggest(&mut self) -> Option<String> {
         let full_reading = self.input_buf.text.clone();
@@ -258,7 +258,7 @@ impl InputMethodEngine {
         combined: &str,
     ) -> ComposingChunk {
         let converted = if reading.chars().next().is_some_and(is_japanese) {
-            let lctx = self.truncate_context(&format!("{base_ctx}{combined}"));
+            let lctx = self.lctx_for(base_ctx, combined);
             self.convert_chunk(&reading, &lctx)
         } else {
             reading.clone()
@@ -271,6 +271,15 @@ impl InputMethodEngine {
         self.config.composing_chunk_len.max(1)
     }
 
+    /// The left context (lctx) a chunk is built with: the editor surrounding
+    /// text `base` followed by the converted text of every preceding chunk,
+    /// truncated to the API context budget. Defined once so the context the
+    /// model is given at conversion time (`convert_new_chunk`) stays identical
+    /// to the one displayed in the aux text (`chunk_lctx`).
+    fn lctx_for(&self, base: &str, preceding_converted: &str) -> String {
+        self.truncate_context(&format!("{base}{preceding_converted}"))
+    }
+
     /// Left context for the chunk at `index`: the editor surrounding text plus
     /// the converted text of every preceding chunk, truncated to the context
     /// budget. Derived on demand (the chunk doesn't store it) — it is just "the
@@ -281,7 +290,7 @@ impl InputMethodEngine {
             .iter()
             .map(|c| c.converted.as_str())
             .collect();
-        self.truncate_context(&format!("{base}{preceding}"))
+        self.lctx_for(&base, &preceding)
     }
 
     /// Best-effort lazy init of the kanji converter. Chunking proceeds even
