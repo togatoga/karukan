@@ -214,7 +214,7 @@ mod tests {
         let settings = Settings::default();
         assert_eq!(settings.conversion.num_candidates, 9);
         assert!(settings.conversion.use_context);
-        assert_eq!(settings.conversion.max_context_length, 20);
+        assert_eq!(settings.conversion.max_context_length, 10);
     }
 
     #[test]
@@ -273,7 +273,7 @@ num_candidates = 3
         assert_eq!(settings.conversion.num_candidates, 3);
         // Should use default for unspecified values
         assert!(settings.conversion.use_context);
-        assert_eq!(settings.conversion.max_context_length, 20);
+        assert_eq!(settings.conversion.max_context_length, 10);
     }
 
     #[test]
