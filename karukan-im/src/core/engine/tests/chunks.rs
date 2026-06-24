@@ -41,29 +41,73 @@ fn test_buffer_split_into_chunks_of_n_chars() {
 
 #[test]
 fn test_typed_punctuation_splits_chunks() {
-    // Real keystroke path: "," → "、" and "." → "。" via romaji, so typing a
-    // punctuated sentence produces chunk boundaries at the punctuation.
+    // Real keystroke path: "," → "、" and "." → "。" via romaji. Punctuation is
+    // non-Japanese, so each mark forms its own chunk and separates the clauses.
     let mut engine = make_chunk_engine(40);
     for k in ['h', 'a', ',', 'j', 'i', '.', 'm', 'e'] {
         engine.process_key(&press(k));
     }
     assert_eq!(engine.input_buf.text, "は、じ。め");
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
-    assert_eq!(readings, vec!["は、", "じ。", "め"]);
+    assert_eq!(readings, vec!["は", "、", "じ", "。", "め"]);
+}
+
+#[test]
+fn test_typed_digits_form_their_own_chunk() {
+    // Real keystroke path: a digit run typed amid hiragana is split into its
+    // own chunk so it is passed through verbatim, never sent to the model
+    // (which tends to drop digits mid-run).
+    let mut engine = make_chunk_engine(40);
+    for k in ['a', '1', '2', '3', 'i'] {
+        engine.process_key(&press(k));
+    }
+    assert_eq!(engine.input_buf.text, "あ123い");
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あ", "123", "い"]);
+}
+
+#[test]
+fn test_non_japanese_chunk_passes_through_and_reuses_japanese() {
+    // Appending a digit after a Japanese chunk does NOT reopen/reconvert that
+    // chunk: the digit starts its own non-Japanese chunk (passed through
+    // verbatim), so the Japanese chunk is reused with its cached conversion.
+    let mut engine = make_chunk_engine(40);
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i')); // "あい" → one Japanese chunk
+    assert_eq!(engine.chunks.len(), 1);
+    engine.chunks[0].converted = "KEEP".to_string();
+
+    engine.process_key(&press('1')); // "あい1"
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あい", "1"]);
+    assert_eq!(engine.chunks[0].converted, "KEEP"); // reused, not reconverted
+    assert_eq!(engine.chunks[1].converted, "1"); // non-Japanese chunk verbatim
+}
+
+#[test]
+fn test_katakana_word_with_prolonged_mark_stays_one_chunk() {
+    // スーパーマーケット contains the prolonged sound mark ー but is all
+    // Japanese, so it must NOT be split into latin chunks.
+    let mut engine = make_chunk_engine(40);
+    engine.input_buf.clear();
+    engine.input_buf.insert("スーパーマーケット");
+    engine.chunked_auto_suggest();
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["スーパーマーケット"]);
 }
 
 #[test]
 fn test_chunks_break_at_punctuation() {
     // With a large chunk length nothing is split by char count, so the only
-    // boundaries come from punctuation: each clause becomes its own chunk while
-    // consecutive marks stay attached.
+    // boundaries come from group changes: each punctuation mark is its own
+    // non-Japanese chunk, separating the Japanese clauses around it.
     let mut engine = make_chunk_engine(40);
     engine.input_buf.clear();
     engine.input_buf.insert("あ、いう。え");
     engine.chunked_auto_suggest();
 
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
-    assert_eq!(readings, vec!["あ、", "いう。", "え"]);
+    assert_eq!(readings, vec!["あ", "、", "いう", "。", "え"]);
 }
 
 #[test]
@@ -131,16 +175,17 @@ fn test_current_chunk_index_tracks_cursor() {
 
 #[test]
 fn test_current_chunk_index_with_variable_length_chunks() {
-    // Punctuation produces variable-length chunks, so the index must be found by
-    // walking actual chunk lengths — not a fixed cursor / chunk_len division.
+    // Punctuation produces single-char non-Japanese chunks, so the index must
+    // be found by walking actual chunk lengths — not a fixed cursor / chunk_len
+    // division.
     let mut engine = make_chunk_engine(40);
     engine.input_buf.clear();
-    engine.input_buf.insert("は、じ。め"); // chunks ["は、", "じ。", "め"]
+    engine.input_buf.insert("は、じ。め"); // chunks ["は", "、", "じ", "。", "め"]
     engine.chunked_auto_suggest();
-    assert_eq!(engine.chunks.len(), 3);
+    assert_eq!(engine.chunks.len(), 5);
 
     // cursor pos → expected chunk index
-    for (pos, expected) in [(0, 0), (1, 0), (2, 0), (3, 1), (4, 1), (5, 2)] {
+    for (pos, expected) in [(0, 0), (1, 0), (2, 1), (3, 2), (4, 3), (5, 4)] {
         engine.input_buf.cursor_pos = pos;
         assert_eq!(
             engine.current_chunk_index(),
