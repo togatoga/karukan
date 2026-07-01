@@ -179,3 +179,17 @@ fn test_truncate_context() {
     let jp = engine.truncate_context("今日はとても良い天気");
     assert_eq!(jp.chars().count(), 5); // Last 5 chars
 }
+
+#[test]
+fn ctrl_space_fullwidth_defaults_true_in_engine_config() {
+    let config = EngineConfig::default();
+    assert!(config.ctrl_space_fullwidth);
+}
+
+#[test]
+fn ctrl_space_fullwidth_maps_from_settings() {
+    let mut settings = crate::config::Settings::default();
+    assert!(EngineConfig::from_settings(&settings).ctrl_space_fullwidth);
+    settings.keys.ctrl_space_fullwidth = false;
+    assert!(!EngineConfig::from_settings(&settings).ctrl_space_fullwidth);
+}

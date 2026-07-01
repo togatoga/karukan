@@ -88,6 +88,9 @@ pub struct EngineConfig {
     pub strategy: StrategyMode,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
+    /// Whether Ctrl+Space inputs a full-width space (U+3000).
+    /// When false, Ctrl+Space is not consumed and passes through to the OS.
+    pub ctrl_space_fullwidth: bool,
 }
 
 impl EngineConfig {
@@ -108,6 +111,7 @@ impl EngineConfig {
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
             live_conversion: settings.conversion.live_conversion,
+            ctrl_space_fullwidth: settings.keys.ctrl_space_fullwidth,
         }
     }
 }
@@ -124,6 +128,7 @@ impl Default for EngineConfig {
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
             live_conversion: false,
+            ctrl_space_fullwidth: true,
         }
     }
 }
