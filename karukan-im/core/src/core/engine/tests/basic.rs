@@ -95,6 +95,78 @@ fn double_space_in_empty_hiragana_commits_two_fullwidth_spaces() {
 }
 
 #[test]
+fn shift_space_in_empty_commits_halfwidth_space_when_enabled() {
+    // With `shift_space_halfwidth` on, Shift+Space emits a literal half-width
+    // ASCII space regardless of mode — a deliberate override of the
+    // bare-Space full-width behavior.
+    let mut engine = InputMethodEngine::new();
+    engine.config.shift_space_halfwidth = true;
+    assert_eq!(engine.mode.current(), InputMode::Hiragana);
+
+    let result = engine.process_key(&press_shift(' '));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    let committed = result.actions.iter().find_map(|a| match a {
+        EngineAction::Commit(t) => Some(t.clone()),
+        _ => None,
+    });
+    assert_eq!(committed.as_deref(), Some(" "));
+}
+
+#[test]
+fn shift_space_in_composing_commits_then_halfwidth_space_when_enabled() {
+    // With `shift_space_halfwidth` on, Shift+Space while composing commits the
+    // current preedit (like Enter) and appends a half-width space, then
+    // returns to Empty. It must NOT trigger conversion the way a bare Space
+    // does.
+    let mut engine = InputMethodEngine::new();
+    engine.config.shift_space_halfwidth = true;
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "あい");
+
+    let result = engine.process_key(&press_shift(' '));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    let committed = result.actions.iter().find_map(|a| match a {
+        EngineAction::Commit(t) => Some(t.clone()),
+        _ => None,
+    });
+    assert_eq!(committed.as_deref(), Some("あい "));
+}
+
+#[test]
+fn shift_space_off_by_default_keeps_fullwidth_in_empty() {
+    // Default config (`shift_space_halfwidth` off): Shift+Space in Empty
+    // Hiragana keeps the bare-Space behavior and commits a full-width `　`.
+    let mut engine = InputMethodEngine::new();
+    assert!(!engine.config.shift_space_halfwidth);
+
+    let result = engine.process_key(&press_shift(' '));
+    assert!(matches!(engine.state(), InputState::Empty));
+    let committed = result.actions.iter().find_map(|a| match a {
+        EngineAction::Commit(t) => Some(t.clone()),
+        _ => None,
+    });
+    assert_eq!(committed.as_deref(), Some("\u{3000}"));
+}
+
+#[test]
+fn shift_space_off_by_default_triggers_conversion_in_composing() {
+    // Default config (`shift_space_halfwidth` off): Shift+Space while composing
+    // keeps the bare-Space behavior and triggers conversion.
+    let mut engine = InputMethodEngine::new();
+    assert!(!engine.config.shift_space_halfwidth);
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "あい");
+
+    let result = engine.process_key(&press_shift(' '));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+}
+
+#[test]
 fn space_in_empty_katakana_passes_through() {
     // Non-Hiragana modes pass the bare Space through to the OS so the
     // application gets a normal half-width ASCII space.

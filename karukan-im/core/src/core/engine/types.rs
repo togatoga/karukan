@@ -88,6 +88,9 @@ pub struct EngineConfig {
     pub strategy: StrategyMode,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
+    /// Whether Shift+Space inputs a half-width ASCII space.
+    /// When false, Shift+Space keeps the bare-Space behavior.
+    pub shift_space_halfwidth: bool,
 }
 
 impl EngineConfig {
@@ -108,6 +111,7 @@ impl EngineConfig {
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
             live_conversion: settings.conversion.live_conversion,
+            shift_space_halfwidth: settings.keys.shift_space_halfwidth,
         }
     }
 }
@@ -124,6 +128,7 @@ impl Default for EngineConfig {
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
             live_conversion: false,
+            shift_space_halfwidth: false,
         }
     }
 }
