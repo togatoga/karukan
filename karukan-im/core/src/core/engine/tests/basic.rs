@@ -220,3 +220,34 @@ fn ctrl_space_passes_through_in_empty_when_disabled() {
         result.actions
     );
 }
+
+#[test]
+fn ctrl_space_inserts_fullwidth_space_while_composing_when_enabled() {
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a')); // preedit "あ", Composing
+    let result = engine.process_key(&press_ctrl(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert!(
+        engine.input_buf.text.contains('\u{3000}'),
+        "buffer should contain a full-width space, got {:?}",
+        engine.input_buf.text
+    );
+}
+
+#[test]
+fn ctrl_space_passes_through_while_composing_when_disabled() {
+    let config = EngineConfig {
+        ctrl_space_fullwidth: false,
+        ..EngineConfig::default()
+    };
+    let mut engine = InputMethodEngine::with_config(config);
+    engine.process_key(&press('a')); // preedit "あ", Composing
+    let result = engine.process_key(&press_ctrl(Keysym::SPACE));
+    assert!(!result.consumed);
+    // Must NOT trigger conversion (the fall-through bug guard) and must
+    // NOT insert a full-width space.
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "あ");
+    assert!(!engine.input_buf.text.contains('\u{3000}'));
+}

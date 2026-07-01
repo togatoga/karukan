@@ -238,8 +238,18 @@ impl InputMethodEngine {
         // Handle Ctrl+key shortcuts
         if key.modifiers.control_key {
             match key.keysym {
-                // Ctrl+Space: insert full-width space (U+3000)
-                Keysym::SPACE => return self.input_fullwidth_space(),
+                // Ctrl+Space: insert full-width space (U+3000), unless
+                // disabled in config — then pass through to the OS. Must
+                // return explicitly here: falling through would let the
+                // bare-Space arm below treat Ctrl+Space as the conversion
+                // trigger.
+                Keysym::SPACE => {
+                    return if self.config.ctrl_space_fullwidth {
+                        self.input_fullwidth_space()
+                    } else {
+                        EngineResult::not_consumed()
+                    };
+                }
                 // Ctrl+K: enter katakana mode
                 Keysym::KEY_K | Keysym::KEY_K_UPPER => return self.enter_katakana_mode(),
                 // Ctrl+A: move to beginning (Emacs-style Home)
