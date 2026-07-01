@@ -193,3 +193,30 @@ fn ctrl_space_fullwidth_maps_from_settings() {
     settings.keys.ctrl_space_fullwidth = false;
     assert!(!EngineConfig::from_settings(&settings).ctrl_space_fullwidth);
 }
+
+#[test]
+fn ctrl_space_inputs_fullwidth_space_in_empty_when_enabled() {
+    // Default config has ctrl_space_fullwidth = true.
+    let mut engine = InputMethodEngine::new();
+    let result = engine.process_key(&press_ctrl(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "\u{3000}");
+}
+
+#[test]
+fn ctrl_space_passes_through_in_empty_when_disabled() {
+    let config = EngineConfig {
+        ctrl_space_fullwidth: false,
+        ..EngineConfig::default()
+    };
+    let mut engine = InputMethodEngine::with_config(config);
+    let result = engine.process_key(&press_ctrl(Keysym::SPACE));
+    assert!(!result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(
+        result.actions.is_empty(),
+        "expected no actions, got {:?}",
+        result.actions
+    );
+}

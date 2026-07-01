@@ -113,8 +113,15 @@ impl InputMethodEngine {
 
     /// Process key in empty state
     pub(super) fn process_key_empty(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
-        // Ctrl+Space: start input with full-width space
+        // Ctrl+Space: start input with full-width space.
+        // Gated on config: when `ctrl_space_fullwidth` is false, do not
+        // intercept — return not_consumed so the key passes through to the
+        // OS (e.g. window-switching shortcuts).
         if key.modifiers.control_key && key.keysym == Keysym::SPACE {
+            if !self.config.ctrl_space_fullwidth {
+                return EngineResult::not_consumed();
+            }
+            self.converters.romaji.reset();
             self.input_buf.clear();
             self.input_buf.push_direct('\u{3000}');
             let preedit = self.set_composing_state();
