@@ -21,6 +21,8 @@ pub struct Settings {
     pub conversion: ConversionSettings,
     /// Learning cache settings
     pub learning: LearningSettings,
+    /// Key-binding behavior settings
+    pub keys: KeysSettings,
 }
 
 /// Conversion strategy mode
@@ -83,6 +85,15 @@ pub struct LearningSettings {
     /// cache; longer conversion results (e.g. whole live-converted
     /// sentences) are not learned
     pub max_surface_chars: usize,
+}
+
+/// Key-binding behavior settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeysSettings {
+    /// Use Ctrl+Space to input a full-width space (U+3000).
+    /// When false, Karukan does not intercept Ctrl+Space and lets it pass
+    /// through to the OS (so window-switching shortcuts etc. still work).
+    pub ctrl_space_fullwidth: bool,
 }
 
 impl Default for Settings {
@@ -344,5 +355,30 @@ strategy = "main"
         let path = file.path().to_path_buf();
         let settings = Settings::load_from(&path).unwrap();
         assert_eq!(settings.conversion.strategy, StrategyMode::Main);
+    }
+
+    #[test]
+    fn test_keys_default_ctrl_space_fullwidth() {
+        let settings = Settings::default();
+        assert!(settings.keys.ctrl_space_fullwidth);
+    }
+
+    #[test]
+    fn test_keys_override_and_other_sections_keep_defaults() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[keys]
+ctrl_space_fullwidth = false
+"#
+        )
+        .unwrap();
+
+        let path = file.path().to_path_buf();
+        let settings = Settings::load_from(&path).unwrap();
+        assert!(!settings.keys.ctrl_space_fullwidth);
+        // Sections the user did not specify still fall back to defaults.
+        assert_eq!(settings.conversion.num_candidates, 9);
     }
 }
