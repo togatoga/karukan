@@ -1,0 +1,44 @@
+name: "🐛 Bug Report"
+description: "Report a bug or unexpected behavior in Karukan"
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please fill out this form to help us diagnose and resolve the issue.
+  - type: textarea
+    id: description
+    attributes:
+      label: "Bug Description"
+      description: "A clear description of what the issue is."
+      placeholder: "e.g., Conversion model crashes on input X..."
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: "Operating System / Platform"
+      options:
+        - Linux (fcitx5)
+        - macOS
+        - Engine CLI
+        - Other / General
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: "Reproduction Steps"
+      description: "How can we reproduce the conversion crash?"
+      placeholder: |
+        1. Type Hiragana...
+        2. Hit space...
+        3. See error logs...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Logs and Stack Traces"
+      render: shell
