@@ -76,6 +76,8 @@ ctrl_space_fullwidth = true
 
 Composing (変換中) に Ctrl+Space を押すと、未確定の preedit (下線テキスト) が残ったまま OS のショートカット (ウインドウ切替等) が発火する。「未入力時・入力中の両方で OS へ渡す」という決定に基づく想定内の挙動として受容する。
 
+また、本機能のスコープは Empty / Composing の 2 状態に限る。候補ウィンドウを開いている Conversion 状態では、Ctrl+Space は `ctrl_space_fullwidth` の値によらず従来通り「次の候補へ」として消費され、OS へは渡らない (`process_key_conversion` は Space を候補送りに割り当てているため)。候補ウィンドウ表示中にウインドウ切替を行う場面は稀であり、既存の bare-Space の候補送り挙動と揃える意図で、この状態は今回の設定対象外とする。
+
 ## テスト
 
 `karukan-im` のエンジンテストに以下 4 ケースを追加する。
