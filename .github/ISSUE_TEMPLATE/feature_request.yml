@@ -1,0 +1,17 @@
+name: "🚀 Feature Request"
+description: "Suggest an improvement or new dictionary feature for Karukan"
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We are happy to receive suggestions to make Karukan a better Japanese IME.
+  - type: textarea
+    id: details
+    attributes:
+      label: "Proposed Feature Details"
+      description: "What capability or conversion optimization should be added?"
+      placeholder: "Add shortcut conversion support for..."
+    validations:
+      required: true
