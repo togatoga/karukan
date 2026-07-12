@@ -130,6 +130,11 @@ class KarukanInputController: IMKInputController {
         for action in actions {
             switch action {
             case .commit(let text):
+                // insertText replaces the marked text and ends the
+                // composition; since #46 the engine no longer pairs Commit
+                // with an empty UpdatePreedit, so clear the flag here or the
+                // next keystroke would skip the surrounding-text refresh.
+                hasPreedit = false
                 client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
 
             case .updatePreedit(let text, let caret, let attributes):
