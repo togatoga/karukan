@@ -149,7 +149,10 @@ fn test_explicit_commit_method() {
         json!({"jsonrpc":"2.0","id":8,"method":"commit"}),
     );
     assert!(actions_of(&resp, "commit").is_empty());
-    assert_eq!(actions_of(&resp, "update_preedit").last().unwrap()["text"], "");
+    assert_eq!(
+        actions_of(&resp, "update_preedit").last().unwrap()["text"],
+        ""
+    );
 }
 
 #[test]
