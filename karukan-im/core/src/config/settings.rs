@@ -21,6 +21,8 @@ pub struct Settings {
     pub conversion: ConversionSettings,
     /// Learning cache settings
     pub learning: LearningSettings,
+    /// Date-conversion settings (きょう -> today's date)
+    pub date: DateSettings,
 }
 
 /// Conversion strategy mode
@@ -83,6 +85,17 @@ pub struct LearningSettings {
     /// cache; longer conversion results (e.g. whole live-converted
     /// sentences) are not learned
     pub max_surface_chars: usize,
+}
+
+/// Date-conversion settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DateSettings {
+    /// Convert relative-day readings (きょう / あした / …) into calendar dates
+    /// as extra conversion candidates.
+    pub enabled: bool,
+    /// Date formats emitted as candidates, in `chrono` strftime notation. Each
+    /// entry produces one candidate (e.g. `%Y-%m-%d` → `2026-07-13`).
+    pub formats: Vec<String>,
 }
 
 impl Default for Settings {
@@ -263,6 +276,34 @@ use_context = false
         let settings = Settings::load_from(&path).unwrap();
         assert_eq!(settings.conversion.num_candidates, 5);
         assert!(!settings.conversion.use_context);
+    }
+
+    #[test]
+    fn test_date_default_enabled_with_iso_and_japanese_formats() {
+        let settings = Settings::default();
+        assert!(settings.date.enabled);
+        assert_eq!(settings.date.formats, vec!["%Y-%m-%d", "%Y年%-m月%-d日"]);
+    }
+
+    #[test]
+    fn test_date_override_formats_and_enabled() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[date]
+enabled = false
+formats = ["%Y/%m/%d"]
+"#
+        )
+        .unwrap();
+
+        let path = file.path().to_path_buf();
+        let settings = Settings::load_from(&path).unwrap();
+        assert!(!settings.date.enabled);
+        assert_eq!(settings.date.formats, vec!["%Y/%m/%d"]);
+        // Sections the user did not specify still fall back to defaults.
+        assert_eq!(settings.conversion.num_candidates, 9);
     }
 
     #[test]

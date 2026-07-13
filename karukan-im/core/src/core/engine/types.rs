@@ -88,6 +88,12 @@ pub struct EngineConfig {
     pub strategy: StrategyMode,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
+    /// Whether relative-day readings (きょう / あした / …) are converted into
+    /// calendar dates as extra candidates.
+    pub date_conversion: bool,
+    /// Date formats (chrono strftime) emitted by the date rewriter. Each entry
+    /// produces one candidate. Ignored when `date_conversion` is false.
+    pub date_formats: Vec<String>,
 }
 
 impl EngineConfig {
@@ -108,6 +114,8 @@ impl EngineConfig {
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
             live_conversion: settings.conversion.live_conversion,
+            date_conversion: settings.date.enabled,
+            date_formats: settings.date.formats.clone(),
         }
     }
 }
@@ -124,6 +132,11 @@ impl Default for EngineConfig {
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
             live_conversion: false,
+            date_conversion: true,
+            date_formats: karukan_engine::DEFAULT_DATE_FORMATS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         }
     }
 }

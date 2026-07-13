@@ -4,9 +4,21 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
+use karukan_engine::Rewriter;
 use tracing::debug;
 
 use super::*;
+
+/// Index at which date candidates are inserted: right after the first model
+/// candidate so they land on the first page rather than in the rewriter tail.
+/// Falls back to just after the top candidate when no model candidate exists.
+pub(super) fn date_insert_index(candidates: &[AnnotatedCandidate]) -> usize {
+    candidates
+        .iter()
+        .position(|c| c.source == CandidateSource::Model)
+        .map(|i| i + 1)
+        .unwrap_or_else(|| candidates.len().min(1))
+}
 
 /// Maximum number of learning candidates to show
 const MAX_LEARNING_CANDIDATES: usize = 3;
@@ -582,7 +594,32 @@ impl InputMethodEngine {
             }
         }
 
-        builder.into_candidates()
+        let mut candidates = builder.into_candidates();
+        self.insert_date_candidates(reading, &mut candidates);
+        candidates
+    }
+
+    /// Insert date-conversion candidates (きょう / あした / … → calendar date)
+    /// right after the top model candidate so they surface on the first page
+    /// instead of the rewriter tail. No-op when date conversion is disabled,
+    /// no format is configured, or the reading is not a date reading.
+    fn insert_date_candidates(&self, reading: &str, candidates: &mut Vec<AnnotatedCandidate>) {
+        if !self.config.date_conversion || self.config.date_formats.is_empty() {
+            return;
+        }
+        let rewriter = karukan_engine::DateRewriter::new(self.config.date_formats.clone());
+        let dates: Vec<AnnotatedCandidate> = rewriter
+            .rewrite(reading)
+            .into_iter()
+            .filter(|(text, _)| !candidates.iter().any(|c| &c.text == text))
+            .map(|(text, description)| {
+                AnnotatedCandidate::new(text, CandidateSource::Date).with_description(description)
+            })
+            .collect();
+        let at = date_insert_index(candidates);
+        for (offset, cand) in dates.into_iter().enumerate() {
+            candidates.insert(at + offset, cand);
+        }
     }
 
     /// Look up learning cache candidates for a reading (exact + prefix match, max 3).

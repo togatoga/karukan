@@ -13,6 +13,8 @@ pub enum CandidateSource {
     Learning,
     /// Model inference result
     Model,
+    /// Date conversion (きょう / あした / … → calendar date)
+    Date,
     /// System dictionary lookup (also covers reading→symbol lookups via
     /// mozc's symbol.tsv — they're treated as just another dictionary).
     Dictionary,
@@ -30,6 +32,7 @@ impl CandidateSource {
             CandidateSource::UserDictionary => "\u{1F464} \u{30E6}\u{30FC}\u{30B6}\u{30FC}", // 👤 ユーザー
             CandidateSource::Learning => "\u{1F4DD} \u{5B66}\u{7FD2}", // 📝 学習
             CandidateSource::Model => "\u{1F916} AI",                  // 🤖 AI
+            CandidateSource::Date => "\u{1F4C5} \u{65E5}\u{4ED8}",     // 📅 日付
             CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
             CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
             CandidateSource::Fallback => "",

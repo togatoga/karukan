@@ -13,7 +13,8 @@ pub use kana::{
 pub use kanji::{Backend, KanaKanjiConverter};
 pub use learning::{LearningCache, LearningConfig};
 pub use rewriter::{
-    AlphabetRewriter, EmojiRewriter, HalfWidthKatakanaRewriter, RewriteOutput, Rewriter,
-    RewriterChain, SymbolRewriter, description as symbol_description,
+    AlphabetRewriter, Clock, DEFAULT_DATE_FORMATS, DateRewriter, EmojiRewriter,
+    HalfWidthKatakanaRewriter, RewriteOutput, Rewriter, RewriterChain, SymbolRewriter, SystemClock,
+    description as symbol_description,
 };
 pub use romaji::{Converted, RomajiConverter};

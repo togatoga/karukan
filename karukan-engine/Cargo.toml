@@ -34,6 +34,9 @@ hf-hub = { version = "1.0", features = ["blocking"] }
 # Unicode normalization (NFKC) for models whose tokenizer doesn't support full-width ASCII
 unicode-normalization = "0.1"
 
+# Date/time for the date-conversion rewriter (きょう -> today's date)
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
 # HuggingFace tokenizers for external BPE tokenization (bypasses llama.cpp's built-in tokenizer)
 tokenizers = "0.23"
 
