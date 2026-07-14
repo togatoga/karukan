@@ -383,11 +383,28 @@ impl InputMethodEngine {
         self.surrounding_context = Some(SurroundingContext { left, right });
     }
 
-    /// Handle mode toggle keys (Right Alt/Super/Meta/Hyper): one-way non-Hiragana → Hiragana.
+    /// Handle mode toggle keys (Right Alt/Super/Meta/Hyper and the JIS 変換
+    /// key): one-way non-Hiragana → Hiragana.
     /// Returns `Some(result)` if the key was handled, `None` if not a mode toggle key.
     fn handle_mode_toggle_key(&mut self, key: &KeyEvent) -> Option<EngineResult> {
         if !key.keysym.is_mode_toggle_key() {
             return None;
+        }
+        // 変換 is an ordinary key, not a modifier: a modified chord
+        // (Ctrl+変換 etc.) may be an app or fcitx5 shortcut, so only the
+        // bare press acts as the toggle. The right-modifier keysyms are
+        // exempt — their events routinely carry their own modifier state.
+        if key.keysym == Keysym::HENKAN && key.modifiers.any() {
+            return None;
+        }
+        // While a conversion is in flight (candidate window open) the
+        // toggle is inert: switching modes here would katakana-bake the
+        // conversion *reading* (not the preedit) and defeat the Emoji-mode
+        // learning guard — the commit path checks the current mode to
+        // decide whether the reading is safe to record in the kana-keyed
+        // learning cache. Resolve the conversion first, then toggle.
+        if matches!(self.state, InputState::Conversion { .. }) {
+            return Some(EngineResult::not_consumed());
         }
         // Only consume the key when actually switching; otherwise pass through
         // so the system can properly track modifier state.

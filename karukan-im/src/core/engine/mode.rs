@@ -6,7 +6,8 @@ use super::*;
 
 impl InputMethodEngine {
     /// Enter katakana mode (Ctrl+k)
-    /// One-way switch to Katakana; use Right Super to return to Hiragana.
+    /// One-way switch to Katakana; a mode toggle key (Right Super, JIS 変換,
+    /// macOS かな/right-⌘ tap) returns to Hiragana.
     pub(super) fn enter_katakana_mode(&mut self) -> EngineResult {
         // Already in katakana mode: nothing to do
         if self.mode.current() == InputMode::Katakana {

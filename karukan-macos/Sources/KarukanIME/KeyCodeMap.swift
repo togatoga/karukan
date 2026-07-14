@@ -48,6 +48,8 @@ enum KeyCodeMap {
     static let kanaKeyCode: UInt16 = 104
     /// JIS keyboard 英数 key (kVK_JIS_Eisu).
     static let eisuKeyCode: UInt16 = 102
+    /// Right Command key (kVK_RightCommand), seen in flagsChanged events.
+    static let rightCommandKeyCode: UInt16 = 54
     /// XKB Super_R keysym — the engine's katakana→hiragana toggle.
     static let superRKeysym: UInt32 = 0xffec
 
@@ -103,5 +105,85 @@ enum KeyCodeMap {
             charactersIgnoringModifiers: event.charactersIgnoringModifiers,
             flags: event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         )
+    }
+}
+
+/// Detects a lone right-⌘ tap — press then release with nothing else in
+/// between — from the flagsChanged/keyDown event stream.
+///
+/// US layouts have no JIS かな key, so this tap is their gesture for
+/// returning the engine to hiragana mode (issue #33); it mirrors what
+/// Karabiner users configure as 右⌘ → かな, but without requiring
+/// Karabiner.
+///
+/// "Nothing else in between" cannot rely on keyDown events alone: Cocoa
+/// claims menu key equivalents (⌘V, ⌘C, ...) in `performKeyEquivalent`
+/// before they reach the input context, and mouse events never reach an
+/// IMKInputController at all, so `handle()` never sees them. Instead the
+/// detector snapshots the session-wide CoreGraphics event counters
+/// (key presses + mouse clicks, maintained by the window server regardless
+/// of who consumes the event) when right ⌘ goes down, and fires on release
+/// only if the counters are unchanged, the hold was shorter than
+/// `maxTapDuration`, and no other modifier moved in between. The keyDown
+/// `cancel()` in the controller stays as a fast path for keys that do
+/// reach the IME.
+struct RightCommandTapDetector {
+    /// Max press→release interval accepted as a tap; longer holds mean
+    /// right ⌘ was being used as a shortcut modifier.
+    static let maxTapDuration: TimeInterval = 0.5
+
+    private var armed = false
+    private var armedAt: TimeInterval = 0
+    private var pressCountWhenArmed: UInt32 = 0
+
+    /// Session-wide count of key and mouse-button presses. Ticks for every
+    /// press in the login session — including menu key equivalents and
+    /// clicks the IME never sees — which is what makes it a reliable
+    /// "did anything happen while right ⌘ was down" signal.
+    static func sessionPressCount() -> UInt32 {
+        let state = CGEventSourceStateID.combinedSessionState
+        return CGEventSource.counterForEventType(state, eventType: .keyDown)
+            &+ CGEventSource.counterForEventType(state, eventType: .leftMouseDown)
+            &+ CGEventSource.counterForEventType(state, eventType: .rightMouseDown)
+            &+ CGEventSource.counterForEventType(state, eventType: .otherMouseDown)
+    }
+
+    /// Feed a flagsChanged event. Returns true when a lone tap completed
+    /// (fire the hiragana toggle on this release). `now` and `pressCount`
+    /// are injectable for tests; production callers use the defaults.
+    mutating func handleFlagsChanged(
+        keyCode: UInt16,
+        flags: NSEvent.ModifierFlags,
+        now: TimeInterval = ProcessInfo.processInfo.systemUptime,
+        pressCount: () -> UInt32 = RightCommandTapDetector.sessionPressCount
+    ) -> Bool {
+        guard keyCode == KeyCodeMap.rightCommandKeyCode else {
+            // Some other modifier moved while (possibly) holding right ⌘:
+            // this is a chord, not a tap.
+            armed = false
+            return false
+        }
+        if flags.contains(.command) {
+            // Right ⌘ went down. Arm only if no other modifier is already
+            // held (⌥⌘-style chords must not fire on release).
+            armed = flags.intersection([.shift, .control, .option]).isEmpty
+            armedAt = now
+            pressCountWhenArmed = pressCount()
+            return false
+        }
+        // Right ⌘ came up. Fire only for a clean tap: still armed, quick,
+        // and no key/click happened anywhere in the session meanwhile.
+        let fire =
+            armed
+            && now - armedAt <= Self.maxTapDuration
+            && pressCount() == pressCountWhenArmed
+        armed = false
+        return fire
+    }
+
+    /// Any key press that does reach the IME means right ⌘ is being used
+    /// as a shortcut modifier — cancel the pending tap.
+    mutating func cancel() {
+        armed = false
     }
 }

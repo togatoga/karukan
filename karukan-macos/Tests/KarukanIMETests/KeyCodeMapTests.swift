@@ -127,3 +127,99 @@ final class Utf16ConversionTests: XCTestCase {
         XCTAssertEqual(range, NSRange(location: 2, length: 2))
     }
 }
+
+final class RightCommandTapDetectorTests: XCTestCase {
+    private let rcmd = KeyCodeMap.rightCommandKeyCode
+    private let lcmd: UInt16 = 55  // kVK_Command (left)
+    private let shiftKey: UInt16 = 56  // kVK_Shift
+
+    /// Press/release with injected time and session press counter so the
+    /// tests are deterministic (no real CGEventSource dependency).
+    private func down(
+        _ d: inout RightCommandTapDetector, keyCode: UInt16? = nil,
+        flags: NSEvent.ModifierFlags = [.command], at t: TimeInterval = 0, count: UInt32 = 0
+    ) -> Bool {
+        d.handleFlagsChanged(
+            keyCode: keyCode ?? rcmd, flags: flags, now: t, pressCount: { count })
+    }
+
+    private func up(
+        _ d: inout RightCommandTapDetector, keyCode: UInt16? = nil,
+        flags: NSEvent.ModifierFlags = [], at t: TimeInterval = 0.1, count: UInt32 = 0
+    ) -> Bool {
+        d.handleFlagsChanged(
+            keyCode: keyCode ?? rcmd, flags: flags, now: t, pressCount: { count })
+    }
+
+    func testLoneTapFires() {
+        var detector = RightCommandTapDetector()
+        XCTAssertFalse(down(&detector))
+        XCTAssertTrue(up(&detector))
+    }
+
+    func testSecondTapFiresAgain() {
+        var detector = RightCommandTapDetector()
+        _ = down(&detector)
+        XCTAssertTrue(up(&detector))
+        _ = down(&detector, at: 1.0)
+        XCTAssertTrue(up(&detector, at: 1.1))
+    }
+
+    func testSessionPressDuringHoldCancels() {
+        // ⌘V where the V keyDown is claimed by the menu and never reaches
+        // handle(): the session press counter still ticks, so no fire.
+        var detector = RightCommandTapDetector()
+        _ = down(&detector, count: 10)
+        XCTAssertFalse(up(&detector, count: 11))
+    }
+
+    func testMouseClickDuringHoldCancels() {
+        // Right-⌘-click: mouse events never reach an IMKInputController,
+        // but they tick the session press counter.
+        var detector = RightCommandTapDetector()
+        _ = down(&detector, count: 5)
+        XCTAssertFalse(up(&detector, count: 6))
+    }
+
+    func testLongHoldDoesNotFire() {
+        var detector = RightCommandTapDetector()
+        _ = down(&detector, at: 0)
+        XCTAssertFalse(up(&detector, at: RightCommandTapDetector.maxTapDuration + 0.01))
+    }
+
+    func testKeyDownCancelsPendingTap() {
+        // A key that does reach handle() cancels via the fast path.
+        var detector = RightCommandTapDetector()
+        _ = down(&detector)
+        detector.cancel()
+        XCTAssertFalse(up(&detector))
+    }
+
+    func testOtherModifierDuringHoldCancels() {
+        // Right ⌘ down, Shift down (chord), Shift up, right ⌘ up → no fire.
+        var detector = RightCommandTapDetector()
+        _ = down(&detector)
+        XCTAssertFalse(down(&detector, keyCode: shiftKey, flags: [.command, .shift]))
+        XCTAssertFalse(down(&detector, keyCode: shiftKey, flags: [.command]))
+        XCTAssertFalse(up(&detector))
+    }
+
+    func testPressWhileOtherModifierHeldDoesNotArm() {
+        // Shift held, then right ⌘ tapped: a ⇧⌘ chord, not a tap.
+        var detector = RightCommandTapDetector()
+        _ = down(&detector, keyCode: shiftKey, flags: [.shift])
+        XCTAssertFalse(down(&detector, flags: [.command, .shift]))
+        XCTAssertFalse(up(&detector, flags: [.shift]))
+    }
+
+    func testRightTapWhileLeftCommandHeldDoesNotFire() {
+        // Left ⌘ held the whole time: right ⌘'s release still reports
+        // .command, so the tap never completes; releasing left ⌘ later
+        // must not fire either.
+        var detector = RightCommandTapDetector()
+        _ = down(&detector, keyCode: lcmd)
+        _ = down(&detector)
+        XCTAssertFalse(up(&detector, flags: [.command]))
+        XCTAssertFalse(up(&detector, keyCode: lcmd))
+    }
+}
