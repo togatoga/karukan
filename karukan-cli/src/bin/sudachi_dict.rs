@@ -12,12 +12,10 @@ use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use karukan_engine::dict::parse_sudachi_csvs;
 use karukan_engine::kana::hiragana_to_katakana;
-use karukan_engine::kanji::{
-    KanjiError, LlamaCppModel, NllScorer, get_path_by_id, get_tokenizer_path_by_id, registry,
-};
+use karukan_engine::kanji::{LlamaCppModel, NllScorer};
 use rayon::prelude::*;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Build a scored JSON dictionary from Sudachi CSV files.
 ///
@@ -162,7 +160,7 @@ fn score_with_model(
     entries: Vec<(String, Vec<(String, i32)>)>,
     total_pairs: usize,
 ) -> Result<Vec<JsonEntry>> {
-    let model = load_model(&cli.model, cli.tokenizer_json.as_ref(), cli.n_ctx)?;
+    let model = load_model(&cli.model, cli.tokenizer_json.as_deref(), cli.n_ctx)?;
     let num_threads = rayon::current_num_threads();
 
     eprintln!("Scoring {} pairs (threads={})...", total_pairs, num_threads);
@@ -170,12 +168,7 @@ fn score_with_model(
     // Flatten all (reading, surface) pairs for parallel processing
     let mut flat_pairs: Vec<FlatPair> = Vec::with_capacity(total_pairs);
     for (entry_idx, (reading, surfaces)) in entries.iter().enumerate() {
-        let reading_katakana = hiragana_to_katakana(reading);
-        let katakana = if reading_katakana == *reading {
-            reading.clone()
-        } else {
-            reading_katakana
-        };
+        let katakana = hiragana_to_katakana(reading);
         for (surface_idx, (surface, cost)) in surfaces.iter().enumerate() {
             flat_pairs.push(FlatPair {
                 entry_idx,
@@ -260,31 +253,10 @@ fn score_with_model(
 /// Load a model by variant id or GGUF file path.
 fn load_model(
     model_spec: &str,
-    tokenizer_json: Option<&PathBuf>,
+    tokenizer_json: Option<&Path>,
     n_ctx: u32,
 ) -> Result<LlamaCppModel> {
     let path = PathBuf::from(model_spec);
-    if path.exists() {
-        let tok_path = tokenizer_json.ok_or_else(|| {
-            anyhow::anyhow!("--tokenizer-json is required when --model is a GGUF file path")
-        })?;
-        eprintln!("Loading GGUF from {}...", path.display());
-        let model = LlamaCppModel::from_file_with_n_ctx(&path, tok_path, n_ctx)
-            .with_context(|| format!("Failed to load GGUF from {}", path.display()))?;
-        return Ok(model);
-    }
-
-    let reg = registry();
-    let (_family, _variant) = reg
-        .find_variant(model_spec)
-        .ok_or(KanjiError::UnknownVariant(model_spec.to_string()))?;
-
-    eprintln!("Downloading/loading model variant: {} ...", model_spec);
-    let gguf_path = get_path_by_id(model_spec)?;
-    let tok_path = get_tokenizer_path_by_id(model_spec)?;
-    eprintln!("Model path: {}", gguf_path.display());
-    eprintln!("Tokenizer: {}", tok_path.display());
-    Ok(LlamaCppModel::from_file_with_n_ctx(
-        &gguf_path, &tok_path, n_ctx,
-    )?)
+    let gguf = path.exists().then_some(path.as_path());
+    karukan_cli::load_llama_model(gguf, tokenizer_json, model_spec, n_ctx)
 }
