@@ -45,11 +45,11 @@ class EngineClient {
         }
     }
 
-    func processKeySync(_ key: EngineKeyEvent, isRelease: Bool = false) -> KeyResult? {
+    func processKeySync(_ key: EngineKeyEvent) -> KeyResult? {
         let params: [String: Any] = [
             "keysym": key.keysym,
             "modifiers": key.modifiers.jsonObject,
-            "is_release": isRelease,
+            "is_release": false,
         ]
         return keyResultSync(method: "process_key", params: params, timeout: 3.0)
     }
