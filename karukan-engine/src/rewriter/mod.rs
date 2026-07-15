@@ -30,6 +30,28 @@ pub use half_katakana::HalfWidthKatakanaRewriter;
 pub use number::NumberRewriter;
 pub use symbol::{SymbolRewriter, description};
 
+use crate::kana::{ascii_to_fullwidth_char, fullwidth_to_ascii_char};
+
+/// True iff every character is a halfwidth (`0-9`) or fullwidth (`０-９`)
+/// decimal digit, and the string is non-empty. Shared gate for digit-only
+/// rewriting so arbitrary candidates with stray digits aren't expanded.
+pub(crate) fn is_pure_digit(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('\u{FF10}'..='\u{FF19}').contains(&c))
+}
+
+/// Convert every full-width ASCII alphanumeric character to half-width.
+pub(crate) fn to_halfwidth(text: &str) -> String {
+    text.chars().map(fullwidth_to_ascii_char).collect()
+}
+
+/// Convert every half-width ASCII alphanumeric character to full-width.
+pub(crate) fn to_fullwidth(text: &str) -> String {
+    text.chars().map(ascii_to_fullwidth_char).collect()
+}
+
 /// One result of rewriting: the variant text and an optional description used
 /// as the candidate's annotation (e.g. `三点リーダ` for `…`).
 pub type RewriteOutput = (String, Option<String>);

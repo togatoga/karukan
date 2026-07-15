@@ -44,9 +44,7 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
-use crate::kana::{ascii_to_fullwidth_char, fullwidth_to_ascii_char};
-
-use super::{RewriteOutput, Rewriter};
+use super::{RewriteOutput, Rewriter, is_pure_digit, to_fullwidth, to_halfwidth};
 
 const SYMBOLS_YAML: &str = include_str!("../../data/symbols.yml");
 
@@ -149,16 +147,6 @@ impl SymbolRewriter {
     }
 }
 
-/// True if every character is an ASCII digit or full-width digit (and the
-/// string is non-empty). Used to gate digit-only width-pair generation so
-/// arbitrary candidates with stray digits aren't expanded.
-fn is_pure_digit(text: &str) -> bool {
-    !text.is_empty()
-        && text
-            .chars()
-            .all(|c| c.is_ascii_digit() || ('\u{FF10}'..='\u{FF19}').contains(&c))
-}
-
 /// For a digit-only string, return the all-full-width and all-half-width forms
 /// that differ from the input. Supports arbitrary length (e.g. `123` → `１２３`,
 /// `１２` → `12`).
@@ -166,8 +154,8 @@ fn digit_width_variants(candidate: &str) -> Vec<String> {
     if !is_pure_digit(candidate) {
         return Vec::new();
     }
-    let full: String = candidate.chars().map(ascii_to_fullwidth_char).collect();
-    let half: String = candidate.chars().map(fullwidth_to_ascii_char).collect();
+    let full = to_fullwidth(candidate);
+    let half = to_halfwidth(candidate);
     let mut out = Vec::new();
     if full != candidate {
         out.push(full);

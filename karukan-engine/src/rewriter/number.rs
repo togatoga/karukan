@@ -9,8 +9,7 @@
 //! Inputs must be pure decimal digits — mixed text like `20世紀` is left
 //! alone.
 
-use super::{RewriteOutput, Rewriter};
-use crate::kana::{ascii_to_fullwidth_char, fullwidth_to_ascii_char};
+use super::{RewriteOutput, Rewriter, is_pure_digit, to_fullwidth, to_halfwidth};
 
 // ---------- tables ----------
 //
@@ -59,25 +58,6 @@ const DESC_CIRCLED: &str = "丸数字";
 const DESC_HEX: &str = "16進数";
 const DESC_OCT: &str = "8進数";
 const DESC_BIN: &str = "2進数";
-
-// ---------- input gates ----------
-
-/// True iff every character is a halfwidth (`0-9`) or fullwidth (`０-９`)
-/// decimal digit, and the string is non-empty.
-fn is_pure_digit(text: &str) -> bool {
-    !text.is_empty()
-        && text
-            .chars()
-            .all(|c| c.is_ascii_digit() || ('\u{FF10}'..='\u{FF19}').contains(&c))
-}
-
-fn to_halfwidth(text: &str) -> String {
-    text.chars().map(fullwidth_to_ascii_char).collect()
-}
-
-fn to_fullwidth(text: &str) -> String {
-    text.chars().map(ascii_to_fullwidth_char).collect()
-}
 
 // ---------- kanji rendering ----------
 

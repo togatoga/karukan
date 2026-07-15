@@ -193,13 +193,6 @@ pub fn katakana_to_half_width(text: &str) -> String {
     out
 }
 
-/// Convert hiragana to half-width katakana.
-///
-/// Equivalent to `katakana_to_half_width(hiragana_to_katakana(text))`.
-pub fn hiragana_to_half_katakana(text: &str) -> String {
-    katakana_to_half_width(&hiragana_to_katakana(text))
-}
-
 /// Map a half-width ASCII alphanumeric character (digit / Latin letter) to
 /// its full-width form (e.g. `a` → `ａ`, `Z` → `Ｚ`, `5` → `５`). All other
 /// characters pass through unchanged.
@@ -322,13 +315,6 @@ mod tests {
         // Pass through non-katakana
         assert_eq!(katakana_to_half_width("abc"), "abc");
         assert_eq!(katakana_to_half_width("漢字"), "漢字");
-    }
-
-    #[test]
-    fn test_hiragana_to_half_katakana() {
-        assert_eq!(hiragana_to_half_katakana("あ"), "ｱ");
-        assert_eq!(hiragana_to_half_katakana("がっこう"), "ｶﾞｯｺｳ");
-        assert_eq!(hiragana_to_half_katakana("ぱぴぷぺぽ"), "ﾊﾟﾋﾟﾌﾟﾍﾟﾎﾟ");
     }
 
     #[test]
