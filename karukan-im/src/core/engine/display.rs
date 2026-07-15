@@ -53,10 +53,8 @@ impl InputMethodEngine {
         } else {
             (self.build_input_display(), self.display_caret_position())
         };
-        let len = display.chars().count();
-        let mut preedit = Preedit::with_text(&display);
+        let mut preedit = Preedit::with_text_underlined(&display);
         preedit.set_caret(caret);
-        preedit.set_attributes(vec![PreeditAttribute::underline(0, len)]);
         preedit
     }
 
@@ -69,19 +67,16 @@ impl InputMethodEngine {
             return String::new();
         }
         let lctx = left.filter(|s| !s.is_empty()).map(|left| {
-            let char_count = left.chars().count();
-            if char_count > max_len {
-                let start = char_count - max_len;
-                format!("...{}", left.chars().skip(start).collect::<String>())
+            if left.chars().count() > max_len {
+                format!("...{}", keep_last_chars(left, max_len))
             } else {
                 left.to_string()
             }
         });
 
         let rctx = right.filter(|s| !s.is_empty()).map(|right| {
-            let char_count = right.chars().count();
-            if char_count > max_len {
-                format!("{}...", right.chars().take(max_len).collect::<String>())
+            if right.chars().count() > max_len {
+                format!("{}...", keep_first_chars(right, max_len))
             } else {
                 right.to_string()
             }
@@ -262,12 +257,6 @@ impl InputMethodEngine {
 
     /// Truncate a context string to safe size for API calls
     pub(super) fn truncate_context(&self, context: &str) -> String {
-        let char_count = context.chars().count();
-        if char_count > self.config.max_api_context_len {
-            let start = char_count - self.config.max_api_context_len;
-            context.chars().skip(start).collect()
-        } else {
-            context.to_string()
-        }
+        keep_last_chars(context, self.config.max_api_context_len)
     }
 }

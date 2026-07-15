@@ -256,10 +256,7 @@ impl InputMethodEngine {
     fn enter_conversion_state(&mut self, reading: &str, candidates: CandidateList) -> EngineResult {
         let selected_text = candidates.selected_text().unwrap_or(reading).to_string();
 
-        let preedit = Preedit::from_segments(
-            vec![PreeditSegment::highlighted(&selected_text)],
-            selected_text.chars().count(),
-        );
+        let preedit = Preedit::with_text_highlighted(&selected_text);
 
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
@@ -612,7 +609,7 @@ impl InputMethodEngine {
     }
 
     /// Get selected text and reading from conversion state, or None if not in conversion
-    fn selected_conversion_info(&self) -> Option<(String, Option<String>)> {
+    pub(super) fn selected_conversion_info(&self) -> Option<(String, Option<String>)> {
         match &self.state {
             InputState::Conversion { candidates, .. } => {
                 let text = candidates.selected_text().unwrap_or("").to_string();
@@ -630,6 +627,23 @@ impl InputMethodEngine {
         }
     }
 
+    /// Record the committed conversion in the learning cache and reset to Empty state.
+    ///
+    /// Skips learning when the buffer is a `:shortcode` query — the
+    /// reading would be e.g. `:smile`, which isn't a hiragana key
+    /// and would corrupt the kana-keyed learning cache.
+    fn finish_conversion(&mut self, text: &str, reading: &Option<String>) {
+        if self.mode.current() != InputMode::Emoji
+            && let Some(reading) = reading
+        {
+            self.record_learning(reading, text);
+        }
+
+        self.state = InputState::Empty;
+        self.input_buf.text.clear();
+        self.mode.exit_temporary();
+    }
+
     /// Commit the current conversion
     fn commit_conversion(&mut self) -> EngineResult {
         let Some((text, reading)) = self.selected_conversion_info() else {
@@ -640,18 +654,7 @@ impl InputMethodEngine {
             return EngineResult::consumed();
         }
 
-        // Skip learning when the buffer is a `:shortcode` query — the
-        // reading would be e.g. `:smile`, which isn't a hiragana key
-        // and would corrupt the kana-keyed learning cache.
-        if self.mode.current() != InputMode::Emoji
-            && let Some(reading) = &reading
-        {
-            self.record_learning(reading, &text);
-        }
-
-        self.state = InputState::Empty;
-        self.input_buf.text.clear();
-        self.mode.exit_temporary();
+        self.finish_conversion(&text, &reading);
 
         EngineResult::consumed()
             .with_action(EngineAction::HideCandidates)
@@ -665,15 +668,7 @@ impl InputMethodEngine {
             return EngineResult::not_consumed();
         };
 
-        if self.mode.current() != InputMode::Emoji
-            && let Some(reading) = &reading
-        {
-            self.record_learning(reading, &text);
-        }
-
-        self.state = InputState::Empty;
-        self.input_buf.text.clear();
-        self.mode.exit_temporary();
+        self.finish_conversion(&text, &reading);
 
         // Start new input with the character
         let new_input_result = self.start_input(ch);
@@ -803,12 +798,7 @@ impl InputMethodEngine {
         selected_text: &str,
         candidates: &CandidateList,
     ) -> EngineResult {
-        let mut preedit = Preedit::with_text(selected_text);
-        preedit.set_attributes(vec![PreeditAttribute::new(
-            0,
-            selected_text.chars().count(),
-            AttributeType::Highlight,
-        )]);
+        let preedit = Preedit::with_text_highlighted(selected_text);
 
         if let Some(p) = self.state.preedit_mut() {
             *p = preedit.clone();
