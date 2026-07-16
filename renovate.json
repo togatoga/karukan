@@ -1,12 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":timezone(Asia/Tokyo)"],
-  "schedule": ["before 9am on saturday"],
-  "lockFileMaintenance": { "enabled": true },
+  "schedule": ["after 9pm", "before 9am"],
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 10,
+  "cargo": { "rangeStrategy": "update-lockfile" },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 9am on saturday"]
+  },
   "packageRules": [
     {
       "matchManagers": ["cargo"],
-      "groupName": "cargo dependencies"
+      "groupName": "cargo dependencies",
+      "minimumReleaseAge": "3 days"
     },
     {
       "matchPackageNames": ["llama-cpp-2"],
