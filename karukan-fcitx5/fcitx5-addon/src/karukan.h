@@ -35,12 +35,11 @@ private:
 // Candidate list class
 class KarukanCandidateList : public CommonCandidateList {
 public:
-    KarukanCandidateList(KarukanEngine* engine, InputContext* ic);
+    KarukanCandidateList(KarukanEngine* engine);
     void updateCandidates(::KarukanEngine* rustEngine);
 
 private:
     KarukanEngine* engine_;
-    InputContext* ic_;
 };
 
 // Per-input-context state
@@ -52,6 +51,8 @@ public:
     void keyEvent(KeyEvent& keyEvent);
     void reset();
     void updateUI();
+    void captureSurroundingText();
+    void emitPendingCommit();
 
     ::KarukanEngine* rustEngine() { return rustEngine_; }
 
@@ -73,11 +74,7 @@ public:
     void activate(const InputMethodEntry& entry, InputContextEvent& event) override;
     void deactivate(const InputMethodEntry& entry, InputContextEvent& event) override;
 
-    Instance* instance() { return instance_; }
-
     void selectCandidate(InputContext* ic, int index);
-
-    auto& factory() { return factory_; }
 
 private:
     Instance* instance_;

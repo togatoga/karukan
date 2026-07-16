@@ -72,42 +72,31 @@ impl InputMethodEngine {
         // Live conversion mode: show converted text in preedit
         if self.live.enabled && self.mode.current() != InputMode::Katakana {
             self.live.text = candidates[0].clone();
-            let preedit = self.set_composing_state();
-
-            // Same candidate ordering as normal auto-suggest (learning → model →
-            // dictionary). Including the model candidates guarantees the list is
-            // never empty, so the candidate window — whose aux line is where
-            // frontends show the raw reading once the preedit displays converted
-            // text — stays on screen for the whole live conversion.
-            let mut all_candidates = self.lookup_learning_candidates(&reading);
-            let model_candidates: Vec<Candidate> = candidates
-                .into_iter()
-                .map(|s| Candidate::with_reading(s, &reading))
-                .collect();
-            append_candidates_dedup(&mut all_candidates, model_candidates);
-            append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
-            let aux = self.format_aux_suggest(&self.input_buf.text.clone());
-            return EngineResult::consumed()
-                .with_action(EngineAction::UpdatePreedit(preedit))
-                .with_action(EngineAction::ShowCandidates(CandidateList::new(
-                    all_candidates,
-                )))
-                .with_action(EngineAction::UpdateAuxText(aux));
+            return self.suggest_result(candidates, &reading);
         }
 
-        // Normal auto-suggest: show hiragana preedit + learning/model/dict candidates
+        // Normal auto-suggest: show hiragana preedit
         self.live.text.clear();
+        self.suggest_result(candidates, &reading)
+    }
+
+    /// Build the auto-suggest result shared by live conversion and normal
+    /// auto-suggest: composing preedit, candidate list, and aux text.
+    ///
+    /// Candidate ordering is learning → model → dictionary. Including the
+    /// model candidates guarantees the list is never empty, so the candidate
+    /// window — whose aux line is where frontends show the raw reading once
+    /// the preedit displays converted text — stays on screen for the whole
+    /// live conversion.
+    fn suggest_result(&mut self, candidates: Vec<String>, reading: &str) -> EngineResult {
         let preedit = self.set_composing_state();
-        // Learning candidates first (highest priority)
-        let mut all_candidates = self.lookup_learning_candidates(&reading);
-        // Then model inference candidates
+        let mut all_candidates = self.lookup_learning_candidates(reading);
         let model_candidates: Vec<Candidate> = candidates
             .into_iter()
-            .map(|s| Candidate::with_reading(s, &reading))
+            .map(|s| Candidate::with_reading(s, reading))
             .collect();
         append_candidates_dedup(&mut all_candidates, model_candidates);
-        // Then dictionary candidates
-        append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
+        append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(reading));
         let aux = self.format_aux_suggest(&self.input_buf.text.clone());
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(preedit))

@@ -164,8 +164,7 @@ impl Settings {
         }
 
         debug!("Loading config from {:?}", config_file);
-        let content = fs::read_to_string(&config_file)?;
-        parse_with_defaults(&content)
+        Self::load_from(&config_file)
     }
 
     /// Load settings from a specific file, merged on top of defaults.
@@ -180,15 +179,8 @@ impl Settings {
             anyhow::bail!("Could not determine config directory");
         };
 
-        // Create config directory if it doesn't exist
-        if let Some(parent) = config_file.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
         debug!("Saving config to {:?}", config_file);
-        let content = toml::to_string_pretty(self)?;
-        fs::write(&config_file, content)?;
-        Ok(())
+        self.save_to(&config_file)
     }
 
     /// Save settings to a specific file

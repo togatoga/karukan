@@ -1,6 +1,5 @@
 use super::rules::build_rules;
 use super::trie::TrieNode;
-use crate::kana::hiragana_to_katakana;
 
 /// Events that can occur during conversion
 #[derive(Debug, Clone, PartialEq)]
@@ -233,11 +232,6 @@ impl RomajiConverter {
         &self.output
     }
 
-    /// Get the current output converted to katakana
-    pub fn output_katakana(&self) -> String {
-        hiragana_to_katakana(&self.output)
-    }
-
     /// Get the current buffer (unconverted input)
     pub fn buffer(&self) -> &str {
         &self.buffer
@@ -247,16 +241,6 @@ impl RomajiConverter {
     pub fn reset(&mut self) {
         self.buffer.clear();
         self.output.clear();
-    }
-
-    /// Get both output and buffer as a single string
-    pub fn full_text(&self) -> String {
-        format!("{}{}", self.output, self.buffer)
-    }
-
-    /// Get both output and buffer as a single string, with output converted to katakana
-    pub fn full_text_katakana(&self) -> String {
-        format!("{}{}", hiragana_to_katakana(&self.output), self.buffer)
     }
 }
 
@@ -447,30 +431,5 @@ mod tests {
         }
         assert_eq!(conv.output(), "あ？b？ちゃ");
         assert_eq!(conv.buffer(), "");
-    }
-
-    #[test]
-    fn test_output_katakana() {
-        let mut conv = RomajiConverter::new();
-        "watashi".chars().for_each(|c| {
-            conv.push(c);
-        });
-        // "watash" → "わたし" with "i" still possible as part of "shi" etc.
-        // Actually: w→buffered, wa→わ, t→buffered, ta→た, s→buffered, sh→buffered, shi→し
-        assert_eq!(conv.output(), "わたし");
-        assert_eq!(conv.output_katakana(), "ワタシ");
-        assert_eq!(conv.buffer(), "");
-    }
-
-    #[test]
-    fn test_full_text_katakana() {
-        let mut conv = RomajiConverter::new();
-        // "kak" → か + k(buffered)
-        "kak".chars().for_each(|c| {
-            conv.push(c);
-        });
-        assert_eq!(conv.output(), "か");
-        assert_eq!(conv.buffer(), "k");
-        assert_eq!(conv.full_text_katakana(), "カk");
     }
 }
