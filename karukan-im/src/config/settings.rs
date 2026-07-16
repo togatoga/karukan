@@ -70,6 +70,8 @@ pub struct ConversionSettings {
     pub n_threads: u32,
     /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
     pub live_conversion: bool,
+    /// Show the candidate window while live conversion is updating preedit.
+    pub show_live_conversion_candidates: bool,
 }
 
 /// Learning cache settings
@@ -215,6 +217,7 @@ mod tests {
         assert_eq!(settings.conversion.num_candidates, 9);
         assert!(settings.conversion.use_context);
         assert_eq!(settings.conversion.max_context_length, 10);
+        assert!(settings.conversion.show_live_conversion_candidates);
     }
 
     #[test]
@@ -274,6 +277,24 @@ num_candidates = 3
         // Should use default for unspecified values
         assert!(settings.conversion.use_context);
         assert_eq!(settings.conversion.max_context_length, 10);
+        assert!(settings.conversion.show_live_conversion_candidates);
+    }
+
+    #[test]
+    fn test_show_live_conversion_candidates_setting() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[conversion]
+show_live_conversion_candidates = false
+"#
+        )
+        .unwrap();
+
+        let path = file.path().to_path_buf();
+        let settings = Settings::load_from(&path).unwrap();
+        assert!(!settings.conversion.show_live_conversion_candidates);
     }
 
     #[test]

@@ -51,6 +51,17 @@ impl InputMethodEngine {
             // (e.g. `「` → `『`, `【`, ...) for symbol-only inputs where the model is skipped.
             self.live.text.clear();
             let preedit = self.set_composing_state();
+            if self.live.enabled
+                && self.input_mode != InputMode::Katakana
+                && self.input_mode != InputMode::Emoji
+                && !self.config.show_live_conversion_candidates
+            {
+                return EngineResult::consumed()
+                    .with_action(EngineAction::UpdatePreedit(preedit))
+                    .with_action(EngineAction::HideCandidates)
+                    .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
+            }
+
             let reading = self.input_buf.text.clone();
             let mut all_candidates = self.lookup_learning_candidates(&reading);
             append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
@@ -73,6 +84,14 @@ impl InputMethodEngine {
         if self.live.enabled && self.mode.current() != InputMode::Katakana {
             self.live.text = candidates[0].clone();
             let preedit = self.set_composing_state();
+            let aux = self.format_aux_suggest(&self.input_buf.text.clone());
+
+            if !self.config.show_live_conversion_candidates {
+                return EngineResult::consumed()
+                    .with_action(EngineAction::UpdatePreedit(preedit))
+                    .with_action(EngineAction::HideCandidates)
+                    .with_action(EngineAction::UpdateAuxText(aux));
+            }
 
             // Same candidate ordering as normal auto-suggest (learning → model →
             // dictionary). Including the model candidates guarantees the list is
@@ -86,7 +105,7 @@ impl InputMethodEngine {
                 .collect();
             append_candidates_dedup(&mut all_candidates, model_candidates);
             append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
-            let aux = self.format_aux_suggest(&self.input_buf.text.clone());
+
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(preedit))
                 .with_action(EngineAction::ShowCandidates(CandidateList::new(

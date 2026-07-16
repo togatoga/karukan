@@ -29,6 +29,8 @@ light_model = "jinen-v1-xsmall-q5"
 n_threads = 4
 # 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
 live_conversion = true
+# ライブ変換中に候補ウィンドウを表示する
+show_live_conversion_candidates = true
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
 
 [learning]

@@ -88,6 +88,8 @@ pub struct EngineConfig {
     pub strategy: StrategyMode,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
+    /// Whether live conversion shows the candidate window while composing
+    pub show_live_conversion_candidates: bool,
 }
 
 impl EngineConfig {
@@ -108,6 +110,7 @@ impl EngineConfig {
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
             live_conversion: settings.conversion.live_conversion,
+            show_live_conversion_candidates: settings.conversion.show_live_conversion_candidates,
         }
     }
 }
@@ -124,6 +127,7 @@ impl Default for EngineConfig {
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
             live_conversion: false,
+            show_live_conversion_candidates: true,
         }
     }
 }
