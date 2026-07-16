@@ -81,10 +81,11 @@ impl Dictionary {
             .collect();
 
         let trie_bytes = DoubleArrayBuilder::build(&keyset)
-            .ok_or_else(|| DictError::Format("failed to build double-array trie".to_string()))?;
+            .map_err(|e| DictError::Format(format!("failed to build double-array trie: {e}")))?;
 
         Ok(Dictionary {
-            trie: DoubleArray::new(trie_bytes),
+            trie: DoubleArray::new(trie_bytes)
+                .map_err(|e| DictError::Format(format!("invalid double-array trie: {e}")))?,
             entries,
         })
     }
@@ -260,7 +261,8 @@ impl Dictionary {
         }
 
         Ok(Dictionary {
-            trie: DoubleArray::new(trie_bytes),
+            trie: DoubleArray::new(trie_bytes)
+                .map_err(|e| DictError::Format(format!("invalid double-array trie: {e}")))?,
             entries,
         })
     }
