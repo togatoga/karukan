@@ -788,10 +788,33 @@ impl InputMethodEngine {
     }
 
     /// Record a conversion selection in the learning cache.
+    ///
+    /// Date conversions (`きょう` → `2026-07-16`) are never learned: their
+    /// surface is tied to the day it was committed, so a learned entry would
+    /// keep resurfacing a stale date (e.g. `2026-07-13` days later) at the top
+    /// of the candidate list. The guard is surface-specific — it only drops the
+    /// calendar-date surfaces the `DateRewriter` would emit today, so a normal
+    /// conversion of the same reading (`きょう` → `今日`) is still learned.
     pub(super) fn record_learning(&mut self, reading: &str, surface: &str) {
+        if self.is_date_surface(reading, surface) {
+            return;
+        }
         if let Some(cache) = &mut self.learning {
             cache.record(reading, surface);
         }
+    }
+
+    /// Whether `surface` is a calendar date the `DateRewriter` produces for
+    /// `reading` today (across all configured formats). Always false when date
+    /// conversion is disabled or no format is configured.
+    fn is_date_surface(&self, reading: &str, surface: &str) -> bool {
+        if !self.config.date_conversion || self.config.date_formats.is_empty() {
+            return false;
+        }
+        karukan_engine::DateRewriter::new(self.config.date_formats.clone())
+            .rewrite(reading)
+            .iter()
+            .any(|(text, _)| text == surface)
     }
 
     /// Record the committed conversion in the learning cache and reset to Empty state.

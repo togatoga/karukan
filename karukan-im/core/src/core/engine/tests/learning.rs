@@ -4,7 +4,7 @@
 //! Tab: skip learning candidates (lets users escape stale learned entries).
 //! Ctrl+Delete: delete the selected learning candidate from the history.
 
-use karukan_engine::{LearningCache, LearningConfig};
+use karukan_engine::{LearningCache, LearningConfig, Rewriter};
 
 use super::*;
 use crate::core::engine::display::LEARNING_DELETE_HINT;
@@ -20,6 +20,47 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     cache.record(reading, surface);
     engine.learning = Some(cache);
     engine
+}
+
+/// Today's date rendered as the ISO variant the `DateRewriter` emits, so the
+/// test agrees with the engine's own notion of "today" regardless of when it
+/// runs.
+fn todays_iso_date() -> String {
+    karukan_engine::DateRewriter::new(vec!["%Y-%m-%d".to_string()])
+        .rewrite("きょう")
+        .remove(0)
+        .0
+}
+
+#[test]
+fn record_learning_skips_todays_date_surface() {
+    let mut engine = InputMethodEngine::new();
+    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+
+    let today = todays_iso_date();
+    engine.record_learning("きょう", &today);
+
+    let texts: Vec<String> = engine
+        .lookup_learning_candidates("きょう")
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert!(!texts.contains(&today), "date surface must not be learned");
+}
+
+#[test]
+fn record_learning_keeps_kanji_surface_for_date_reading() {
+    let mut engine = InputMethodEngine::new();
+    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+
+    engine.record_learning("きょう", "今日");
+
+    let texts: Vec<String> = engine
+        .lookup_learning_candidates("きょう")
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert!(texts.contains(&"今日".to_string()));
 }
 
 #[test]
