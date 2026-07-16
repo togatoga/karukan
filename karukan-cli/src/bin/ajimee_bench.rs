@@ -6,10 +6,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use karukan_engine::kana::normalize_nfkc;
-use karukan_engine::kanji::{
-    KanjiError, LlamaCppModel, build_jinen_prompt, clean_model_output, get_path_by_id,
-    get_tokenizer_path_by_id, registry,
-};
+use karukan_engine::kanji::{build_jinen_prompt, clean_model_output};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -149,28 +146,12 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Load model
-    let model = if let Some(gguf_path) = &cli.gguf {
-        let tok_path = cli
-            .tokenizer_json
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("--tokenizer-json is required when using --gguf"))?;
-        eprintln!("Loading GGUF from {}...", gguf_path.display());
-        LlamaCppModel::from_file_with_n_ctx(gguf_path, tok_path, cli.n_ctx)
-            .with_context(|| format!("Failed to load GGUF from {}", gguf_path.display()))?
-    } else {
-        let reg = registry();
-        let variant_id = &cli.model;
-        let (_family, _variant) = reg
-            .find_variant(variant_id)
-            .ok_or(KanjiError::UnknownVariant(variant_id.to_string()))?;
-
-        eprintln!("Downloading/loading model variant: {} ...", variant_id);
-        let path = get_path_by_id(variant_id)?;
-        let tok_path = get_tokenizer_path_by_id(variant_id)?;
-        eprintln!("Model path: {}", path.display());
-        eprintln!("Tokenizer: {}", tok_path.display());
-        LlamaCppModel::from_file_with_n_ctx(&path, &tok_path, cli.n_ctx)?
-    };
+    let model = karukan_cli::load_llama_model(
+        cli.gguf.as_deref(),
+        cli.tokenizer_json.as_deref(),
+        &cli.model,
+        cli.n_ctx,
+    )?;
 
     let eos = Some(model.eos_token_id().0);
 

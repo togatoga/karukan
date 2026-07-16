@@ -103,6 +103,17 @@ impl Preedit {
         }
     }
 
+    /// Create a preedit with text and highlight the entire text
+    pub fn with_text_highlighted(text: impl Into<String>) -> Self {
+        let text = text.into();
+        let len = text.chars().count();
+        Self {
+            attributes: vec![PreeditAttribute::new(0, len, AttributeType::Highlight)],
+            text,
+            caret: len,
+        }
+    }
+
     /// Get the preedit text
     pub fn text(&self) -> &str {
         &self.text

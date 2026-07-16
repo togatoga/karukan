@@ -39,11 +39,7 @@ class KarukanInputController: IMKInputController {
                 flags: event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             )
             if fired, let client = sender as? (any IMKTextInput) {
-                let key = EngineKeyEvent(
-                    keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
-                if let result = engineClient.processKeySync(key) {
-                    apply(actions: result.actions, client: client)
-                }
+                sendKanaToggle(client: client)
             }
             return false
         }
@@ -63,10 +59,7 @@ class KarukanInputController: IMKInputController {
         // consume so the system doesn't process keyCode 104 after the engine
         // returns not_consumed (already in hiragana mode).
         if event.keyCode == KeyCodeMap.kanaKeyCode {
-            let key = EngineKeyEvent(keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
-            if let result = engineClient.processKeySync(key) {
-                apply(actions: result.actions, client: client)
-            }
+            sendKanaToggle(client: client)
             return true
         }
 
@@ -97,6 +90,15 @@ class KarukanInputController: IMKInputController {
         }
         apply(actions: result.actions, client: client)
         return result.consumed
+    }
+
+    /// Send the return-to-hiragana toggle (Super_R) to the engine and apply
+    /// the resulting actions.
+    private func sendKanaToggle(client: any IMKTextInput) {
+        let key = EngineKeyEvent(keysym: KeyCodeMap.superRKeysym, modifiers: KeyModifiers())
+        if let result = engineClient.processKeySync(key) {
+            apply(actions: result.actions, client: client)
+        }
     }
 
     // MARK: - Lifecycle

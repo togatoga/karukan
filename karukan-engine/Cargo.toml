@@ -22,24 +22,23 @@ serde_yaml = "0.9"
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 toml.workspace = true
 
 # llama.cpp bindings for GGUF inference
 llama-cpp-2 = "0.1"
-yada = "0.5"
+yada = "0.7"
 
 # HuggingFace model download
-hf-hub = "0.4"
+hf-hub = "0.5"
 
 # Unicode normalization (NFKC) for models whose tokenizer doesn't support full-width ASCII
 unicode-normalization = "0.1"
 
 # HuggingFace tokenizers for external BPE tokenization (bypasses llama.cpp's built-in tokenizer)
-tokenizers = "0.21"
+tokenizers = "0.23"
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8"
 tempfile.workspace = true
 
 [[bench]]

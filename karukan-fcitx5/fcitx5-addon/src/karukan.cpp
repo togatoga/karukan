@@ -49,8 +49,7 @@ void KarukanCandidateWord::select(InputContext* inputContext) const {
 
 // --- KarukanCandidateList ---
 
-KarukanCandidateList::KarukanCandidateList(KarukanEngine* engine, InputContext* ic)
-    : engine_(engine), ic_(ic) {
+KarukanCandidateList::KarukanCandidateList(KarukanEngine* engine) : engine_(engine) {
     setLayoutHint(CandidateLayoutHint::Vertical);
     setPageSize(9);
     // Set selection key labels (1-9)
@@ -153,15 +152,7 @@ void KarukanState::keyEvent(KeyEvent& keyEvent) {
     // For apps without SurroundingText capability (terminals), this clears
     // the context so stale data doesn't persist.
     if (karukan_engine_is_empty(rustEngine_) && !isRelease) {
-        if (ic_->capabilityFlags().test(CapabilityFlag::SurroundingText) &&
-            ic_->surroundingText().isValid()) {
-            const auto& surrounding = ic_->surroundingText();
-            const std::string& text = surrounding.text();
-            uint32_t cursor = surrounding.cursor();
-            karukan_engine_set_surrounding_text(rustEngine_, text.c_str(), cursor);
-        } else {
-            karukan_engine_set_surrounding_text(rustEngine_, "", 0);
-        }
+        captureSurroundingText();
     }
 
     // Process key through Rust engine
@@ -198,10 +189,7 @@ void KarukanState::updateUI() {
     // preedit/candidates/aux in one shot.
     // New preedit/candidates/aux are re-set below if the engine produced them.
     if (karukan_engine_has_commit(rustEngine_)) {
-        const char* commitText = karukan_engine_get_commit(rustEngine_);
-        if (commitText && karukan_engine_get_commit_len(rustEngine_) > 0) {
-            ic_->commitString(commitText);
-        }
+        emitPendingCommit();
         inputPanel.reset();
     }
 
@@ -243,7 +231,7 @@ void KarukanState::updateUI() {
         if (karukan_engine_should_hide_candidates(rustEngine_)) {
             inputPanel.setCandidateList(nullptr);
         } else {
-            auto candidateList = std::make_unique<KarukanCandidateList>(engine_, ic_);
+            auto candidateList = std::make_unique<KarukanCandidateList>(engine_);
             candidateList->updateCandidates(rustEngine_);
             inputPanel.setCandidateList(std::move(candidateList));
         }
@@ -251,6 +239,25 @@ void KarukanState::updateUI() {
 
     ic_->updatePreedit();
     ic_->updateUserInterface(UserInterfaceComponent::InputPanel);
+}
+
+void KarukanState::captureSurroundingText() {
+    if (ic_->capabilityFlags().test(CapabilityFlag::SurroundingText) &&
+        ic_->surroundingText().isValid()) {
+        const auto& surrounding = ic_->surroundingText();
+        const std::string& text = surrounding.text();
+        uint32_t cursor = surrounding.cursor();
+        karukan_engine_set_surrounding_text(rustEngine_, text.c_str(), cursor);
+    } else {
+        karukan_engine_set_surrounding_text(rustEngine_, "", 0);
+    }
+}
+
+void KarukanState::emitPendingCommit() {
+    const char* commitText = karukan_engine_get_commit(rustEngine_);
+    if (commitText && karukan_engine_get_commit_len(rustEngine_) > 0) {
+        ic_->commitString(commitText);
+    }
 }
 
 // --- KarukanEngine ---
@@ -290,15 +297,7 @@ void KarukanEngine::activate(const InputMethodEntry& entry, InputContextEvent& e
     // Capture surrounding text on activation for accurate context.
     // For apps without SurroundingText capability, this clears the context.
     if (state->rustEngine()) {
-        if (ic->capabilityFlags().test(CapabilityFlag::SurroundingText) &&
-            ic->surroundingText().isValid()) {
-            const auto& surrounding = ic->surroundingText();
-            const std::string& text = surrounding.text();
-            uint32_t cursor = surrounding.cursor();
-            karukan_engine_set_surrounding_text(state->rustEngine(), text.c_str(), cursor);
-        } else {
-            karukan_engine_set_surrounding_text(state->rustEngine(), "", 0);
-        }
+        state->captureSurroundingText();
     }
 }
 
@@ -312,10 +311,7 @@ void KarukanEngine::deactivate(const InputMethodEntry& entry, InputContextEvent&
     // This ensures preedit is not lost when Super/Windows key is pressed
     if (state->rustEngine()) {
         if (karukan_engine_commit(state->rustEngine())) {
-            const char* commitText = karukan_engine_get_commit(state->rustEngine());
-            if (commitText && karukan_engine_get_commit_len(state->rustEngine()) > 0) {
-                ic->commitString(commitText);
-            }
+            state->emitPendingCommit();
         }
         // Persist learning cache on deactivation (azooKey-style)
         karukan_engine_save_learning(state->rustEngine());

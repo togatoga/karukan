@@ -20,11 +20,10 @@ clap = { version = "4", features = ["derive"] }
 # server, dict_viewer 用
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.6", features = ["fs", "cors"] }
-http-body-util = "0.1"
+tower-http = { version = "0.7", features = ["fs", "cors"] }
 
 # sudachi-dict 用
-indicatif = "0.17"
+indicatif = "0.18"
 rayon = "1.11.0"
 
 [[bin]]

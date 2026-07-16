@@ -4,10 +4,11 @@
 //!
 //! Note: These benchmarks require downloading models from HuggingFace.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use karukan_engine::kanji::{
     LlamaCppModel, build_jinen_prompt, get_path_by_id, get_tokenizer_path_by_id, registry,
 };
+use std::hint::black_box;
 
 // ============================================================================
 // llama.cpp backend benchmarks

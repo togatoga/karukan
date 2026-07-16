@@ -94,21 +94,6 @@ impl CandidateList {
         Self::new(strings.into_iter().map(Candidate::new).collect())
     }
 
-    /// Create a candidate list from strings, attaching the same reading to
-    /// every candidate.
-    pub fn from_strings_with_reading(
-        strings: impl IntoIterator<Item = impl Into<String>>,
-        reading: impl Into<String>,
-    ) -> Self {
-        let reading = reading.into();
-        Self::new(
-            strings
-                .into_iter()
-                .map(|s| Candidate::with_reading(s, &reading))
-                .collect(),
-        )
-    }
-
     /// Get all candidates
     pub fn candidates(&self) -> &[Candidate] {
         &self.candidates
@@ -247,16 +232,6 @@ impl CandidateList {
         let absolute_index = self.page_start() + page_index - 1;
         if absolute_index < self.candidates.len() {
             self.cursor = absolute_index;
-            self.selected()
-        } else {
-            None
-        }
-    }
-
-    /// Select a candidate by absolute index
-    pub fn select(&mut self, index: usize) -> Option<&Candidate> {
-        if index < self.candidates.len() {
-            self.cursor = index;
             self.selected()
         } else {
             None

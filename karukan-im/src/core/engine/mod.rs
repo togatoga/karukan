@@ -28,7 +28,7 @@ use tracing::{debug, trace};
 
 use super::candidate::{Candidate, CandidateList};
 use super::keycode::{KeyEvent, Keysym};
-use super::preedit::{AttributeType, Preedit, PreeditAttribute, PreeditSegment};
+use super::preedit::Preedit;
 use super::state::InputState;
 use crate::config::settings::Settings;
 
@@ -117,6 +117,26 @@ pub fn resolve_variant_id(model: Option<&str>) -> anyhow::Result<String> {
             }
         }
         _ => Ok(reg.default_model.clone()),
+    }
+}
+
+/// Keep at most the last `n` characters of `s`.
+fn keep_last_chars(s: &str, n: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count > n {
+        s.chars().skip(char_count - n).collect()
+    } else {
+        s.to_string()
+    }
+}
+
+/// Keep at most the first `n` characters of `s`.
+fn keep_first_chars(s: &str, n: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count > n {
+        s.chars().take(n).collect()
+    } else {
+        s.to_string()
     }
 }
 
@@ -356,28 +376,20 @@ impl InputMethodEngine {
         let left = if left_context.is_empty() {
             None
         } else {
-            let left_count = left_context.chars().count();
-            Some(if left_count > self.config.max_api_context_len {
-                let start = left_count - self.config.max_api_context_len;
-                left_context.chars().skip(start).collect()
-            } else {
-                left_context.to_string()
-            })
+            Some(keep_last_chars(
+                left_context,
+                self.config.max_api_context_len,
+            ))
         };
 
         // Truncate right context to max length (keep beginning)
         let right = if right_context.is_empty() {
             None
         } else {
-            let right_count = right_context.chars().count();
-            Some(if right_count > self.config.max_api_context_len {
-                right_context
-                    .chars()
-                    .take(self.config.max_api_context_len)
-                    .collect()
-            } else {
-                right_context.to_string()
-            })
+            Some(keep_first_chars(
+                right_context,
+                self.config.max_api_context_len,
+            ))
         };
 
         self.surrounding_context = Some(SurroundingContext { left, right });
@@ -511,9 +523,10 @@ impl InputMethodEngine {
                 self.surrounding_context = None;
                 text
             }
-            InputState::Conversion { candidates, .. } => {
-                let text = candidates.selected_text().unwrap_or("").to_string();
-                let reading = candidates.selected().and_then(|c| c.reading.clone());
+            InputState::Conversion { .. } => {
+                let (text, reading) = self
+                    .selected_conversion_info()
+                    .expect("state is Conversion");
                 // Record conversion result in learning cache
                 if let Some(reading) = &reading {
                     self.record_learning(reading, &text);
