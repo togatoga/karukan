@@ -245,6 +245,21 @@ impl CandidateList {
         }
     }
 
+    /// Remove the currently selected candidate from the list. The cursor
+    /// keeps its index so the next candidate slides into the selection,
+    /// clamped to the new end of the list. Returns the removed candidate,
+    /// or `None` if the list is empty.
+    pub fn remove_selected(&mut self) -> Option<Candidate> {
+        if self.candidates.is_empty() {
+            return None;
+        }
+        let removed = self.candidates.remove(self.cursor);
+        if self.cursor >= self.candidates.len() {
+            self.cursor = self.candidates.len().saturating_sub(1);
+        }
+        Some(removed)
+    }
+
     /// Reset cursor to beginning
     pub fn reset(&mut self) {
         self.cursor = 0;
@@ -314,6 +329,37 @@ mod tests {
         // Wrap to first page
         candidates.next_page();
         assert_eq!(candidates.current_page(), 0);
+    }
+
+    #[test]
+    fn test_remove_selected_keeps_cursor_position() {
+        let mut candidates = CandidateList::from_strings(["a", "b", "c"]);
+        candidates.move_next(); // cursor on "b"
+
+        let removed = candidates.remove_selected().unwrap();
+        assert_eq!(removed.text, "b");
+        // The next candidate slides into the selection.
+        assert_eq!(candidates.selected_text(), Some("c"));
+        assert_eq!(candidates.len(), 2);
+    }
+
+    #[test]
+    fn test_remove_selected_clamps_cursor_at_end() {
+        let mut candidates = CandidateList::from_strings(["a", "b", "c"]);
+        candidates.move_prev(); // wrap to "c" (last)
+
+        let removed = candidates.remove_selected().unwrap();
+        assert_eq!(removed.text, "c");
+        assert_eq!(candidates.selected_text(), Some("b"));
+    }
+
+    #[test]
+    fn test_remove_selected_last_candidate() {
+        let mut candidates = CandidateList::from_strings(["a"]);
+        assert_eq!(candidates.remove_selected().unwrap().text, "a");
+        assert!(candidates.is_empty());
+        assert_eq!(candidates.selected_text(), None);
+        assert!(candidates.remove_selected().is_none());
     }
 
     #[test]

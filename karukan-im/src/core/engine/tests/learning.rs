@@ -116,34 +116,76 @@ fn ctrl_delete_removes_selected_learning_entry() {
 
     let result = engine.process_key(&press_ctrl(Keysym::DELETE));
     assert!(result.consumed);
-    // mozc-style: successful deletion cancels the conversion (ConvertCancel)
-    // back to composing the reading...
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    // The entry is gone from the cache...
+    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    // ...and the candidate disappears from the open list in place: mozc
+    // blinks its window closed and reopen; karukan stays in Conversion with
+    // the window up.
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(
         result
             .actions
             .iter()
-            .any(|a| matches!(a, EngineAction::HideCandidates)),
-        "cancel must close the candidate window"
+            .any(|a| matches!(a, EngineAction::ShowCandidates(_))),
+        "deletion must refresh the candidate window, not close it"
     );
-    // ...and the entry is gone from the cache.
-    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        !result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::HideCandidates)),
+        "deletion must not hide the candidate window"
+    );
 
-    // Re-converting no longer surfaces the deleted entry.
-    engine.process_key(&press_key(Keysym::SPACE));
-    let texts: Vec<String> = engine
-        .state()
-        .candidates()
-        .unwrap()
+    let candidates = engine.state().candidates().unwrap();
+    let texts: Vec<&str> = candidates
         .candidates()
         .iter()
-        .map(|c| c.text.clone())
+        .map(|c| c.text.as_str())
         .collect();
     assert!(
-        !texts.contains(&"藍".to_string()),
-        "deleted `藍` must not reappear, got {:?}",
+        !texts.contains(&"藍"),
+        "deleted `藍` must leave the list, got {:?}",
         texts,
     );
+    // The selection index is preserved — the next candidate slides in.
+    // (Which text that is depends on whether the kanji model is available
+    // in the test environment, so only the position is asserted.)
+    assert_eq!(candidates.cursor(), 0);
+    assert_ne!(candidates.selected_text(), Some("藍"));
+}
+
+#[test]
+fn ctrl_backspace_deletes_learning_entry_like_ctrl_delete() {
+    // Mac keyboards label the Backspace key "delete", so the natural macOS
+    // chord is Ctrl+delete = Ctrl+Backspace; it must behave like Ctrl+Delete
+    // (forward delete), not like the plain-Backspace cancel.
+    let mut engine = engine_with_learned("あい", "藍");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
+    assert!(result.consumed);
+    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+}
+
+#[test]
+fn plain_backspace_still_cancels_conversion() {
+    let mut engine = engine_with_learned("あい", "藍");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let result = engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert!(result.consumed);
+    // Backspace without Ctrl keeps its cancel-to-composing behavior and
+    // deletes nothing from the history.
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert!(!engine.learning.as_ref().unwrap().lookup("あい").is_empty());
 }
 
 #[test]

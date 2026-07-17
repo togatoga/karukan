@@ -584,9 +584,13 @@ impl InputMethodEngine {
             Keysym::UP => self.prev_candidate(),
             Keysym::PAGE_DOWN => self.next_candidate_page(),
             Keysym::PAGE_UP => self.prev_candidate_page(),
-            // Ctrl+Delete (macOS: control+fn+delete): remove the selected
-            // learning-cache candidate from the history, mozc-style.
-            Keysym::DELETE if key.modifiers.control_key => {
+            // Ctrl+Delete or Ctrl+Backspace: remove the selected learning
+            // candidate from the history (mozc's DeleteSelectedCandidate,
+            // bound to Ctrl+Delete). Backspace is accepted too because Mac
+            // keyboards label the Backspace key "delete" — that is the key
+            // users actually press there (forward delete would need
+            // Ctrl+fn+delete).
+            Keysym::DELETE | Keysym::BACKSPACE if key.modifiers.control_key => {
                 self.delete_selected_candidate_from_history()
             }
             Keysym::BACKSPACE => self.backspace_conversion(),
@@ -692,47 +696,66 @@ impl InputMethodEngine {
     }
 
     /// Delete the currently selected candidate from the learning history
-    /// (Ctrl+Delete; control+fn+delete on macOS).
+    /// (Ctrl+Delete / Ctrl+Backspace).
     ///
-    /// Mirrors mozc's `DeleteSelectedCandidate` flow: only candidates that
-    /// came from the user history are deletable (mozc gates on the
+    /// Follows mozc's `DeleteSelectedCandidate`: only candidates that came
+    /// from the user history are deletable (mozc gates on the
     /// `USER_HISTORY_PREDICTION` attribute; karukan on
-    /// `Candidate::from_learning`), the entry is removed by exact
-    /// reading+surface match (`UserHistoryPredictor::ClearHistoryEntry`),
-    /// and on success the conversion is cancelled (`ConvertCancel`) so the
-    /// user is back composing the reading — the next conversion is rebuilt
-    /// without the deleted entry. A non-deletable candidate consumes the key
-    /// but does nothing (mozc's `DoNothing`), so Ctrl+Delete never leaks to
-    /// the application mid-conversion. Persisting the removal is deferred to
-    /// the regular save points, matching mozc's deferred sync.
+    /// `Candidate::from_learning`), and the entry is removed by exact
+    /// reading+surface match (`UserHistoryPredictor::ClearHistoryEntry`).
+    /// A non-deletable candidate consumes the key but does nothing (mozc's
+    /// `DoNothing`), so the chord never leaks to the application
+    /// mid-conversion.
+    ///
+    /// After the removal mozc cancels and re-runs the conversion, so its
+    /// candidate window blinks closed and reopens without the entry; karukan
+    /// skips that round trip and removes the candidate from the open list in
+    /// place — same end state, no flicker, no extra inference — keeping the
+    /// selection at the same position. Only the learning entry is gone; the
+    /// deleted surface can still come back in later conversions from the
+    /// model or dictionaries. Persisting the removal is deferred to the
+    /// regular save points, matching mozc's deferred sync. Should the list
+    /// somehow end up empty, fall back to cancelling like mozc.
     fn delete_selected_candidate_from_history(&mut self) -> EngineResult {
-        let Some(candidates) = self.state.candidates() else {
-            return EngineResult::not_consumed();
-        };
-        let Some(selected) = candidates.selected() else {
-            return EngineResult::consumed();
-        };
-        if !selected.from_learning {
-            return EngineResult::consumed();
-        }
-        let surface = selected.text.clone();
-        // Learning candidates always carry their cache reading (the prefix
-        // lookup stores the full reading, which can differ from the input).
-        let reading = selected.reading.clone();
+        let survivors = {
+            let Some(candidates) = self.state.candidates_mut() else {
+                return EngineResult::not_consumed();
+            };
+            let Some(selected) = candidates.selected() else {
+                return EngineResult::consumed();
+            };
+            if !selected.from_learning {
+                return EngineResult::consumed();
+            }
+            let surface = selected.text.clone();
+            // Learning candidates always carry their cache reading (the
+            // prefix lookup stores the full reading, which can differ from
+            // the input).
+            let reading = selected.reading.clone();
 
-        let removed = match (self.learning.as_mut(), reading.as_deref()) {
-            (Some(cache), Some(reading)) => cache.remove(reading, &surface),
-            _ => false,
+            let removed = match (self.learning.as_mut(), reading.as_deref()) {
+                (Some(cache), Some(reading)) => cache.remove(reading, &surface),
+                _ => false,
+            };
+            if !removed {
+                return EngineResult::consumed();
+            }
+            debug!(
+                "deleted learning entry: {} -> {}",
+                reading.as_deref().unwrap_or(""),
+                surface
+            );
+            candidates.remove_selected();
+            candidates
+                .selected_text()
+                .map(|text| (text.to_string(), candidates.clone()))
         };
-        if !removed {
-            return EngineResult::consumed();
+        match survivors {
+            Some((selected_text, candidates)) => {
+                self.update_conversion_preedit(&selected_text, &candidates)
+            }
+            None => self.cancel_conversion(),
         }
-        debug!(
-            "deleted learning entry: {} -> {}",
-            reading.as_deref().unwrap_or(""),
-            surface
-        );
-        self.cancel_conversion()
     }
 
     /// Cancel conversion and return to hiragana
