@@ -96,7 +96,7 @@ jobs:
         with:
           workspaces: ". -> target"
       - name: Cache HuggingFace models
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: ${{ runner.os }}-hf-models-v1
