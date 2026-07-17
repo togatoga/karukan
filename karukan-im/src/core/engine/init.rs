@@ -45,7 +45,11 @@ impl InputMethodEngine {
 
         self.init_system_dictionary(settings.conversion.dict_path.as_deref());
         self.init_user_dictionaries();
-        self.init_learning_cache(settings.learning.enabled, settings.learning.max_entries);
+        self.init_learning_cache(
+            settings.learning.enabled,
+            settings.learning.max_entries,
+            settings.learning.max_surface_chars,
+        );
 
         let n_threads = settings.conversion.n_threads;
 
@@ -181,36 +185,45 @@ impl InputMethodEngine {
     ///
     /// Loads `~/.local/share/karukan-im/learning.tsv` if it exists.
     /// If the file doesn't exist, creates an empty in-memory cache.
-    pub fn init_learning_cache(&mut self, enabled: bool, max_entries: usize) {
+    /// `max_surface_chars` caps the surface length `record` accepts;
+    /// entries already on disk are loaded regardless (they can be removed
+    /// with Ctrl+Delete or by eviction).
+    pub fn init_learning_cache(
+        &mut self,
+        enabled: bool,
+        max_entries: usize,
+        max_surface_chars: usize,
+    ) {
         if !enabled || self.learning.is_some() {
             return;
         }
 
-        let Some(path) = Settings::learning_file() else {
-            debug!("Could not determine learning cache path");
-            self.learning = Some(LearningCache::new(max_entries));
-            return;
-        };
-
-        if path.exists() {
-            match LearningCache::load(&path, max_entries) {
+        let mut cache = match Settings::learning_file() {
+            Some(path) if path.exists() => match LearningCache::load(&path, max_entries) {
                 Ok(cache) => {
                     debug!(
                         "Learning cache loaded from {:?} ({} entries)",
                         path,
                         cache.entry_count()
                     );
-                    self.learning = Some(cache);
+                    cache
                 }
                 Err(e) => {
                     debug!("Failed to load learning cache from {:?}: {}", path, e);
-                    self.learning = Some(LearningCache::new(max_entries));
+                    LearningCache::new(max_entries)
                 }
+            },
+            Some(path) => {
+                debug!("Learning cache not found at {:?}, starting empty", path);
+                LearningCache::new(max_entries)
             }
-        } else {
-            debug!("Learning cache not found at {:?}, starting empty", path);
-            self.learning = Some(LearningCache::new(max_entries));
-        }
+            None => {
+                debug!("Could not determine learning cache path");
+                LearningCache::new(max_entries)
+            }
+        };
+        cache.set_max_surface_chars(max_surface_chars);
+        self.learning = Some(cache);
     }
 
     /// Initialize user dictionaries by scanning the user dictionary directory.

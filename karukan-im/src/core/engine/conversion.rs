@@ -242,6 +242,7 @@ impl InputMethodEngine {
                         reading: Some(cand_reading),
                         source_label: (!label.is_empty()).then(|| label.to_string()),
                         description: ac.description,
+                        from_learning: ac.source == CandidateSource::Learning,
                     }
                 })
                 .collect(),
@@ -496,6 +497,7 @@ impl InputMethodEngine {
                     reading: Some(reading.to_string()),
                     source_label: Some(label.clone()),
                     description: None,
+                    from_learning: true,
                 });
             }
         }
@@ -514,6 +516,7 @@ impl InputMethodEngine {
                     reading: Some(full_reading),
                     source_label: Some(label.clone()),
                     description: None,
+                    from_learning: true,
                 });
             }
         }
@@ -532,6 +535,7 @@ impl InputMethodEngine {
                 reading: Some(reading.to_string()),
                 source_label: Some(ac.source.label().to_string()),
                 description: None,
+                from_learning: false,
             })
             .collect()
     }
@@ -550,6 +554,7 @@ impl InputMethodEngine {
                 reading: Some(reading.to_string()),
                 source_label: Some(source_label.clone()),
                 description,
+                from_learning: false,
             })
             .collect()
     }
@@ -579,6 +584,11 @@ impl InputMethodEngine {
             Keysym::UP => self.prev_candidate(),
             Keysym::PAGE_DOWN => self.next_candidate_page(),
             Keysym::PAGE_UP => self.prev_candidate_page(),
+            // Ctrl+Delete (macOS: control+fn+delete): remove the selected
+            // learning-cache candidate from the history, mozc-style.
+            Keysym::DELETE if key.modifiers.control_key => {
+                self.delete_selected_candidate_from_history()
+            }
             Keysym::BACKSPACE => self.backspace_conversion(),
             _ => {
                 // Ctrl+N / Ctrl+P: emacs-style candidate navigation
@@ -679,6 +689,50 @@ impl InputMethodEngine {
             .with_action(EngineAction::HideCandidates);
         result.actions.extend(new_input_result.actions);
         result
+    }
+
+    /// Delete the currently selected candidate from the learning history
+    /// (Ctrl+Delete; control+fn+delete on macOS).
+    ///
+    /// Mirrors mozc's `DeleteSelectedCandidate` flow: only candidates that
+    /// came from the user history are deletable (mozc gates on the
+    /// `USER_HISTORY_PREDICTION` attribute; karukan on
+    /// `Candidate::from_learning`), the entry is removed by exact
+    /// reading+surface match (`UserHistoryPredictor::ClearHistoryEntry`),
+    /// and on success the conversion is cancelled (`ConvertCancel`) so the
+    /// user is back composing the reading — the next conversion is rebuilt
+    /// without the deleted entry. A non-deletable candidate consumes the key
+    /// but does nothing (mozc's `DoNothing`), so Ctrl+Delete never leaks to
+    /// the application mid-conversion. Persisting the removal is deferred to
+    /// the regular save points, matching mozc's deferred sync.
+    fn delete_selected_candidate_from_history(&mut self) -> EngineResult {
+        let Some(candidates) = self.state.candidates() else {
+            return EngineResult::not_consumed();
+        };
+        let Some(selected) = candidates.selected() else {
+            return EngineResult::consumed();
+        };
+        if !selected.from_learning {
+            return EngineResult::consumed();
+        }
+        let surface = selected.text.clone();
+        // Learning candidates always carry their cache reading (the prefix
+        // lookup stores the full reading, which can differ from the input).
+        let reading = selected.reading.clone();
+
+        let removed = match (self.learning.as_mut(), reading.as_deref()) {
+            (Some(cache), Some(reading)) => cache.remove(reading, &surface),
+            _ => false,
+        };
+        if !removed {
+            return EngineResult::consumed();
+        }
+        debug!(
+            "deleted learning entry: {} -> {}",
+            reading.as_deref().unwrap_or(""),
+            surface
+        );
+        self.cancel_conversion()
     }
 
     /// Cancel conversion and return to hiragana

@@ -36,3 +36,7 @@ live_conversion = true
 enabled = true
 # 学習エントリの最大数
 max_entries = 10000
+# 学習履歴に登録する変換結果（surface）の最大文字数。
+# これを超える確定（ライブ変換で文全体を確定した場合など）は学習しない。
+# 学習された候補は変換中に Ctrl+Del で履歴から削除できる。
+max_surface_chars = 50

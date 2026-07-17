@@ -79,6 +79,10 @@ pub struct LearningSettings {
     pub enabled: bool,
     /// Maximum number of total entries in the learning cache
     pub max_entries: usize,
+    /// Maximum surface length (in characters) recorded into the learning
+    /// cache; longer conversion results (e.g. whole live-converted
+    /// sentences) are not learned
+    pub max_surface_chars: usize,
 }
 
 impl Default for Settings {
@@ -207,6 +211,28 @@ mod tests {
         assert_eq!(settings.conversion.num_candidates, 9);
         assert!(settings.conversion.use_context);
         assert_eq!(settings.conversion.max_context_length, 10);
+        assert!(settings.learning.enabled);
+        assert_eq!(settings.learning.max_entries, 10000);
+        assert_eq!(settings.learning.max_surface_chars, 50);
+    }
+
+    #[test]
+    fn test_learning_partial_config() {
+        // Overriding one learning key keeps the defaults for the others.
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[learning]
+max_surface_chars = 10
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(settings.learning.max_surface_chars, 10);
+        assert!(settings.learning.enabled);
+        assert_eq!(settings.learning.max_entries, 10000);
     }
 
     #[test]

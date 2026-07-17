@@ -2,6 +2,13 @@
 
 use super::*;
 
+/// Deletion hint appended to the conversion aux text while a learning-cache
+/// candidate is selected. Mirrors mozc's candidate-window footer
+/// (`engine/engine_output.cc` `FillFooter`). One wording for every platform —
+/// mozc switches to "control+fn+delete" on Apple, but the short form reads
+/// fine everywhere (on Mac laptops the physical gesture is Ctrl+fn+delete).
+pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Delで履歴から削除";
+
 impl InputMethodEngine {
     /// Build display text from the input buffer and romaji buffer
     /// Format: composed[:cursor] + romaji_buffer + composed[cursor:]
@@ -193,21 +200,28 @@ impl InputMethodEngine {
             .filter(|c| c.total_pages() > 1)
             .map(|c| format!(" ({}/{})", c.current_page() + 1, c.total_pages()))
             .unwrap_or_default();
-        let source_label = candidates
-            .and_then(|c| c.selected())
+        let selected = candidates.and_then(|c| c.selected());
+        let source_label = selected
             .and_then(|c| c.source_label.as_deref())
             .filter(|a| !a.is_empty())
             .map(|a| format!(" | {}", a))
             .unwrap_or_default();
+        // mozc-style footer hint: shown only while the selected candidate is
+        // a deletable user-history entry (mozc's `FillFooter` gates on the
+        // focused candidate's `deletable` annotation the same way).
+        let delete_hint = selected
+            .filter(|c| c.from_learning)
+            .map(|_| format!(" ({})", LEARNING_DELETE_HINT))
+            .unwrap_or_default();
         if ctx.is_empty() {
             format!(
-                "[変換]{} {} | {} {} | {}{}",
-                page_info, reading, timing, tokens, model, source_label
+                "[変換]{} {} | {} {} | {}{}{}",
+                page_info, reading, timing, tokens, model, source_label, delete_hint
             )
         } else {
             format!(
-                "[変換]{} {} | {} | {} {} | {}{}",
-                page_info, reading, ctx, timing, tokens, model, source_label
+                "[変換]{} {} | {} | {} {} | {}{}{}",
+                page_info, reading, ctx, timing, tokens, model, source_label, delete_hint
             )
         }
     }

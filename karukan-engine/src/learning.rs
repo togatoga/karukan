@@ -28,6 +28,7 @@ pub struct LearningEntry {
 pub struct LearningCache {
     entries: HashMap<String, Vec<LearningEntry>>,
     max_entries: usize,
+    max_surface_chars: usize,
     dirty: bool,
 }
 
@@ -35,17 +36,42 @@ impl LearningCache {
     /// Default maximum number of total entries across all readings.
     pub const DEFAULT_MAX_ENTRIES: usize = 10_000;
 
+    /// Default maximum surface length (Unicode chars) that
+    /// [`LearningCache::record`] accepts. Whole-buffer commits from live
+    /// conversion can be entire sentences; learning those as single entries
+    /// pollutes the cache with one-off text that never matches again.
+    /// Mozc's UserHistoryPredictor caps its entries the same way
+    /// (`kMaxStringLength` = 256 bytes on both key and value); karukan
+    /// defaults tighter because it learns whole commits rather than
+    /// per-segment pairs, and only caps the surface — that is the text
+    /// that actually gets stored and re-surfaced as a candidate.
+    pub const DEFAULT_MAX_SURFACE_CHARS: usize = 50;
+
     /// Create an empty cache with the given entry limit.
     pub fn new(max_entries: usize) -> Self {
         Self {
             entries: HashMap::new(),
             max_entries,
+            max_surface_chars: Self::DEFAULT_MAX_SURFACE_CHARS,
             dirty: false,
         }
     }
 
+    /// Set the maximum surface length (in Unicode chars) that
+    /// [`LearningCache::record`] accepts. Longer surfaces are silently skipped.
+    pub fn set_max_surface_chars(&mut self, max_surface_chars: usize) {
+        self.max_surface_chars = max_surface_chars;
+    }
+
     /// Record a user selection. Increments frequency and updates last_access.
+    ///
+    /// Selections whose surface exceeds `max_surface_chars` are skipped: they
+    /// are almost always whole live-converted sentences that would never be
+    /// retyped verbatim, and they crowd out useful word/phrase entries.
     pub fn record(&mut self, reading: &str, surface: &str) {
+        if surface.chars().count() > self.max_surface_chars {
+            return;
+        }
         let now = now_unix();
         let entries = self.entries.entry(reading.to_string()).or_default();
 
@@ -60,6 +86,26 @@ impl LearningCache {
             });
         }
         self.dirty = true;
+    }
+
+    /// Remove a learned `(reading, surface)` pair (exact match on both, like
+    /// mozc's `UserHistoryPredictor::ClearHistoryEntry`). Returns whether an
+    /// entry was removed. The removal is persisted at the next `save` (mozc
+    /// also defers the disk write to its periodic sync).
+    pub fn remove(&mut self, reading: &str, surface: &str) -> bool {
+        let Some(entries) = self.entries.get_mut(reading) else {
+            return false;
+        };
+        let before = entries.len();
+        entries.retain(|e| e.surface != surface);
+        let removed = entries.len() < before;
+        if entries.is_empty() {
+            self.entries.remove(reading);
+        }
+        if removed {
+            self.dirty = true;
+        }
+        removed
     }
 
     /// Exact-match lookup: returns `(surface, score)` pairs sorted by score descending.
@@ -421,6 +467,90 @@ mod tests {
         let results = cache.lookup("きょう");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "今日");
+    }
+
+    #[test]
+    fn test_remove_entry() {
+        let mut cache = LearningCache::new(100);
+        cache.record("きょう", "今日");
+        cache.record("きょう", "京");
+
+        let file = NamedTempFile::new().unwrap();
+        cache.save(file.path()).unwrap();
+        assert!(!cache.is_dirty());
+
+        assert!(cache.remove("きょう", "今日"));
+        assert!(cache.is_dirty(), "removal must mark the cache dirty");
+
+        let results = cache.lookup("きょう");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "京");
+    }
+
+    #[test]
+    fn test_remove_nonexistent() {
+        let mut cache = LearningCache::new(100);
+        cache.record("きょう", "今日");
+
+        let file = NamedTempFile::new().unwrap();
+        cache.save(file.path()).unwrap();
+
+        assert!(!cache.remove("きょう", "京"));
+        assert!(!cache.remove("あした", "明日"));
+        assert!(!cache.is_dirty(), "no-op removal must not mark dirty");
+    }
+
+    #[test]
+    fn test_remove_last_surface_drops_reading() {
+        let mut cache = LearningCache::new(100);
+        cache.record("きょう", "今日");
+
+        assert!(cache.remove("きょう", "今日"));
+        assert_eq!(cache.entry_count(), 0);
+        assert!(cache.lookup("きょう").is_empty());
+        assert!(cache.prefix_lookup("き").is_empty());
+    }
+
+    #[test]
+    fn test_record_skips_long_surface() {
+        let mut cache = LearningCache::new(100);
+        cache.set_max_surface_chars(5);
+
+        cache.record("あ", &"漢".repeat(6));
+        assert_eq!(cache.entry_count(), 0);
+        assert!(!cache.is_dirty());
+
+        // Boundary: exactly max_surface_chars is accepted.
+        cache.record("あ", &"漢".repeat(5));
+        assert_eq!(cache.entry_count(), 1);
+    }
+
+    #[test]
+    fn test_record_ignores_reading_length() {
+        let mut cache = LearningCache::new(100);
+        cache.set_max_surface_chars(5);
+
+        // Only the surface is capped; a long reading with a short surface
+        // is fine (e.g. a long kana reading converting to a short word).
+        cache.record(&"あ".repeat(30), "短い");
+        assert_eq!(cache.entry_count(), 1);
+    }
+
+    #[test]
+    fn test_default_max_surface_chars() {
+        let mut cache = LearningCache::new(100);
+
+        cache.record(
+            "よみ",
+            &"あ".repeat(LearningCache::DEFAULT_MAX_SURFACE_CHARS + 1),
+        );
+        assert_eq!(cache.entry_count(), 0);
+
+        cache.record(
+            "よみ",
+            &"あ".repeat(LearningCache::DEFAULT_MAX_SURFACE_CHARS),
+        );
+        assert_eq!(cache.entry_count(), 1);
     }
 
     #[test]

@@ -83,6 +83,7 @@ dict_path = "/path/to/dict.bin" # システム辞書パス（省略時はデー�
 [learning]
 enabled = true                 # 変換学習の有効/無効
 max_entries = 10000            # 学習エントリの最大数
+max_surface_chars = 50         # 学習する変換結果（surface）の最大文字数。超える確定は学習しない
 ```
 
 > [!NOTE]
@@ -171,6 +172,8 @@ cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
   - 例: 「早稲田大学」を一度変換すると、次回「わせだ」と入力した時点で候補に表示
 - 学習候補は変換時・入力中（auto-suggest）の両方で最大3件表示
 - スコアはrecency（最終使用日時）重視 + 頻度補正
+- 変換結果（surface）が `max_surface_chars`（既定50文字）を超える確定は学習しない（ライブ変換で文全体を確定した場合などの長文エントリを防ぐ）
+- 変換中に学習候補（📝）を選択して `Ctrl+Del` を押すと、そのエントリを学習履歴から削除できる（Mozcと同じ挙動）。学習候補の選択中は候補ウィンドウのフッターに「Ctrl+Delで履歴から削除」と表示される
 - IME切り替え・ウィンドウ切り替え時に自動保存（commit のたびには保存しない）
 - `[learning] enabled = false` で無効化可能
-- 学習履歴を削除するには: `rm ~/.local/share/karukan-im/learning.tsv`
+- 学習履歴をすべて削除するには: `rm ~/.local/share/karukan-im/learning.tsv`

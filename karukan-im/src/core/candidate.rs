@@ -31,6 +31,11 @@ pub struct Candidate {
     /// rewriter descriptions like `[全]英大文字`. Source labels are
     /// intentionally excluded so they don't duplicate the aux text.
     pub description: Option<String>,
+    /// Whether this candidate came from the learning cache (user history).
+    /// Mirrors mozc's `USER_HISTORY_PREDICTION` attribute: such candidates
+    /// are deletable with Ctrl+Delete during conversion, and the aux text
+    /// shows the mozc-style deletion hint while one is selected.
+    pub from_learning: bool,
 }
 
 impl Candidate {
@@ -40,6 +45,7 @@ impl Candidate {
             reading: None,
             source_label: None,
             description: None,
+            from_learning: false,
         }
     }
 
@@ -49,6 +55,7 @@ impl Candidate {
             reading: Some(reading.into()),
             source_label: None,
             description: None,
+            from_learning: false,
         }
     }
 }
