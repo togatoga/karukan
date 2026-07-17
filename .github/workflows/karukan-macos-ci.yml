@@ -30,7 +30,7 @@ jobs:
     name: Swift Format
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install swift-format
         run: brew install swift-format
       - name: Swift format lint
@@ -41,7 +41,7 @@ jobs:
     name: Build & Test
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
