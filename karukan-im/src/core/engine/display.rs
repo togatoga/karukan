@@ -4,10 +4,11 @@ use super::*;
 
 /// Deletion hint appended to the conversion aux text while a learning-cache
 /// candidate is selected. Mirrors mozc's candidate-window footer
-/// (`engine/engine_output.cc` `FillFooter`). One wording for every platform —
-/// mozc switches to "control+fn+delete" on Apple, but the short form reads
-/// fine everywhere (on Mac laptops the physical gesture is Ctrl+fn+delete).
-pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Delで履歴から削除";
+/// (`engine/engine_output.cc` `FillFooter`), but names Backspace instead of
+/// mozc's "Ctrl+Del": karukan binds both chords, and Backspace is the key
+/// users actually press — the Mac "delete" key is Backspace, and mozc's
+/// "Del" (forward delete) reads ambiguous there. One wording everywhere.
+pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Backspaceで履歴から削除";
 
 impl InputMethodEngine {
     /// Build display text from the input buffer and romaji buffer
