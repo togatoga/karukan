@@ -173,7 +173,7 @@ cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
 - 学習候補は変換時・入力中（auto-suggest）の両方で最大3件表示
 - スコアはrecency（最終使用日時）重視 + 頻度補正
 - 変換結果（surface）が `max_surface_chars`（既定50文字）を超える確定は学習しない（ライブ変換で文全体を確定した場合などの長文エントリを防ぐ）
-- 変換中に学習候補（📝）を選択して `Ctrl+Backspace`（macOSでは Ctrl+delete。`Ctrl+Delete`/forward delete でも可）を押すと、そのエントリを学習履歴から削除できる（Mozcと同じ機能）。候補ウィンドウは開いたまま該当候補だけがリストから消える。学習候補の選択中は候補ウィンドウのフッターに「Ctrl+Backspaceで履歴から削除」と表示される
+- 変換中に学習候補（📝）を選択して `Ctrl+Backspace`（macOSでは Ctrl+delete。`Ctrl+Delete`/forward delete でも可）を押すと、そのエントリを学習履歴から削除できる（Mozcと同じ機能）。接頭辞違いの読みで同じ変換結果を持つエントリもまとめて削除され、候補ウィンドウは開いたまま候補リストが作り直される（モデル・辞書など学習以外のソースが出す同じ候補は通常候補として残る）。学習候補以外を選択中は何も起きない（変換のキャンセルは素の `Backspace` / `Escape`）。入力中のサジェスト表示でも、先頭の学習候補を同じキーで削除できる。学習候補の選択中は候補ウィンドウのフッターに「Ctrl+Backspaceで履歴から削除」と表示される
 - IME切り替え・ウィンドウ切り替え時に自動保存（commit のたびには保存しない）
 - `[learning] enabled = false` で無効化可能
 - 学習履歴をすべて削除するには: `rm ~/.local/share/karukan-im/learning.tsv`

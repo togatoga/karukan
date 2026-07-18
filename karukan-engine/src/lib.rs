@@ -11,7 +11,7 @@ pub use kana::{
     katakana_to_hiragana, normalize_nfkc,
 };
 pub use kanji::{Backend, KanaKanjiConverter};
-pub use learning::LearningCache;
+pub use learning::{LearningCache, LearningConfig};
 pub use rewriter::{
     AlphabetRewriter, EmojiRewriter, HalfWidthKatakanaRewriter, RewriteOutput, Rewriter,
     RewriterChain, SymbolRewriter, description as symbol_description,

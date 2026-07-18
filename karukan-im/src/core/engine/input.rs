@@ -261,10 +261,8 @@ impl InputMethodEngine {
                 // Ctrl+F: move right (Emacs-style Right)
                 Keysym::KEY_F | Keysym::KEY_F_UPPER => return self.move_caret_right(),
                 // Ctrl+Delete / Ctrl+Backspace: delete the highlighted learning
-                // suggestion from history, mirroring the Conversion-state chord.
-                // Only fires when the top suggestion is a learning entry;
-                // otherwise it falls through to plain character editing below
-                // (plain Backspace/Delete already cover the char-delete case).
+                // suggestion from history, mirroring the Conversion-state chord;
+                // falls through to plain character editing when nothing matches.
                 Keysym::DELETE | Keysym::BACKSPACE if !key.modifiers.alt_key => {
                     if let Some(result) = self.delete_top_learning_suggestion() {
                         return result;
@@ -325,13 +323,9 @@ impl InputMethodEngine {
     }
 
     /// Delete the learning suggestion the auto-suggest window is highlighting
-    /// (always cursor 0 — learning candidates are listed first) — the
-    /// Composing-state counterpart of the Conversion Ctrl+Backspace. Uses the
-    /// same prefix-aware removal so twins under longer readings go too, then
-    /// refreshes the window without the entry.
-    ///
-    /// Returns `None` when the top suggestion isn't a learning entry, so the
-    /// caller falls back to plain character editing.
+    /// (always cursor 0 — learning candidates are listed first), then refresh
+    /// the window. Returns `None` when the top suggestion isn't a learning
+    /// entry, so the caller falls back to plain character editing.
     fn delete_top_learning_suggestion(&mut self) -> Option<EngineResult> {
         let reading = self.input_buf.text.clone();
         let surface = self

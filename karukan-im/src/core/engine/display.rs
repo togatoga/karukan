@@ -3,11 +3,8 @@
 use super::*;
 
 /// Deletion hint appended to the conversion aux text while a learning-cache
-/// candidate is selected. Mirrors mozc's candidate-window footer
-/// (`engine/engine_output.cc` `FillFooter`), but names Backspace instead of
-/// mozc's "Ctrl+Del": karukan binds both chords, and Backspace is the key
-/// users actually press — the Mac "delete" key is Backspace, and mozc's
-/// "Del" (forward delete) reads ambiguous there. One wording everywhere.
+/// candidate is selected. Names Backspace rather than Delete because the Mac
+/// "delete" key is Backspace — one wording everywhere.
 pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Backspaceで履歴から削除";
 
 impl InputMethodEngine {
@@ -208,15 +205,13 @@ impl InputMethodEngine {
             .unwrap_or_default();
         let selected = candidates.and_then(|c| c.selected());
         let source_label = selected
-            .and_then(|c| c.source_label.as_deref())
-            .filter(|a| !a.is_empty())
+            .and_then(Candidate::source_label)
             .map(|a| format!(" | {}", a))
             .unwrap_or_default();
-        // mozc-style footer hint: shown only while the selected candidate is
-        // a deletable user-history entry (mozc's `FillFooter` gates on the
-        // focused candidate's `deletable` annotation the same way).
+        // Footer hint, shown only while the selected candidate is a
+        // deletable user-history entry.
         let delete_hint = selected
-            .filter(|c| c.from_learning)
+            .filter(|c| c.is_deletable())
             .map(|_| format!(" ({})", LEARNING_DELETE_HINT))
             .unwrap_or_default();
         format!(

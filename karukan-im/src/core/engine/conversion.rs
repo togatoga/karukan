@@ -231,13 +231,8 @@ impl InputMethodEngine {
 
     /// Map builder output (`AnnotatedCandidate`) to the public
     /// [`CandidateList`] shown in the conversion window. Candidates that don't
-    /// carry their own reading fall back to `reading`.
-    ///
-    /// The two annotation slots are kept disjoint so descriptions never
-    /// duplicate between the aux text and the candidate's right-side comment:
-    /// `source_label` carries `source.label()` only (e.g. `🤖 AI`, `📚 辞書`),
-    /// and `description` carries the per-candidate description only (e.g.
-    /// `三点リーダ`, `[全]英大文字`).
+    /// carry their own reading fall back to `reading`. The source rides along
+    /// as-is; its presentation (aux label, deletability) is derived on read.
     fn to_conversion_candidate_list(
         candidates: Vec<AnnotatedCandidate>,
         reading: &str,
@@ -245,16 +240,11 @@ impl InputMethodEngine {
         CandidateList::new(
             candidates
                 .into_iter()
-                .map(|ac| {
-                    let cand_reading = ac.reading.unwrap_or_else(|| reading.to_string());
-                    let label = ac.source.label();
-                    Candidate {
-                        text: ac.text,
-                        reading: Some(cand_reading),
-                        source_label: (!label.is_empty()).then(|| label.to_string()),
-                        description: ac.description,
-                        from_learning: ac.source == CandidateSource::Learning,
-                    }
+                .map(|ac| Candidate {
+                    reading: Some(ac.reading.unwrap_or_else(|| reading.to_string())),
+                    text: ac.text,
+                    source: Some(ac.source),
+                    description: ac.description,
                 })
                 .collect(),
         )
@@ -494,7 +484,6 @@ impl InputMethodEngine {
         };
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut seen = HashSet::new();
-        let label = CandidateSource::Learning.label().to_string();
 
         // Exact match
         for (surface, _score) in cache.lookup(reading) {
@@ -505,9 +494,8 @@ impl InputMethodEngine {
                 candidates.push(Candidate {
                     text: surface,
                     reading: Some(reading.to_string()),
-                    source_label: Some(label.clone()),
+                    source: Some(CandidateSource::Learning),
                     description: None,
-                    from_learning: true,
                 });
             }
         }
@@ -524,9 +512,8 @@ impl InputMethodEngine {
                 candidates.push(Candidate {
                     text: surface,
                     reading: Some(full_reading),
-                    source_label: Some(label.clone()),
+                    source: Some(CandidateSource::Learning),
                     description: None,
-                    from_learning: true,
                 });
             }
         }
@@ -543,9 +530,8 @@ impl InputMethodEngine {
             .map(|ac| Candidate {
                 text: ac.text,
                 reading: Some(reading.to_string()),
-                source_label: Some(ac.source.label().to_string()),
+                source: Some(ac.source),
                 description: None,
-                from_learning: false,
             })
             .collect()
     }
@@ -554,7 +540,6 @@ impl InputMethodEngine {
     /// symbol input `「` → `『`, `【`, `（`, ...). Used in the auto-suggest path
     /// so users see mozc-style symbol variants without pressing Space first.
     pub(super) fn lookup_rewriter_variants(&self, reading: &str) -> Vec<Candidate> {
-        let source_label = CandidateSource::Rewriter.label().to_string();
         self.converters
             .rewriters
             .rewrite_all(&[reading.to_string()])
@@ -562,9 +547,8 @@ impl InputMethodEngine {
             .map(|(text, description)| Candidate {
                 text,
                 reading: Some(reading.to_string()),
-                source_label: Some(source_label.clone()),
+                source: Some(CandidateSource::Rewriter),
                 description,
-                from_learning: false,
             })
             .collect()
     }
@@ -594,17 +578,11 @@ impl InputMethodEngine {
             Keysym::UP => self.prev_candidate(),
             Keysym::PAGE_DOWN => self.next_candidate_page(),
             Keysym::PAGE_UP => self.prev_candidate_page(),
-            // Ctrl+Delete or Ctrl+Backspace: remove the selected learning
-            // candidate from the history (mozc's DeleteSelectedCandidate,
-            // bound to Ctrl+Delete). Backspace is accepted too because Mac
-            // keyboards label the Backspace key "delete" — that is the key
-            // users actually press there (forward delete would need
-            // Ctrl+fn+delete).
-            //
-            // When the selection isn't a learning candidate, both chords do
-            // nothing (mozc's `DoNothing`) — the key is consumed so it never
-            // leaks into the application mid-conversion, but the conversion is
-            // left untouched. Cancelling stays on plain Backspace / Escape.
+            // Ctrl+Backspace / Ctrl+Delete: delete the selected learning
+            // candidate from the history. Backspace doubles as Delete because
+            // the Mac "delete" key is Backspace. On a non-learning selection
+            // the chord is consumed but does nothing, so it can't leak into
+            // the application mid-conversion.
             Keysym::DELETE | Keysym::BACKSPACE
                 if key.modifiers.control_key && !key.modifiers.alt_key =>
             {
@@ -717,33 +695,24 @@ impl InputMethodEngine {
     }
 
     /// Whether the selected candidate can be removed from the learning
-    /// history — mozc's `USER_HISTORY_PREDICTION` gate on
-    /// `DeleteSelectedCandidate`. False when nothing is selected, so the
-    /// delete chord stays inert outside the case it is meant for.
+    /// history. False when nothing is selected, so the delete chord stays
+    /// inert outside the case it is meant for.
     fn selected_is_deletable(&self) -> bool {
         self.state
             .candidates()
             .and_then(|c| c.selected())
-            .is_some_and(|c| c.from_learning)
+            .is_some_and(Candidate::is_deletable)
     }
 
-    /// Delete the selected learning-history candidate (Ctrl+Delete /
-    /// Ctrl+Backspace) — mozc's `DeleteSelectedCandidate`.
+    /// Delete the selected learning candidate from the history
+    /// (Ctrl+Backspace / Ctrl+Delete); the caller guards deletability
+    /// ([`Self::selected_is_deletable`]).
     ///
-    /// Deletability is the caller's guard ([`Self::selected_is_deletable`]),
-    /// so this is only reached with a learning candidate selected. The entry
-    /// is removed from the cache by [`LearningCache::remove_suggestion`] — the
-    /// shown row plus any prefix twins that would otherwise pop back — and
-    /// then, exactly like mozc's cancel-and-reconvert, the conversion is
-    /// rebuilt from scratch.
-    ///
-    /// Rebuilding (rather than dropping the row in place) is what keeps a
-    /// surface the model/dictionary/fallback *also* produce: those copies are
-    /// deduped away under the learning entry while it exists, and reappear —
-    /// now as ordinary, non-deletable candidates — once it is gone. The extra
-    /// inference is acceptable on this rare, explicit keypress. Persisting the
-    /// removal is deferred to the regular save points, matching mozc's
-    /// deferred sync. An empty rebuild falls back to cancelling, like mozc.
+    /// Removes the entry and its prefix twins
+    /// ([`LearningCache::remove_suggestion`]), then rebuilds the conversion
+    /// rather than dropping the row in place: dedup hid any
+    /// model/dictionary/fallback copy of the same surface behind the learning
+    /// entry, and only a rebuild brings it back.
     fn delete_selected_candidate_from_history(&mut self) -> EngineResult {
         let Some(surface) = self
             .state

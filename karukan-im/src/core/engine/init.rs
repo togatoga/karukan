@@ -47,8 +47,10 @@ impl InputMethodEngine {
         self.init_user_dictionaries();
         self.init_learning_cache(
             settings.learning.enabled,
-            settings.learning.max_entries,
-            settings.learning.max_surface_chars,
+            LearningConfig {
+                max_entries: settings.learning.max_entries,
+                max_surface_chars: settings.learning.max_surface_chars,
+            },
         );
 
         let n_threads = settings.conversion.n_threads;
@@ -185,21 +187,16 @@ impl InputMethodEngine {
     ///
     /// Loads `~/.local/share/karukan-im/learning.tsv` if it exists.
     /// If the file doesn't exist, creates an empty in-memory cache.
-    /// `max_surface_chars` caps the surface length `record` accepts;
+    /// `config.max_surface_chars` caps the surface length `record` accepts;
     /// entries already on disk are loaded regardless (they can be removed
     /// with Ctrl+Delete or by eviction).
-    pub fn init_learning_cache(
-        &mut self,
-        enabled: bool,
-        max_entries: usize,
-        max_surface_chars: usize,
-    ) {
+    pub fn init_learning_cache(&mut self, enabled: bool, config: LearningConfig) {
         if !enabled || self.learning.is_some() {
             return;
         }
 
-        let mut cache = match Settings::learning_file() {
-            Some(path) if path.exists() => match LearningCache::load(&path, max_entries) {
+        let cache = match Settings::learning_file() {
+            Some(path) if path.exists() => match LearningCache::load(&path, config) {
                 Ok(cache) => {
                     debug!(
                         "Learning cache loaded from {:?} ({} entries)",
@@ -210,19 +207,18 @@ impl InputMethodEngine {
                 }
                 Err(e) => {
                     debug!("Failed to load learning cache from {:?}: {}", path, e);
-                    LearningCache::new(max_entries)
+                    LearningCache::new(config)
                 }
             },
             Some(path) => {
                 debug!("Learning cache not found at {:?}, starting empty", path);
-                LearningCache::new(max_entries)
+                LearningCache::new(config)
             }
             None => {
                 debug!("Could not determine learning cache path");
-                LearningCache::new(max_entries)
+                LearningCache::new(config)
             }
         };
-        cache.set_max_surface_chars(max_surface_chars);
         self.learning = Some(cache);
     }
 

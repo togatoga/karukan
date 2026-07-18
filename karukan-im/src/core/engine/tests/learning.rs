@@ -2,10 +2,9 @@
 //!
 //! Space/Down: include learning candidates (default conversion).
 //! Tab: skip learning candidates (lets users escape stale learned entries).
-//! Ctrl+Delete: delete the selected learning candidate from the history
-//! (mozc's DeleteSelectedCandidate).
+//! Ctrl+Delete: delete the selected learning candidate from the history.
 
-use karukan_engine::LearningCache;
+use karukan_engine::{LearningCache, LearningConfig};
 
 use super::*;
 use crate::core::engine::display::LEARNING_DELETE_HINT;
@@ -17,7 +16,7 @@ use crate::core::engine::display::LEARNING_DELETE_HINT;
 fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     let mut engine = InputMethodEngine::new();
     engine.converters.kanji = None;
-    let mut cache = LearningCache::new(100);
+    let mut cache = LearningCache::new(LearningConfig::default());
     cache.record(reading, surface);
     engine.learning = Some(cache);
     engine
@@ -104,14 +103,17 @@ fn ctrl_delete_removes_selected_learning_entry() {
         .unwrap()
         .clone();
     assert_eq!(selected.text, "藍");
-    assert!(selected.from_learning, "learning candidate must be flagged");
+    assert!(
+        selected.is_deletable(),
+        "learning candidate must be flagged"
+    );
 
     let result = engine.process_key(&press_ctrl(Keysym::DELETE));
     assert!(result.consumed);
     // The entry is gone from the cache...
     assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
-    // ...and the window stays up: mozc blinks it closed and reopens after
-    // reconversion; karukan rebuilds it in place, staying in Conversion.
+    // ...and the window stays up: the conversion is rebuilt in place,
+    // staying in Conversion.
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(
         result
@@ -137,10 +139,10 @@ fn ctrl_delete_removes_selected_learning_entry() {
         !candidates
             .candidates()
             .iter()
-            .any(|c| c.text == "藍" && c.from_learning),
+            .any(|c| c.text == "藍" && c.is_deletable()),
         "`藍` must no longer be a learning candidate after deletion",
     );
-    // The rebuilt list reopens at the top, like mozc's fresh window.
+    // The rebuilt list reopens at the top.
     assert_eq!(candidates.cursor(), 0);
 }
 
@@ -164,7 +166,7 @@ fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
         .unwrap()
         .clone();
     assert_eq!(selected.text, "藍");
-    assert!(selected.from_learning);
+    assert!(selected.is_deletable());
 
     engine.process_key(&press_ctrl(Keysym::DELETE));
     // Both the exact and the prefix entry are gone.
@@ -201,7 +203,7 @@ fn ctrl_delete_keeps_surface_that_another_source_also_produces() {
         .unwrap()
         .clone();
     assert_eq!(selected.text, "あい");
-    assert!(selected.from_learning);
+    assert!(selected.is_deletable());
 
     engine.process_key(&press_ctrl(Keysym::DELETE));
     assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
@@ -215,20 +217,24 @@ fn ctrl_delete_keeps_surface_that_another_source_also_produces() {
          learning entry",
     );
     assert!(
-        !ai.unwrap().from_learning,
+        !ai.unwrap().is_deletable(),
         "the surviving `あい` must no longer be flagged as learning",
     );
 }
 
 #[test]
 fn init_learning_cache_applies_configured_surface_cap() {
-    // Regression guard for the config→cache seam. `init_learning_cache` must
-    // push settings.learning.max_surface_chars into the cache; if that wiring
-    // is dropped, a configured cap is silently ignored in favor of the 50-char
-    // default and this test (which uses a 6-char surface, between the
-    // configured 5 and the default 50) records what it should have skipped.
+    // Guards the config→cache seam: if init_learning_cache stops applying
+    // max_surface_chars, the 6-char surface (over the configured 5, under
+    // the default 50) gets recorded and this fails.
     let mut engine = InputMethodEngine::new();
-    engine.init_learning_cache(true, 10_000, 5);
+    engine.init_learning_cache(
+        true,
+        LearningConfig {
+            max_entries: 10_000,
+            max_surface_chars: 5,
+        },
+    );
     let cache = engine.learning.as_mut().expect("learning enabled");
 
     let before = cache.entry_count();
@@ -261,9 +267,9 @@ fn ctrl_backspace_deletes_learning_entry_like_ctrl_delete() {
 #[test]
 fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
     // When the selection isn't a learning candidate, Ctrl+Backspace (like
-    // Ctrl+Delete) is mozc's `DoNothing`: it is consumed so it can't leak to
-    // the app mid-conversion, but the conversion is left intact. Cancelling
-    // stays on plain Backspace / Escape.
+    // Ctrl+Delete) is consumed so it can't leak to the app mid-conversion,
+    // but the conversion is left intact. Cancelling stays on plain
+    // Backspace / Escape.
     let mut engine = engine_with_learned("あい", "藍");
 
     engine.process_key(&press('a'));
@@ -272,7 +278,7 @@ fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
     // Move the selection off the learning candidate.
     engine.process_key(&press_key(Keysym::SPACE));
     let before = engine.state().candidates().unwrap().clone();
-    assert!(!before.selected().unwrap().from_learning);
+    assert!(!before.selected().unwrap().is_deletable());
 
     let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
     assert!(
@@ -355,7 +361,7 @@ fn ctrl_alt_delete_leaves_history_alone() {
             .unwrap()
             .selected()
             .unwrap()
-            .from_learning
+            .is_deletable()
     );
 
     let result = engine.process_key(&press_ctrl_alt(Keysym::DELETE));
@@ -399,12 +405,12 @@ fn ctrl_delete_ignores_non_learning_candidate() {
         .selected()
         .unwrap()
         .clone();
-    assert!(!selected.from_learning);
+    assert!(!selected.is_deletable());
 
     let before_len = engine.state().candidates().unwrap().len();
     let result = engine.process_key(&press_ctrl(Keysym::DELETE));
-    // mozc's DoNothing: the key is consumed (it must not leak to the app
-    // mid-conversion) but nothing is deleted and the conversion continues.
+    // The key is consumed (it must not leak to the app mid-conversion) but
+    // nothing is deleted and the conversion continues.
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(engine.state().candidates().unwrap().len(), before_len);
@@ -430,7 +436,7 @@ fn ctrl_delete_removes_prefix_matched_entry_by_full_reading() {
         .clone();
     assert_eq!(selected.text, "挨拶");
     assert_eq!(selected.reading.as_deref(), Some("あいさつ"));
-    assert!(selected.from_learning);
+    assert!(selected.is_deletable());
 
     engine.process_key(&press_ctrl(Keysym::DELETE));
     assert!(
@@ -450,7 +456,7 @@ fn aux_shows_delete_hint_only_for_learning_candidate() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
 
-    // Learning candidate selected → aux carries the mozc-style footer hint.
+    // Learning candidate selected → aux carries the deletion hint.
     let result = engine.process_key(&press_key(Keysym::SPACE));
     let aux = last_aux_text(&result).expect("conversion must update aux text");
     assert!(

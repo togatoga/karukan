@@ -2,40 +2,62 @@
 //!
 //! Handles the list of conversion candidates with pagination support.
 
+/// Source of a conversion candidate — which subsystem produced it.
+/// Presentation ([`label`](Self::label), [`is_deletable`](Self::is_deletable))
+/// is derived from this on read, never stored, so it can't fall out of sync.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandidateSource {
+    /// User dictionary lookup
+    UserDictionary,
+    /// Learning cache (user history)
+    Learning,
+    /// Model inference result
+    Model,
+    /// System dictionary lookup (also covers reading→symbol lookups via
+    /// mozc's symbol.tsv — they're treated as just another dictionary).
+    Dictionary,
+    /// Rewriter-generated variant (half-width katakana, symbol)
+    Rewriter,
+    /// Hiragana/katakana fallback
+    Fallback,
+}
+
+impl CandidateSource {
+    /// Aux-text label telling the user which subsystem produced the
+    /// candidate. Empty for sources that aren't worth calling out (Fallback).
+    pub fn label(&self) -> &'static str {
+        match self {
+            CandidateSource::UserDictionary => "\u{1F464} \u{30E6}\u{30FC}\u{30B6}\u{30FC}", // 👤 ユーザー
+            CandidateSource::Learning => "\u{1F4DD} \u{5B66}\u{7FD2}", // 📝 学習
+            CandidateSource::Model => "\u{1F916} AI",                  // 🤖 AI
+            CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
+            CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
+            CandidateSource::Fallback => "",
+        }
+    }
+
+    /// Whether candidates from this source can be removed from the learning
+    /// history with Ctrl+Backspace / Ctrl+Delete.
+    pub fn is_deletable(&self) -> bool {
+        matches!(self, CandidateSource::Learning)
+    }
+}
+
 /// A single conversion candidate.
-///
-/// Two distinct annotation slots are kept separate so the same description
-/// never appears in two places at once:
-///
-/// - `source_label` — shown in the aux text (after the model name) to tell
-///   the user which subsystem produced the candidate (`🤖 AI`, `📚 辞書`,
-///   `📝 学習`, `🔄 変換`, ...).
-/// - `description` — shown as the mozc-style right-side comment on the
-///   candidate itself, describing what the candidate *is* (symbol names like
-///   `三点リーダ`, rewriter variants like `[全]英大文字`).
-///
-/// Position within a `CandidateList` is tracked by the list itself; the
-/// candidate doesn't carry its own index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     /// The converted text
     pub text: String,
     /// The original reading (hiragana)
     pub reading: Option<String>,
-    /// Source label for the aux text slot (e.g. `🤖 AI`, `📚 辞書`).
-    /// `None` when the source has no label (Fallback).
-    pub source_label: Option<String>,
+    /// Which subsystem produced this candidate, if known.
+    pub source: Option<CandidateSource>,
     /// Per-candidate description shown as the right-side comment on the
     /// candidate (mozc-style). Only set when the candidate itself has a
     /// meaningful description — symbol descriptions like `三点リーダ`,
     /// rewriter descriptions like `[全]英大文字`. Source labels are
     /// intentionally excluded so they don't duplicate the aux text.
     pub description: Option<String>,
-    /// Whether this candidate came from the learning cache (user history).
-    /// Mirrors mozc's `USER_HISTORY_PREDICTION` attribute: such candidates
-    /// are deletable with Ctrl+Delete during conversion, and the aux text
-    /// shows the mozc-style deletion hint while one is selected.
-    pub from_learning: bool,
 }
 
 impl Candidate {
@@ -43,9 +65,8 @@ impl Candidate {
         Self {
             text: text.into(),
             reading: None,
-            source_label: None,
+            source: None,
             description: None,
-            from_learning: false,
         }
     }
 
@@ -54,6 +75,18 @@ impl Candidate {
             reading: Some(reading.into()),
             ..Self::new(text)
         }
+    }
+
+    /// Aux-text source label (`🤖 AI`, `📚 辞書`, ...) derived from `source`;
+    /// `None` when the source is unknown or has no label.
+    pub fn source_label(&self) -> Option<&'static str> {
+        self.source.map(|s| s.label()).filter(|l| !l.is_empty())
+    }
+
+    /// Whether this candidate can be removed from the learning history with
+    /// Ctrl+Backspace / Ctrl+Delete. See [`CandidateSource::is_deletable`].
+    pub fn is_deletable(&self) -> bool {
+        self.source.is_some_and(|s| s.is_deletable())
     }
 }
 
@@ -242,19 +275,6 @@ impl CandidateList {
         }
     }
 
-    /// Remove the currently selected candidate from the list. The cursor
-    /// keeps its index so the next candidate slides into the selection,
-    /// clamped to the new end of the list. Returns the removed candidate,
-    /// or `None` if there is no selection.
-    pub fn remove_selected(&mut self) -> Option<Candidate> {
-        if self.cursor >= self.candidates.len() {
-            return None;
-        }
-        let removed = self.candidates.remove(self.cursor);
-        self.cursor = self.cursor.min(self.candidates.len().saturating_sub(1));
-        Some(removed)
-    }
-
     /// Reset cursor to beginning
     pub fn reset(&mut self) {
         self.cursor = 0;
@@ -324,37 +344,6 @@ mod tests {
         // Wrap to first page
         candidates.next_page();
         assert_eq!(candidates.current_page(), 0);
-    }
-
-    #[test]
-    fn test_remove_selected_keeps_cursor_position() {
-        let mut candidates = CandidateList::from_strings(["a", "b", "c"]);
-        candidates.move_next(); // cursor on "b"
-
-        let removed = candidates.remove_selected().unwrap();
-        assert_eq!(removed.text, "b");
-        // The next candidate slides into the selection.
-        assert_eq!(candidates.selected_text(), Some("c"));
-        assert_eq!(candidates.len(), 2);
-    }
-
-    #[test]
-    fn test_remove_selected_clamps_cursor_at_end() {
-        let mut candidates = CandidateList::from_strings(["a", "b", "c"]);
-        candidates.move_prev(); // wrap to "c" (last)
-
-        let removed = candidates.remove_selected().unwrap();
-        assert_eq!(removed.text, "c");
-        assert_eq!(candidates.selected_text(), Some("b"));
-    }
-
-    #[test]
-    fn test_remove_selected_last_candidate() {
-        let mut candidates = CandidateList::from_strings(["a"]);
-        assert_eq!(candidates.remove_selected().unwrap().text, "a");
-        assert!(candidates.is_empty());
-        assert_eq!(candidates.selected_text(), None);
-        assert!(candidates.remove_selected().is_none());
     }
 
     #[test]

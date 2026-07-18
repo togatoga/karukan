@@ -22,52 +22,21 @@ use input_buffer::InputBuffer;
 mod tests;
 
 use karukan_engine::{
-    Dictionary, KanaKanjiConverter, LearningCache, RewriterChain, RomajiConverter,
+    Dictionary, KanaKanjiConverter, LearningCache, LearningConfig, RewriterChain, RomajiConverter,
 };
 use tracing::{debug, trace};
 
-use super::candidate::{Candidate, CandidateList};
+use super::candidate::{Candidate, CandidateList, CandidateSource};
 use super::keycode::{KeyEvent, Keysym};
 use super::preedit::Preedit;
 use super::state::InputState;
 use crate::config::settings::Settings;
 
-/// Source of a conversion candidate
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum CandidateSource {
-    /// User dictionary lookup
-    UserDictionary,
-    /// Learning cache (user history)
-    Learning,
-    /// Model inference result
-    Model,
-    /// System dictionary lookup (also covers reading→symbol lookups via
-    /// mozc's symbol.tsv — they're treated as just another dictionary).
-    Dictionary,
-    /// Rewriter-generated variant (half-width katakana, symbol)
-    Rewriter,
-    /// Hiragana/katakana fallback
-    Fallback,
-}
-
-impl CandidateSource {
-    fn label(&self) -> &'static str {
-        match self {
-            CandidateSource::UserDictionary => "\u{1F464} \u{30E6}\u{30FC}\u{30B6}\u{30FC}", // 👤 ユーザー
-            CandidateSource::Learning => "\u{1F4DD} \u{5B66}\u{7FD2}", // 📝 学習
-            CandidateSource::Model => "\u{1F916} AI",                  // 🤖 AI
-            CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
-            CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
-            CandidateSource::Fallback => "",
-        }
-    }
-}
-
 /// A conversion candidate tagged with its source and an optional description.
 ///
 /// Built up internally during candidate construction; later mapped onto the
-/// public `Candidate` (where `source.label()` becomes `source_label` and this
-/// `description` becomes `description`).
+/// public `Candidate`, which carries the `source` itself and derives its
+/// presentation (aux label, deletability) from it on read.
 #[derive(Debug, Clone)]
 struct AnnotatedCandidate {
     text: String,
