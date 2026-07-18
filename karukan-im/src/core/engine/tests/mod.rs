@@ -43,12 +43,31 @@ fn press_ctrl(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(keysym, KeyModifiers::new().with_control(true), true)
 }
 
+fn press_ctrl_alt(keysym: Keysym) -> KeyEvent {
+    KeyEvent::new(
+        keysym,
+        KeyModifiers {
+            alt_key: true,
+            ..KeyModifiers::new().with_control(true)
+        },
+        true,
+    )
+}
+
 fn press_ctrl_shift(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(
         keysym,
         KeyModifiers::new().with_control(true).with_shift(true),
         true,
     )
+}
+
+/// Last UpdateAuxText emitted by an engine result, if any.
+fn last_aux_text(result: &EngineResult) -> Option<String> {
+    result.actions.iter().rev().find_map(|a| match a {
+        EngineAction::UpdateAuxText(text) => Some(text.clone()),
+        _ => None,
+    })
 }
 
 fn make_live_conversion_engine() -> InputMethodEngine {

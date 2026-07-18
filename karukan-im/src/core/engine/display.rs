@@ -188,6 +188,11 @@ impl InputMethodEngine {
         candidates: Option<&CandidateList>,
     ) -> String {
         let ctx = self.display_context();
+        let ctx = if ctx.is_empty() {
+            String::new()
+        } else {
+            format!(" | {}", ctx)
+        };
         let timing = format!(
             "{}ms/{}ms",
             self.metrics.conversion_ms, self.metrics.process_key_ms
@@ -214,17 +219,10 @@ impl InputMethodEngine {
             .filter(|c| c.from_learning)
             .map(|_| format!(" ({})", LEARNING_DELETE_HINT))
             .unwrap_or_default();
-        if ctx.is_empty() {
-            format!(
-                "[変換]{} {} | {} {} | {}{}{}",
-                page_info, reading, timing, tokens, model, source_label, delete_hint
-            )
-        } else {
-            format!(
-                "[変換]{} {} | {} | {} {} | {}{}{}",
-                page_info, reading, ctx, timing, tokens, model, source_label, delete_hint
-            )
-        }
+        format!(
+            "[変換]{} {}{} | {} {} | {}{}{}",
+            page_info, reading, ctx, timing, tokens, model, source_label, delete_hint
+        )
     }
 
     /// Format aux text for auto-suggest mode

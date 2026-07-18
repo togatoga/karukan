@@ -10,14 +10,6 @@ use karukan_engine::LearningCache;
 use super::*;
 use crate::core::engine::display::LEARNING_DELETE_HINT;
 
-/// Last UpdateAuxText emitted by an engine result, if any.
-fn last_aux_text(result: &EngineResult) -> Option<String> {
-    result.actions.iter().rev().find_map(|a| match a {
-        EngineAction::UpdateAuxText(text) => Some(text.clone()),
-        _ => None,
-    })
-}
-
 /// Engine seeded with a learning entry `reading → surface`, no kanji model.
 /// We bypass `init.rs` (which gates learning on settings + file I/O) and just
 /// inject a populated `LearningCache` directly — these tests assert the
@@ -118,9 +110,8 @@ fn ctrl_delete_removes_selected_learning_entry() {
     assert!(result.consumed);
     // The entry is gone from the cache...
     assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
-    // ...and the candidate disappears from the open list in place: mozc
-    // blinks its window closed and reopen; karukan stays in Conversion with
-    // the window up.
+    // ...and the window stays up: mozc blinks it closed and reopens after
+    // reconversion; karukan rebuilds it in place, staying in Conversion.
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(
         result
@@ -137,22 +128,117 @@ fn ctrl_delete_removes_selected_learning_entry() {
         "deletion must not hide the candidate window"
     );
 
+    // `藍` is no longer a *learning* candidate. It may still return from the
+    // model or dictionary (deleting history doesn't blacklist a surface — the
+    // whole point of rebuilding instead of dropping the row), but never again
+    // flagged as user history.
     let candidates = engine.state().candidates().unwrap();
-    let texts: Vec<&str> = candidates
-        .candidates()
-        .iter()
-        .map(|c| c.text.as_str())
-        .collect();
     assert!(
-        !texts.contains(&"藍"),
-        "deleted `藍` must leave the list, got {:?}",
-        texts,
+        !candidates
+            .candidates()
+            .iter()
+            .any(|c| c.text == "藍" && c.from_learning),
+        "`藍` must no longer be a learning candidate after deletion",
     );
-    // The selection index is preserved — the next candidate slides in.
-    // (Which text that is depends on whether the kanji model is available
-    // in the test environment, so only the position is asserted.)
+    // The rebuilt list reopens at the top, like mozc's fresh window.
     assert_eq!(candidates.cursor(), 0);
-    assert_ne!(candidates.selected_text(), Some("藍"));
+}
+
+#[test]
+fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
+    // The same surface learned under two prefix-related readings is shown as a
+    // single deduped row; deleting it must clear both, or the twin under the
+    // longer reading pops back on the next conversion of the same input.
+    let mut engine = engine_with_learned("あい", "藍");
+    engine.learning.as_mut().unwrap().record("あいさ", "藍");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let selected = engine
+        .state()
+        .candidates()
+        .unwrap()
+        .selected()
+        .unwrap()
+        .clone();
+    assert_eq!(selected.text, "藍");
+    assert!(selected.from_learning);
+
+    engine.process_key(&press_ctrl(Keysym::DELETE));
+    // Both the exact and the prefix entry are gone.
+    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あいさ")
+            .is_empty(),
+        "the prefix twin (あいさ→藍) must be cleared too, not just the exact entry",
+    );
+}
+
+#[test]
+fn ctrl_delete_keeps_surface_that_another_source_also_produces() {
+    // #2 regression: the learned surface equals the hiragana reading, which
+    // the fallback ALWAYS produces. That fallback copy is deduped away under
+    // the learning entry; deleting the entry must bring it back (now
+    // non-learning) rather than remove the only row — which is why deletion
+    // rebuilds the conversion instead of dropping the candidate in place.
+    let mut engine = engine_with_learned("あい", "あい");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let selected = engine
+        .state()
+        .candidates()
+        .unwrap()
+        .selected()
+        .unwrap()
+        .clone();
+    assert_eq!(selected.text, "あい");
+    assert!(selected.from_learning);
+
+    engine.process_key(&press_ctrl(Keysym::DELETE));
+    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+
+    // `あい` survives as an ordinary fallback candidate.
+    let candidates = engine.state().candidates().unwrap();
+    let ai = candidates.candidates().iter().find(|c| c.text == "あい");
+    assert!(
+        ai.is_some(),
+        "the fallback `あい` must survive the deletion, not vanish with the \
+         learning entry",
+    );
+    assert!(
+        !ai.unwrap().from_learning,
+        "the surviving `あい` must no longer be flagged as learning",
+    );
+}
+
+#[test]
+fn init_learning_cache_applies_configured_surface_cap() {
+    // Regression guard for the config→cache seam. `init_learning_cache` must
+    // push settings.learning.max_surface_chars into the cache; if that wiring
+    // is dropped, a configured cap is silently ignored in favor of the 50-char
+    // default and this test (which uses a 6-char surface, between the
+    // configured 5 and the default 50) records what it should have skipped.
+    let mut engine = InputMethodEngine::new();
+    engine.init_learning_cache(true, 10_000, 5);
+    let cache = engine.learning.as_mut().expect("learning enabled");
+
+    let before = cache.entry_count();
+    cache.record("__karukan_seam_test__", &"漢".repeat(6));
+    assert_eq!(
+        cache.entry_count(),
+        before,
+        "a surface over the configured cap must be skipped; the configured \
+         value is not reaching the cache",
+    );
 }
 
 #[test]
@@ -170,6 +256,114 @@ fn ctrl_backspace_deletes_learning_entry_like_ctrl_delete() {
     assert!(result.consumed);
     assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
+}
+
+#[test]
+fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
+    // When the selection isn't a learning candidate, Ctrl+Backspace (like
+    // Ctrl+Delete) is mozc's `DoNothing`: it is consumed so it can't leak to
+    // the app mid-conversion, but the conversion is left intact. Cancelling
+    // stays on plain Backspace / Escape.
+    let mut engine = engine_with_learned("あい", "藍");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    // Move the selection off the learning candidate.
+    engine.process_key(&press_key(Keysym::SPACE));
+    let before = engine.state().candidates().unwrap().clone();
+    assert!(!before.selected().unwrap().from_learning);
+
+    let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
+    assert!(
+        result.consumed,
+        "the chord must be consumed, not leak to the app"
+    );
+    assert!(
+        matches!(engine.state(), InputState::Conversion { .. }),
+        "Ctrl+Backspace must not cancel when the selection isn't deletable"
+    );
+    // Nothing changed: same selection, same list, history intact.
+    let after = engine.state().candidates().unwrap();
+    assert_eq!(after.cursor(), before.cursor());
+    assert_eq!(after.selected_text(), before.selected_text());
+    assert!(!engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+}
+
+#[test]
+fn ctrl_backspace_deletes_top_learning_suggestion_in_composing() {
+    // The suggest window shows the same learning candidates during Composing;
+    // Ctrl+Backspace there must delete the highlighted entry, not silently eat
+    // a character off the reading.
+    let mut engine = engine_with_learned("あい", "藍");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(
+        engine
+            .lookup_learning_candidates("あい")
+            .first()
+            .map(|c| c.text.clone()),
+        Some("藍".to_string()),
+        "the learned entry should be the top suggestion",
+    );
+
+    let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
+    assert!(result.consumed);
+    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert_eq!(
+        engine.input_buf.text, "あい",
+        "the reading must be intact — the chord deletes history, not a char",
+    );
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+}
+
+#[test]
+fn ctrl_backspace_still_deletes_char_when_no_learning_suggestion() {
+    // With nothing deletable highlighted, Ctrl+Backspace keeps its plain
+    // char-delete behavior rather than being swallowed.
+    let mut engine = InputMethodEngine::new();
+    engine.converters.kanji = None; // no model; no learning cache seeded
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert_eq!(engine.input_buf.text, "あい");
+
+    let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
+    assert!(result.consumed);
+    assert_eq!(
+        engine.input_buf.text, "あ",
+        "Ctrl+Backspace must delete a char when no learning suggestion is shown",
+    );
+}
+
+#[test]
+fn ctrl_alt_delete_leaves_history_alone() {
+    // Ctrl+Alt+Delete is a desktop chord, not ours. The delete arm guards on
+    // `!alt_key` like its siblings, so the key passes through untouched
+    // instead of irreversibly purging a history entry.
+    let mut engine = engine_with_learned("あい", "藍");
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(
+        engine
+            .state()
+            .candidates()
+            .unwrap()
+            .selected()
+            .unwrap()
+            .from_learning
+    );
+
+    let result = engine.process_key(&press_ctrl_alt(Keysym::DELETE));
+    assert!(!result.consumed, "Ctrl+Alt+Delete must reach the desktop");
+    assert!(
+        !engine.learning.as_ref().unwrap().lookup("あい").is_empty(),
+        "Ctrl+Alt+Delete must not delete the learning entry"
+    );
 }
 
 #[test]

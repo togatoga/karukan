@@ -51,11 +51,8 @@ impl Candidate {
 
     pub fn with_reading(text: impl Into<String>, reading: impl Into<String>) -> Self {
         Self {
-            text: text.into(),
             reading: Some(reading.into()),
-            source_label: None,
-            description: None,
-            from_learning: false,
+            ..Self::new(text)
         }
     }
 }
@@ -248,15 +245,13 @@ impl CandidateList {
     /// Remove the currently selected candidate from the list. The cursor
     /// keeps its index so the next candidate slides into the selection,
     /// clamped to the new end of the list. Returns the removed candidate,
-    /// or `None` if the list is empty.
+    /// or `None` if there is no selection.
     pub fn remove_selected(&mut self) -> Option<Candidate> {
-        if self.candidates.is_empty() {
+        if self.cursor >= self.candidates.len() {
             return None;
         }
         let removed = self.candidates.remove(self.cursor);
-        if self.cursor >= self.candidates.len() {
-            self.cursor = self.candidates.len().saturating_sub(1);
-        }
+        self.cursor = self.cursor.min(self.candidates.len().saturating_sub(1));
         Some(removed)
     }
 

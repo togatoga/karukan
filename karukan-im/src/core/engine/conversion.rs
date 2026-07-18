@@ -225,17 +225,28 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Map AnnotatedCandidate → public Candidate. The two annotation
-        // slots are kept disjoint so descriptions never duplicate between the
-        // aux text and the candidate's right-side comment:
-        //   - `source_label` ← source.label() only (e.g. `🤖 AI`, `📚 辞書`)
-        //   - `description`  ← the per-candidate description only
-        //                      (e.g. `三点リーダ`, `[全]英大文字`)
-        let candidate_list = CandidateList::new(
+        let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
+        self.enter_conversion_state(&reading, candidate_list)
+    }
+
+    /// Map builder output (`AnnotatedCandidate`) to the public
+    /// [`CandidateList`] shown in the conversion window. Candidates that don't
+    /// carry their own reading fall back to `reading`.
+    ///
+    /// The two annotation slots are kept disjoint so descriptions never
+    /// duplicate between the aux text and the candidate's right-side comment:
+    /// `source_label` carries `source.label()` only (e.g. `🤖 AI`, `📚 辞書`),
+    /// and `description` carries the per-candidate description only (e.g.
+    /// `三点リーダ`, `[全]英大文字`).
+    fn to_conversion_candidate_list(
+        candidates: Vec<AnnotatedCandidate>,
+        reading: &str,
+    ) -> CandidateList {
+        CandidateList::new(
             candidates
                 .into_iter()
                 .map(|ac| {
-                    let cand_reading = ac.reading.unwrap_or_else(|| reading.clone());
+                    let cand_reading = ac.reading.unwrap_or_else(|| reading.to_string());
                     let label = ac.source.label();
                     Candidate {
                         text: ac.text,
@@ -246,8 +257,7 @@ impl InputMethodEngine {
                     }
                 })
                 .collect(),
-        );
-        self.enter_conversion_state(&reading, candidate_list)
+        )
     }
 
     /// Transition to Conversion state with the given reading and candidate list.
@@ -590,8 +600,19 @@ impl InputMethodEngine {
             // keyboards label the Backspace key "delete" — that is the key
             // users actually press there (forward delete would need
             // Ctrl+fn+delete).
-            Keysym::DELETE | Keysym::BACKSPACE if key.modifiers.control_key => {
-                self.delete_selected_candidate_from_history()
+            //
+            // When the selection isn't a learning candidate, both chords do
+            // nothing (mozc's `DoNothing`) — the key is consumed so it never
+            // leaks into the application mid-conversion, but the conversion is
+            // left untouched. Cancelling stays on plain Backspace / Escape.
+            Keysym::DELETE | Keysym::BACKSPACE
+                if key.modifiers.control_key && !key.modifiers.alt_key =>
+            {
+                if self.selected_is_deletable() {
+                    self.delete_selected_candidate_from_history()
+                } else {
+                    EngineResult::consumed()
+                }
             }
             Keysym::BACKSPACE => self.backspace_conversion(),
             _ => {
@@ -695,67 +716,64 @@ impl InputMethodEngine {
         result
     }
 
-    /// Delete the currently selected candidate from the learning history
-    /// (Ctrl+Delete / Ctrl+Backspace).
-    ///
-    /// Follows mozc's `DeleteSelectedCandidate`: only candidates that came
-    /// from the user history are deletable (mozc gates on the
-    /// `USER_HISTORY_PREDICTION` attribute; karukan on
-    /// `Candidate::from_learning`), and the entry is removed by exact
-    /// reading+surface match (`UserHistoryPredictor::ClearHistoryEntry`).
-    /// A non-deletable candidate consumes the key but does nothing (mozc's
-    /// `DoNothing`), so the chord never leaks to the application
-    /// mid-conversion.
-    ///
-    /// After the removal mozc cancels and re-runs the conversion, so its
-    /// candidate window blinks closed and reopens without the entry; karukan
-    /// skips that round trip and removes the candidate from the open list in
-    /// place — same end state, no flicker, no extra inference — keeping the
-    /// selection at the same position. Only the learning entry is gone; the
-    /// deleted surface can still come back in later conversions from the
-    /// model or dictionaries. Persisting the removal is deferred to the
-    /// regular save points, matching mozc's deferred sync. Should the list
-    /// somehow end up empty, fall back to cancelling like mozc.
-    fn delete_selected_candidate_from_history(&mut self) -> EngineResult {
-        let survivors = {
-            let Some(candidates) = self.state.candidates_mut() else {
-                return EngineResult::not_consumed();
-            };
-            let Some(selected) = candidates.selected() else {
-                return EngineResult::consumed();
-            };
-            if !selected.from_learning {
-                return EngineResult::consumed();
-            }
-            let surface = selected.text.clone();
-            // Learning candidates always carry their cache reading (the
-            // prefix lookup stores the full reading, which can differ from
-            // the input).
-            let reading = selected.reading.clone();
+    /// Whether the selected candidate can be removed from the learning
+    /// history — mozc's `USER_HISTORY_PREDICTION` gate on
+    /// `DeleteSelectedCandidate`. False when nothing is selected, so the
+    /// delete chord stays inert outside the case it is meant for.
+    fn selected_is_deletable(&self) -> bool {
+        self.state
+            .candidates()
+            .and_then(|c| c.selected())
+            .is_some_and(|c| c.from_learning)
+    }
 
-            let removed = match (self.learning.as_mut(), reading.as_deref()) {
-                (Some(cache), Some(reading)) => cache.remove(reading, &surface),
-                _ => false,
-            };
-            if !removed {
-                return EngineResult::consumed();
-            }
-            debug!(
-                "deleted learning entry: {} -> {}",
-                reading.as_deref().unwrap_or(""),
-                surface
-            );
-            candidates.remove_selected();
-            candidates
-                .selected_text()
-                .map(|text| (text.to_string(), candidates.clone()))
+    /// Delete the selected learning-history candidate (Ctrl+Delete /
+    /// Ctrl+Backspace) — mozc's `DeleteSelectedCandidate`.
+    ///
+    /// Deletability is the caller's guard ([`Self::selected_is_deletable`]),
+    /// so this is only reached with a learning candidate selected. The entry
+    /// is removed from the cache by [`LearningCache::remove_suggestion`] — the
+    /// shown row plus any prefix twins that would otherwise pop back — and
+    /// then, exactly like mozc's cancel-and-reconvert, the conversion is
+    /// rebuilt from scratch.
+    ///
+    /// Rebuilding (rather than dropping the row in place) is what keeps a
+    /// surface the model/dictionary/fallback *also* produce: those copies are
+    /// deduped away under the learning entry while it exists, and reappear —
+    /// now as ordinary, non-deletable candidates — once it is gone. The extra
+    /// inference is acceptable on this rare, explicit keypress. Persisting the
+    /// removal is deferred to the regular save points, matching mozc's
+    /// deferred sync. An empty rebuild falls back to cancelling, like mozc.
+    fn delete_selected_candidate_from_history(&mut self) -> EngineResult {
+        let Some(surface) = self
+            .state
+            .candidates()
+            .and_then(|c| c.selected())
+            .map(|c| c.text.clone())
+        else {
+            return EngineResult::consumed();
         };
-        match survivors {
-            Some((selected_text, candidates)) => {
-                self.update_conversion_preedit(&selected_text, &candidates)
-            }
-            None => self.cancel_conversion(),
+        // The typed reading is the key the candidate was looked up under. A
+        // prefix-matched candidate carries a longer reading of its own, but
+        // every entry that surfaces it has the typed reading as a prefix, so
+        // removing by the typed reading clears the shown row and its twins.
+        let reading = self.input_buf.text.clone();
+        let removed = self
+            .learning
+            .as_mut()
+            .is_some_and(|cache| cache.remove_suggestion(&reading, &surface));
+        if !removed {
+            return EngineResult::consumed();
         }
+        debug!("deleted learning entry: {} -> {}", reading, surface);
+
+        let candidates =
+            self.build_conversion_candidates(&reading, self.config.num_candidates, false);
+        if candidates.is_empty() {
+            return self.cancel_conversion();
+        }
+        let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
+        self.enter_conversion_state(&reading, candidate_list)
     }
 
     /// Cancel conversion and return to hiragana

@@ -65,9 +65,8 @@ impl LearningCache {
 
     /// Record a user selection. Increments frequency and updates last_access.
     ///
-    /// Selections whose surface exceeds `max_surface_chars` are skipped: they
-    /// are almost always whole live-converted sentences that would never be
-    /// retyped verbatim, and they crowd out useful word/phrase entries.
+    /// Surfaces longer than `max_surface_chars` are skipped; see
+    /// [`LearningCache::DEFAULT_MAX_SURFACE_CHARS`] for why.
     pub fn record(&mut self, reading: &str, surface: &str) {
         if surface.chars().count() > self.max_surface_chars {
             return;
@@ -98,9 +97,48 @@ impl LearningCache {
         };
         let before = entries.len();
         entries.retain(|e| e.surface != surface);
-        let removed = entries.len() < before;
+        if entries.len() == before {
+            return false;
+        }
         if entries.is_empty() {
             self.entries.remove(reading);
+        }
+        self.dirty = true;
+        true
+    }
+
+    /// Remove every learned entry that would resurface `surface` for input
+    /// `reading`: the exact-reading entry plus every longer reading that has
+    /// `reading` as a prefix — the same fan-out [`prefix_lookup`] uses to
+    /// suggest it. Returns whether anything was removed.
+    ///
+    /// [`remove`](Self::remove) targets one exact reading, but the candidate
+    /// window dedups a surface across its exact and prefix readings and shows
+    /// only one row, so an exact-only delete can leave a prefix twin that pops
+    /// back on the next conversion of the same input. This clears them
+    /// together, so one delete makes the shown suggestion actually disappear.
+    ///
+    /// [`prefix_lookup`]: Self::prefix_lookup
+    pub fn remove_suggestion(&mut self, reading: &str, surface: &str) -> bool {
+        let matching: Vec<String> = self
+            .entries
+            .keys()
+            .filter(|r| r.starts_with(reading))
+            .cloned()
+            .collect();
+        let mut removed = false;
+        for r in matching {
+            let Some(entries) = self.entries.get_mut(&r) else {
+                continue;
+            };
+            let before = entries.len();
+            entries.retain(|e| e.surface != surface);
+            if entries.len() != before {
+                removed = true;
+                if entries.is_empty() {
+                    self.entries.remove(&r);
+                }
+            }
         }
         if removed {
             self.dirty = true;
@@ -509,6 +547,43 @@ mod tests {
         assert_eq!(cache.entry_count(), 0);
         assert!(cache.lookup("きょう").is_empty());
         assert!(cache.prefix_lookup("き").is_empty());
+    }
+
+    #[test]
+    fn test_remove_suggestion_clears_exact_and_prefix_twins() {
+        let mut cache = LearningCache::new(100);
+        cache.record("あい", "藍");
+        cache.record("あいさ", "藍"); // same surface, longer reading (a twin)
+        cache.record("あい", "愛"); // different surface under the same reading
+        cache.record("うみ", "藍"); // same surface, unrelated reading
+
+        let file = NamedTempFile::new().unwrap();
+        cache.save(file.path()).unwrap();
+        assert!(!cache.is_dirty());
+
+        assert!(cache.remove_suggestion("あい", "藍"));
+        assert!(cache.is_dirty(), "removal must mark the cache dirty");
+
+        // Both the exact entry and the prefix twin are gone...
+        assert!(cache.lookup("あい").iter().all(|(s, _)| s != "藍"));
+        assert!(cache.lookup("あいさ").is_empty());
+        // ...but a different surface under the same reading survives...
+        assert!(cache.lookup("あい").iter().any(|(s, _)| s == "愛"));
+        // ...and the same surface under an unrelated reading is untouched.
+        assert!(cache.lookup("うみ").iter().any(|(s, _)| s == "藍"));
+    }
+
+    #[test]
+    fn test_remove_suggestion_nonexistent_is_noop() {
+        let mut cache = LearningCache::new(100);
+        cache.record("あい", "藍");
+
+        let file = NamedTempFile::new().unwrap();
+        cache.save(file.path()).unwrap();
+
+        assert!(!cache.remove_suggestion("あい", "愛"));
+        assert!(!cache.remove_suggestion("かき", "柿"));
+        assert!(!cache.is_dirty(), "no-op removal must not mark dirty");
     }
 
     #[test]
