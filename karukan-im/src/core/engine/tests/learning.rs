@@ -297,50 +297,22 @@ fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
 }
 
 #[test]
-fn ctrl_backspace_deletes_top_learning_suggestion_in_composing() {
-    // The suggest window shows the same learning candidates during Composing;
-    // Ctrl+Backspace there must delete the highlighted entry, not silently eat
-    // a character off the reading.
+fn ctrl_backspace_in_composing_deletes_char_not_history() {
+    // History deletion is a Conversion-state-only chord. During Composing,
+    // Ctrl+Backspace edits text like plain Backspace, even while a learning
+    // suggestion is on screen.
     let mut engine = engine_with_learned("あい", "藍");
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(
-        engine
-            .lookup_learning_candidates("あい")
-            .first()
-            .map(|c| c.text.clone()),
-        Some("藍".to_string()),
-        "the learned entry should be the top suggestion",
-    );
 
     let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
     assert!(result.consumed);
-    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
-    assert_eq!(
-        engine.input_buf.text, "あい",
-        "the reading must be intact — the chord deletes history, not a char",
-    );
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-}
-
-#[test]
-fn ctrl_backspace_still_deletes_char_when_no_learning_suggestion() {
-    // With nothing deletable highlighted, Ctrl+Backspace keeps its plain
-    // char-delete behavior rather than being swallowed.
-    let mut engine = InputMethodEngine::new();
-    engine.converters.kanji = None; // no model; no learning cache seeded
-
-    engine.process_key(&press('a'));
-    engine.process_key(&press('i'));
-    assert_eq!(engine.input_buf.text, "あい");
-
-    let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
-    assert!(result.consumed);
-    assert_eq!(
-        engine.input_buf.text, "あ",
-        "Ctrl+Backspace must delete a char when no learning suggestion is shown",
+    assert_eq!(engine.input_buf.text, "あ");
+    assert!(
+        !engine.learning.as_ref().unwrap().lookup("あい").is_empty(),
+        "the learning entry must survive — deletion only works in Conversion",
     );
 }
 

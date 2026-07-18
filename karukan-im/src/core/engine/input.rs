@@ -260,14 +260,6 @@ impl InputMethodEngine {
                 Keysym::KEY_E | Keysym::KEY_E_UPPER => return self.move_caret_end(),
                 // Ctrl+F: move right (Emacs-style Right)
                 Keysym::KEY_F | Keysym::KEY_F_UPPER => return self.move_caret_right(),
-                // Ctrl+Delete / Ctrl+Backspace: delete the highlighted learning
-                // suggestion from history, mirroring the Conversion-state chord;
-                // falls through to plain character editing when nothing matches.
-                Keysym::DELETE | Keysym::BACKSPACE if !key.modifiers.alt_key => {
-                    if let Some(result) = self.delete_top_learning_suggestion() {
-                        return result;
-                    }
-                }
                 _ => {}
             }
         }
@@ -320,31 +312,6 @@ impl InputMethodEngine {
                 EngineResult::not_consumed()
             }
         }
-    }
-
-    /// Delete the learning suggestion the auto-suggest window is highlighting
-    /// (always cursor 0 — learning candidates are listed first), then refresh
-    /// the window. Returns `None` when the top suggestion isn't a learning
-    /// entry, so the caller falls back to plain character editing.
-    fn delete_top_learning_suggestion(&mut self) -> Option<EngineResult> {
-        let reading = self.input_buf.text.clone();
-        let surface = self
-            .lookup_learning_candidates(&reading)
-            .into_iter()
-            .next()?
-            .text;
-        let removed = self
-            .learning
-            .as_mut()
-            .is_some_and(|cache| cache.remove_suggestion(&reading, &surface));
-        if !removed {
-            return None;
-        }
-        debug!(
-            "deleted learning entry (suggest): {} -> {}",
-            reading, surface
-        );
-        Some(self.refresh_input_state())
     }
 
     /// Begin a new emoji-shortcode composing session.
