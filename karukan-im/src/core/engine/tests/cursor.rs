@@ -363,3 +363,164 @@ fn test_cursor_composed_hiragana_tracking() {
     assert_eq!(engine.input_buf.text, "");
     assert_eq!(engine.input_buf.cursor_pos, 0);
 }
+
+// --- Pass-through consonant reclaim after deletion ---
+
+#[test]
+fn test_backspace_reclaims_passthrough_ks_bs_i() {
+    // "ks" → BS → 'i' should produce "き", not "kい"
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('k'));
+    engine.process_key(&press('s'));
+    // 'k' passed through, 's' in romaji buffer
+    assert_eq!(engine.preedit().unwrap().text(), "ks");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(engine.preedit().unwrap().text(), "k");
+
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "き");
+}
+
+#[test]
+fn test_backspace_reclaims_passthrough_ksi_bs_i() {
+    // "ksi" → BS → 'i' should produce "き", not "kい"
+    // (romaji buffer is empty after "si"→"し", so backspace goes
+    // through the input_buf branch)
+    let mut engine = InputMethodEngine::new();
+    for ch in "ksi".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.preedit().unwrap().text(), "kし");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(engine.preedit().unwrap().text(), "k");
+
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "き");
+}
+
+#[test]
+fn test_backspace_reclaims_with_preceding_hiragana() {
+    // "aiksi" → BS → 'i' should produce "あいき"
+    let mut engine = InputMethodEngine::new();
+    for ch in "aiksi".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.preedit().unwrap().text(), "あいkし");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "あいき");
+}
+
+#[test]
+fn test_delete_reclaims_passthrough_at_cursor() {
+    // "kしあ" with cursor after "k" → Delete removes "し" →
+    // 'k' before cursor is reclaimed → typing 'a' gives "かあ"
+    let mut engine = InputMethodEngine::new();
+    for ch in "ksia".chars() {
+        engine.process_key(&press(ch));
+    }
+    // input_buf = "kしあ"
+    assert_eq!(engine.preedit().unwrap().text(), "kしあ");
+
+    // Move cursor to after "k" (pos 1)
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+    assert_eq!(engine.preedit().unwrap().caret(), 1);
+
+    // Delete → removes "し" at cursor
+    engine.process_key(&press_key(Keysym::DELETE));
+    // 'k' is reclaimed into romaji buffer; display: "k" + "あ"
+    assert_eq!(engine.preedit().unwrap().text(), "kあ");
+
+    // Type 'a' → "ka" → "か"
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "かあ");
+}
+
+#[test]
+fn test_backspace_reclaims_at_mid_cursor_position() {
+    // Cursor moved to middle, backspace exposes consonant
+    // "kしあ" → cursor between "し" and "あ" → BS removes "し" →
+    // 'k' before cursor is reclaimed
+    let mut engine = InputMethodEngine::new();
+    for ch in "ksia".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.preedit().unwrap().text(), "kしあ");
+
+    // Move cursor left once (before "あ", after "し")
+    engine.process_key(&press_key(Keysym::LEFT));
+
+    // Backspace removes "し"
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(engine.preedit().unwrap().text(), "kあ");
+
+    // Type 'a' → "ka" → "か", inserted before "あ"
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "かあ");
+}
+
+#[test]
+fn test_cursor_move_reclaims_passthrough() {
+    // "kしあ" → cursor after "k" → type 'a' → "かしあ"
+    let mut engine = InputMethodEngine::new();
+    for ch in "ksia".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.preedit().unwrap().text(), "kしあ");
+
+    // Move left twice: end(3) → 2 → 1 (after "k")
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+    // Display should still look the same: 'k' is now in romaji buffer
+    assert_eq!(engine.preedit().unwrap().text(), "kしあ");
+
+    // Type 'a' → "ka" → "か" replaces the buffered 'k'
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "かしあ");
+}
+
+#[test]
+fn test_cursor_move_no_reclaim_after_hiragana() {
+    // "あいう" → cursor after "あ" → type 'k' → "あkいう"
+    // (hiragana should NOT be reclaimed)
+    let mut engine = InputMethodEngine::new();
+    for ch in "aiu".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.preedit().unwrap().text(), "あいう");
+
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press('k'));
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "あかいう");
+}
+
+#[test]
+fn test_cursor_home_then_type_combines_with_passthrough() {
+    // "kあ" → Home → type nothing (cursor at 0, no reclaim) →
+    // End → cursor after "k"... wait, "k" is at pos 0 so End goes to
+    // pos 2 past "あ". Instead test: "あkい" → cursor after "k" →
+    // type 'a' → "あかい"
+    let mut engine = InputMethodEngine::new();
+    for ch in "aksi".chars() {
+        engine.process_key(&press(ch));
+    }
+    // "aks" → あ + k passthrough + し, then 'i' → no, let me retrace
+    // a→あ, k→buffer, s→buffer "ks" invalid→k passthrough→buffer "s"
+    // input_buf = "あk", buffer = "s"
+    // i→buffer "si"→"し". input_buf = "あkし"
+    assert_eq!(engine.preedit().unwrap().text(), "あkし");
+
+    // Move left once → after "k" (pos 2)
+    engine.process_key(&press_key(Keysym::LEFT));
+    // 'k' at pos 1 is reclaimed → input_buf = "あし", buffer = "k"
+    assert_eq!(engine.preedit().unwrap().text(), "あkし");
+
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "あきし");
+}

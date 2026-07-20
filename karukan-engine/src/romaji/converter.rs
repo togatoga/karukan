@@ -219,12 +219,36 @@ impl RomajiConverter {
     /// Handle backspace
     pub fn backspace(&mut self) -> BackspaceResult {
         if let Some(ch) = self.buffer.pop() {
+            // When the buffer empties, check whether the last character in
+            // output is an ASCII letter that could start a new romaji
+            // sequence.  If so, pull it back into the buffer so the next
+            // keystroke can combine with it.
+            //
+            // Example: "ks" → output="k", buffer="s".  Backspace removes
+            // "s"; without the reclaim the "k" stays committed and a
+            // subsequent "i" would produce "kい" instead of "き".
+            if self.buffer.is_empty() {
+                if let Some(last_char) = self.output.chars().next_back() {
+                    if self.can_start_sequence(last_char) {
+                        self.output.pop();
+                        self.buffer.push(last_char);
+                    }
+                }
+            }
             BackspaceResult::RemovedBuffer(ch)
         } else if let Some(ch) = self.output.pop() {
             BackspaceResult::RemovedOutput(ch)
         } else {
             BackspaceResult::Empty
         }
+    }
+
+    /// Whether `ch` could be the first character of a romaji sequence
+    /// (i.e. it has children in the conversion trie).
+    pub fn can_start_sequence(&self, ch: char) -> bool {
+        self.trie
+            .children
+            .contains_key(&ch.to_ascii_lowercase())
     }
 
     /// Get the current output
@@ -366,6 +390,26 @@ mod tests {
 
         let result = conv.backspace();
         assert_eq!(result, BackspaceResult::RemovedOutput('か'));
+    }
+
+    #[test]
+    fn test_backspace_reclaims_passthrough() {
+        let mut conv = RomajiConverter::new();
+        // "ks" → 'k' passes through, 's' stays in buffer
+        conv.push('k');
+        conv.push('s');
+        assert_eq!(conv.output(), "k");
+        assert_eq!(conv.buffer(), "s");
+
+        // Backspace removes 's'; 'k' should be reclaimed into buffer
+        conv.backspace();
+        assert_eq!(conv.output(), "");
+        assert_eq!(conv.buffer(), "k");
+
+        // Now 'i' should combine with 'k' → "き"
+        conv.push('i');
+        assert_eq!(conv.output(), "き");
+        assert_eq!(conv.buffer(), "");
     }
 
     #[test]
