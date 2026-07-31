@@ -94,8 +94,8 @@ mod tests {
     #[test]
     fn test_parse_registry() {
         let reg = registry();
-        assert_eq!(reg.default_model, "jinen-v1-small-q5");
-        assert_eq!(reg.models.len(), 2, "Expected exactly 2 model families");
+        assert_eq!(reg.default_model, "jinen-v1.1-beta-q5");
+        assert_eq!(reg.models.len(), 3, "Expected exactly 3 model families");
     }
 
     #[test]
@@ -122,8 +122,8 @@ mod tests {
     fn test_default_variant() {
         let reg = registry();
         let (family, variant) = reg.default_variant().expect("default not found");
-        assert_eq!(variant.id, "jinen-v1-small-q5");
-        assert_eq!(family.repo_id, "togatogah/jinen-v1-small.gguf");
+        assert_eq!(variant.id, "jinen-v1.1-beta-q5");
+        assert_eq!(family.repo_id, "togatogah/jinen-v1.1-beta");
     }
 
     #[test]
@@ -132,19 +132,20 @@ mod tests {
         let ids = reg.all_variant_ids();
         assert_eq!(
             ids.len(),
-            2,
-            "Expected exactly 2 variants, got {}",
+            3,
+            "Expected exactly 3 variants, got {}",
             ids.len()
         );
         assert!(ids.contains(&"jinen-v1-xsmall-q5"));
         assert!(ids.contains(&"jinen-v1-small-q5"));
+        assert!(ids.contains(&"jinen-v1.1-beta-q5"));
     }
 
     #[test]
     fn test_iter_variants() {
         let reg = registry();
         let count = reg.iter_variants().count();
-        assert_eq!(count, 2, "Expected exactly 2 variants, got {}", count);
+        assert_eq!(count, 3, "Expected exactly 3 variants, got {}", count);
     }
 
     #[test]
