@@ -1,7 +1,7 @@
-//! Tests for the learning cache and the Tab-skips-learning behavior.
+//! Tests for the learning cache and learning-candidate deletion behavior.
 //!
-//! Space/Down: include learning candidates (default conversion).
-//! Tab: skip learning candidates (lets users escape stale learned entries).
+//! Space conversion and composing-time predictions both include learning.
+//! Tab enters the exact prediction list already shown while composing.
 //! Ctrl+Delete: delete the selected learning candidate from the history.
 
 use karukan_engine::{LearningCache, LearningConfig};
@@ -23,47 +23,45 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
 }
 
 #[test]
-fn build_candidates_includes_learning_when_not_skipped() {
+fn build_candidates_includes_learning() {
     let mut engine = engine_with_learned("あい", "藍");
 
     let texts: Vec<String> = engine
-        .build_conversion_candidates("あい", 9, false)
+        .build_conversion_candidates("あい", 9)
         .into_iter()
         .map(|c| c.text)
         .collect();
 
     assert!(
         texts.contains(&"藍".to_string()),
-        "Space path (skip_learning=false) should surface learned `藍`, got {:?}",
+        "Explicit conversion should surface learned `藍`, got {:?}",
         texts,
     );
 }
 
 #[test]
-fn build_candidates_omits_learning_when_skipped() {
-    let mut engine = engine_with_learned("あい", "藍");
-
-    let texts: Vec<String> = engine
-        .build_conversion_candidates("あい", 9, true)
-        .into_iter()
-        .map(|c| c.text)
-        .collect();
-
-    assert!(
-        !texts.contains(&"藍".to_string()),
-        "Tab path (skip_learning=true) must drop learned `藍`, got {:?}",
-        texts,
-    );
-}
-
-#[test]
-fn tab_key_skips_learning_in_composing() {
-    // End-to-end: type the reading, press Tab → learned candidate is gone.
+fn tab_key_selects_shown_learning_prediction() {
+    // End-to-end: type the reading, press Tab → the learned prediction that
+    // was already visible becomes the selected conversion candidate.
     let mut engine = engine_with_learned("あい", "藍");
 
     engine.process_key(&press('a'));
-    engine.process_key(&press('i'));
+    let suggest_result = engine.process_key(&press('i'));
     assert_eq!(engine.input_buf.text, "あい");
+    let shown: Vec<String> = suggest_result
+        .actions
+        .iter()
+        .find_map(|action| match action {
+            EngineAction::ShowCandidates(list) => Some(
+                list.candidates()
+                    .iter()
+                    .map(|candidate| candidate.text.clone())
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .expect("typing should show predictions");
+    assert!(shown.contains(&"藍".to_string()));
 
     let result = engine.process_key(&press_key(Keysym::TAB));
     assert!(result.consumed);
@@ -77,10 +75,13 @@ fn tab_key_skips_learning_in_composing() {
         .iter()
         .map(|c| c.text.clone())
         .collect();
-    assert!(
-        !texts.contains(&"藍".to_string()),
-        "Tab must skip the learned `藍` candidate, got {:?}",
-        texts,
+    assert_eq!(
+        texts, shown,
+        "Tab must retain the exact shown prediction list"
+    );
+    assert_eq!(
+        engine.state().candidates().unwrap().selected_text(),
+        Some("藍")
     );
 }
 

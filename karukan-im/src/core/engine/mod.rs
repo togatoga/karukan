@@ -128,6 +128,12 @@ pub struct InputMethodEngine {
     input_buf: InputBuffer,
     /// Live conversion state
     live: LiveConversion,
+    /// Auto-suggest candidates currently shown while composing.
+    ///
+    /// Composing normally keeps candidates only in frontend actions. Retaining
+    /// the exact list lets Tab/Down enter prediction selection without
+    /// rebuilding a separate explicit-conversion list.
+    suggestions: Option<CandidateList>,
     /// Internal chunking of the composing buffer used by
     /// `chunked_auto_suggest`: a cache of the per-chunk model conversions.
     /// Re-chunking diffs the new buffer against this by common prefix/suffix so
@@ -157,6 +163,7 @@ impl InputMethodEngine {
             mode: ModeState::default(),
             input_buf: InputBuffer::new(),
             live: LiveConversion::default(),
+            suggestions: None,
             chunks: Vec::new(),
             dicts: Dictionaries::default(),
             learning: None,
@@ -229,6 +236,7 @@ impl InputMethodEngine {
         self.mode = ModeState::default();
         self.input_buf.clear();
         self.live.text.clear();
+        self.suggestions = None;
         self.chunks.clear();
         self.metrics = ConversionMetrics::default();
     }
@@ -245,6 +253,7 @@ impl InputMethodEngine {
             // render a stale live.text, and the chunk cache would be diffed
             // against a buffer it no longer matches).
             self.live.text.clear();
+            self.suggestions = None;
             self.chunks.clear();
             // Temporary modes (Emoji, Alphabet) are per-composition:
             // erasing back to an empty buffer ends the session, so restore

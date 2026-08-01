@@ -22,6 +22,7 @@ impl InputMethodEngine {
             && !self.live.text.is_empty()
             && !karukan_engine::contains_kana(&self.input_buf.text)
         {
+            self.suggestions = None;
             let preedit = self.set_composing_state();
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
@@ -56,16 +57,17 @@ impl InputMethodEngine {
             append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
             append_candidates_dedup(&mut all_candidates, self.lookup_rewriter_variants(&reading));
             if all_candidates.is_empty() {
+                self.suggestions = None;
                 return EngineResult::consumed()
                     .with_action(EngineAction::UpdatePreedit(preedit))
                     .with_action(EngineAction::HideCandidates)
                     .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
             }
+            let candidate_list = CandidateList::new(all_candidates);
+            self.suggestions = Some(candidate_list.clone());
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(preedit))
-                .with_action(EngineAction::ShowCandidates(CandidateList::new(
-                    all_candidates,
-                )))
+                .with_action(EngineAction::ShowCandidates(candidate_list))
                 .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         };
 
@@ -98,11 +100,11 @@ impl InputMethodEngine {
         append_candidates_dedup(&mut all_candidates, model_candidates);
         append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(reading));
         let aux = self.format_aux_suggest(&self.input_buf.text.clone());
+        let candidate_list = CandidateList::new(all_candidates);
+        self.suggestions = Some(candidate_list.clone());
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(preedit))
-            .with_action(EngineAction::ShowCandidates(CandidateList::new(
-                all_candidates,
-            )))
+            .with_action(EngineAction::ShowCandidates(candidate_list))
             .with_action(EngineAction::UpdateAuxText(aux))
     }
 
@@ -195,6 +197,7 @@ impl InputMethodEngine {
     pub(super) fn start_input(&mut self, ch: char) -> EngineResult {
         self.converters.romaji.reset();
         self.input_buf.clear();
+        self.suggestions = None;
 
         if self.mode.current() == InputMode::Alphabet {
             self.input_buf.insert(&ch.to_string());
@@ -270,11 +273,10 @@ impl InputMethodEngine {
             Keysym::BACKSPACE => self.backspace_composing(),
             Keysym::DELETE => self.delete_composing(),
             Keysym::SPACE if self.mode.current() == InputMode::Alphabet => self.input_char(' '),
-            // Tab triggers conversion that bypasses the learning cache, so users
-            // can escape stale or unwanted learned entries (mozc binds Tab to a
-            // different conversion path — PredictAndConvert — in the same spirit).
-            Keysym::TAB => self.start_conversion(true),
-            Keysym::SPACE | Keysym::DOWN => self.start_conversion(false),
+            // Tab/Down select from the exact predictions already visible while
+            // composing. Space remains the explicit kana-kanji conversion path.
+            Keysym::TAB | Keysym::DOWN => self.start_suggestion_selection(),
+            Keysym::SPACE => self.start_conversion(),
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
             Keysym::HOME => self.move_caret_home(),
@@ -412,6 +414,7 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             self.input_buf.clear();
             self.live.text.clear();
+            self.suggestions = None;
             self.chunks.clear();
             return EngineResult::consumed()
                 .with_action(EngineAction::HideCandidates)
@@ -429,6 +432,7 @@ impl InputMethodEngine {
         self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
+        self.suggestions = None;
         self.chunks.clear();
         self.state = InputState::Empty;
         // Temporary modes (Emoji, Alphabet) end with the composition:
@@ -453,6 +457,7 @@ impl InputMethodEngine {
         // If live conversion is active, first Escape returns to hiragana display
         if !self.live.text.is_empty() {
             self.live.text.clear();
+            self.suggestions = None;
             let preedit = self.set_composing_state();
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(preedit))
@@ -476,6 +481,7 @@ impl InputMethodEngine {
         self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
+        self.suggestions = None;
         self.chunks.clear();
         self.state = InputState::Empty;
         // Temporary modes (Emoji, Alphabet) are per-session: cancelling

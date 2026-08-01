@@ -1,53 +1,64 @@
 use super::*;
 
-// --- Candidate preservation tests ---
-
-#[test]
-fn test_live_text_preserved_in_conversion_via_down() {
-    // When DOWN is pressed during live conversion, the AI inference result
-    // (live_conversion_text) should appear in the candidate list.
-    let mut engine = make_live_conversion_engine();
-
-    // Simulate typing "あい" with live conversion active
-    engine.process_key(&press('a'));
-    engine.process_key(&press('i'));
-    engine.live.text = "愛".to_string();
-
-    // Press DOWN → start_conversion()
-    let result = engine.process_key(&press_key(Keysym::DOWN));
-    assert!(result.consumed);
-    assert!(matches!(engine.state(), InputState::Conversion { .. }));
-
-    // The candidate list should contain "愛"
-    let candidates = engine.state().candidates().unwrap();
-    assert!(
-        candidates.candidates().iter().any(|c| c.text == "愛"),
-        "AI inference result '愛' should be in the candidate list"
-    );
+fn seed_shown_predictions(engine: &mut InputMethodEngine, reading: &str, texts: &[&str]) {
+    engine.input_buf.text = reading.to_string();
+    engine.input_buf.cursor_pos = reading.chars().count();
+    engine.state = InputState::Composing {
+        preedit: Preedit::with_text_underlined(reading),
+        romaji_buffer: String::new(),
+    };
+    engine.suggestions = Some(CandidateList::new(
+        texts
+            .iter()
+            .map(|text| Candidate::with_reading(*text, reading))
+            .collect(),
+    ));
 }
 
 #[test]
-fn test_live_text_not_duplicated_in_conversion() {
-    // If the live_text matches the reading, it should not be duplicated
-    let mut engine = make_live_conversion_engine();
+fn tab_enters_the_exact_predictions_already_shown() {
+    let mut engine = InputMethodEngine::new();
+    seed_shown_predictions(&mut engine, "きょう", &["今日", "京都", "教"]);
 
-    engine.process_key(&press('a'));
-    engine.process_key(&press('i'));
-    // live_conversion_text same as hiragana reading → should not be added
-    engine.live.text = "あい".to_string();
-
-    let result = engine.process_key(&press_key(Keysym::DOWN));
+    let result = engine.process_key(&press_key(Keysym::TAB));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
-
-    // "あい" should not appear twice (it's same as reading, so live_text is skipped)
     let candidates = engine.state().candidates().unwrap();
-    let count = candidates
+    let texts: Vec<_> = candidates
         .candidates()
         .iter()
-        .filter(|c| c.text == "あい")
-        .count();
-    assert_eq!(count, 1, "Reading should appear exactly once");
+        .map(|candidate| candidate.text.as_str())
+        .collect();
+    assert_eq!(texts, vec!["今日", "京都", "教"]);
+    assert_eq!(candidates.cursor(), 0);
+    assert_eq!(candidates.selected_text(), Some("今日"));
+}
+
+#[test]
+fn repeated_tab_moves_to_the_next_prediction_and_enter_commits_it() {
+    let mut engine = InputMethodEngine::new();
+    seed_shown_predictions(&mut engine, "きょう", &["今日", "京都", "教"]);
+
+    engine.process_key(&press_key(Keysym::TAB));
+    let move_result = engine.process_key(&press_key(Keysym::TAB));
+    let shown_cursor = move_result.actions.iter().find_map(|action| match action {
+        EngineAction::ShowCandidates(list) => Some(list.cursor()),
+        _ => None,
+    });
+    assert_eq!(shown_cursor, Some(1));
+    assert_eq!(
+        engine.state().candidates().unwrap().selected_text(),
+        Some("京都")
+    );
+
+    let commit_result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(
+        commit_result
+            .actions
+            .iter()
+            .any(|action| matches!(action, EngineAction::Commit(text) if text == "京都"))
+    );
+    assert!(engine.state().is_empty());
 }
 
 #[test]
@@ -76,24 +87,46 @@ fn test_suggest_result_preserved_in_start_conversion() {
 }
 
 #[test]
-fn test_empty_live_text_not_added_to_candidates() {
-    // When live_conversion_text is empty, no extra candidate should be added
-    let mut engine = make_live_conversion_engine();
+fn down_uses_the_same_prediction_selection_path_as_tab() {
+    let mut engine = InputMethodEngine::new();
+    seed_shown_predictions(&mut engine, "きょう", &["今日", "京都"]);
 
-    engine.process_key(&press('a'));
-    engine.process_key(&press('i'));
-    // Force empty to test the "no live text" scenario
-    engine.live.text.clear();
-
-    // DOWN → start_conversion()
     let result = engine.process_key(&press_key(Keysym::DOWN));
     assert!(result.consumed);
+    assert_eq!(
+        engine.state().candidates().unwrap().selected_text(),
+        Some("今日")
+    );
+}
 
-    // Should have candidates but no empty-string candidate
-    if let Some(candidates) = engine.state().candidates() {
-        assert!(
-            !candidates.candidates().iter().any(|c| c.text.is_empty()),
-            "Empty candidate should not be in the list"
-        );
-    }
+#[test]
+fn space_uses_explicit_conversion_instead_of_the_shown_predictions() {
+    let mut engine = InputMethodEngine::new();
+    seed_shown_predictions(&mut engine, "あい", &["予測専用"]);
+
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert!(
+        !engine
+            .state()
+            .candidates()
+            .unwrap()
+            .candidates()
+            .iter()
+            .any(|candidate| candidate.text == "予測専用"),
+        "Space must rebuild explicit conversion candidates"
+    );
+}
+
+#[test]
+fn tab_without_predictions_is_consumed_and_keeps_composing() {
+    let mut engine = InputMethodEngine::new();
+    seed_shown_predictions(&mut engine, "あい", &["unused"]);
+    engine.suggestions = None;
+
+    let result = engine.process_key(&press_key(Keysym::TAB));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.text, "あい");
 }

@@ -172,15 +172,13 @@ impl InputMethodEngine {
 
     /// Start kanji conversion for the current input buffer.
     ///
-    /// Called when DOWN/TAB/SPACE is pressed: flushes any pending romaji,
+    /// Called when Space is pressed: flushes any pending romaji,
     /// resolves the reading, runs `build_conversion_candidates`, and
     /// transitions into the Conversion state. The previous live-conversion
     /// result is preserved as the first model candidate so the user sees
     /// the same text they had been looking at during input.
     ///
-    /// `skip_learning` is set by the Tab path to omit learning-cache
-    /// candidates (Space/Down keep the default learning-included behavior).
-    pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
+    pub(super) fn start_conversion(&mut self) -> EngineResult {
         // Flush any remaining romaji into composed_hiragana
         self.flush_romaji_to_composed();
 
@@ -190,6 +188,7 @@ impl InputMethodEngine {
         // This ensures the candidate that was displayed during input is preserved
         // in the conversion candidate list even if the re-inference uses a different strategy.
         let prev_suggest_text = std::mem::take(&mut self.live.text);
+        self.suggestions = None;
 
         self.converters.romaji.reset();
         self.input_buf.cursor_pos = 0;
@@ -199,8 +198,7 @@ impl InputMethodEngine {
         }
 
         // Get candidates from kanji converter (use full num_candidates for explicit conversion)
-        let mut candidates =
-            self.build_conversion_candidates(&reading, self.config.num_candidates, skip_learning);
+        let mut candidates = self.build_conversion_candidates(&reading, self.config.num_candidates);
 
         // If the previous auto-suggest result is not in the new candidates, insert it at the top
         // so it doesn't disappear when the conversion strategy changes.
@@ -227,6 +225,26 @@ impl InputMethodEngine {
 
         let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
         self.enter_conversion_state(&reading, candidate_list)
+    }
+
+    /// Enter conversion state using the exact prediction list already shown
+    /// while composing. This is the Tab/Down path and intentionally performs
+    /// no explicit conversion inference.
+    pub(super) fn start_suggestion_selection(&mut self) -> EngineResult {
+        self.flush_romaji_to_composed();
+        let reading = self.input_buf.text.clone();
+        let Some(candidates) = self.suggestions.take() else {
+            return EngineResult::consumed();
+        };
+
+        if reading.is_empty() || candidates.is_empty() {
+            return EngineResult::consumed();
+        }
+
+        self.converters.romaji.reset();
+        self.input_buf.cursor_pos = 0;
+        self.live.text.clear();
+        self.enter_conversion_state(&reading, candidates)
     }
 
     /// Map builder output (`AnnotatedCandidate`) to the public
@@ -327,14 +345,10 @@ impl InputMethodEngine {
     ///
     /// Priority: Learning → User Dictionary → Model → System Dictionary → Fallback
     ///
-    /// `skip_learning` suppresses the learning-cache step (1). Used by the Tab
-    /// key path so users can escape a noisy learning history without losing
-    /// access to dictionary/model candidates.
     pub(super) fn build_conversion_candidates(
         &mut self,
         reading: &str,
         num_candidates: usize,
-        skip_learning: bool,
     ) -> Vec<AnnotatedCandidate> {
         // Try to initialize the kanji converter, but don't bail out if it
         // fails — symbol-only inputs (e.g. `。。。`) don't need the model and
@@ -357,16 +371,13 @@ impl InputMethodEngine {
 
         // 1. Learning cache candidates (highest priority).
         //    Force-inserted so they win against duplicate text from later sources.
-        //    Skipped when the caller asks for a learning-free conversion (Tab key).
-        if !skip_learning {
-            for c in self.lookup_learning_candidates(reading) {
-                // Exact matches have reading == input reading; use None to avoid redundancy
-                let cand_reading = c.reading.filter(|r| r != reading);
-                builder.push_force(
-                    AnnotatedCandidate::new(c.text, CandidateSource::Learning)
-                        .with_reading(cand_reading),
-                );
-            }
+        for c in self.lookup_learning_candidates(reading) {
+            // Exact matches have reading == input reading; use None to avoid redundancy
+            let cand_reading = c.reading.filter(|r| r != reading);
+            builder.push_force(
+                AnnotatedCandidate::new(c.text, CandidateSource::Learning)
+                    .with_reading(cand_reading),
+            );
         }
 
         // 2. Dictionary candidates (user dict first, then system dict)
@@ -654,6 +665,7 @@ impl InputMethodEngine {
 
         self.state = InputState::Empty;
         self.input_buf.text.clear();
+        self.suggestions = None;
         self.mode.exit_temporary();
     }
 
@@ -736,8 +748,7 @@ impl InputMethodEngine {
         }
         debug!("deleted learning entry: {} -> {}", reading, surface);
 
-        let candidates =
-            self.build_conversion_candidates(&reading, self.config.num_candidates, false);
+        let candidates = self.build_conversion_candidates(&reading, self.config.num_candidates);
         if candidates.is_empty() {
             return self.cancel_conversion();
         }
@@ -755,6 +766,7 @@ impl InputMethodEngine {
         if reading.is_empty() {
             self.state = InputState::Empty;
             self.input_buf.clear();
+            self.suggestions = None;
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(Preedit::new()))
                 .with_action(EngineAction::HideCandidates)
@@ -764,6 +776,7 @@ impl InputMethodEngine {
         // Set up composed_hiragana with the reading
         self.input_buf.text = reading.clone();
         self.input_buf.cursor_pos = self.input_buf.text.chars().count();
+        self.suggestions = None;
 
         // Reset romaji converter and set output to reading
         self.converters.romaji.reset();
