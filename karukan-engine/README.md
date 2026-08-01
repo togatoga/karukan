@@ -103,10 +103,13 @@ let results = dict.common_prefix_search("きょうと");
 
 モデルは`models.toml`で定義されています。`Backend::from_variant_id()`で指定すると自動的にダウンロードされます。
 
-| バリアントID | パラメータ数 | 量子化 | デフォルト |
-|------------|-----------|--------------|---------|
-| `jinen-v1-xsmall-q5` | 26M | Q5_K_M | |
-| `jinen-v1-small-q5` | 90M | Q5_K_M | Yes |
+| バリアントID | ベースモデル | パラメータ数 | 量子化 | デフォルト |
+|------------|-----------|-----------|--------------|---------|
+| `jinen-v1-xsmall-q5` | GPT-2 | 26M | Q5_K_M | |
+| `jinen-v1-small-q5` | GPT-2 | 90M | Q5_K_M | Yes |
+| `jinen-v1.1-beta-q5` | Qwen3 | 109M | Q5_K_M | |
+
+IMEで使うモデルは設定ファイルの `model` / `light_model` で切り替えられます（[karukan-im の Configuration](../karukan-im/README.md#configuration) 参照）。
 
 ### jinen Format
 

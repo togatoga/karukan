@@ -86,6 +86,14 @@ max_entries = 10000            # 学習エントリの最大数
 max_surface_chars = 50         # 学習する変換結果の最大文字数
 ```
 
+`model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回利用時にHugging Faceから自動ダウンロードされます）。設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
+
+| モデルID | ベースモデル | パラメータ数 |
+|---------|-----------|-----------|
+| `jinen-v1-xsmall-q5` | GPT-2 | 26M |
+| `jinen-v1-small-q5` | GPT-2 | 90M |
+| `jinen-v1.1-beta-q5` | Qwen3 | 109M（beta） |
+
 > [!NOTE]
 > 上記は主要な設定項目の抜粋です。全項目の正確な既定値と説明は [`config/default.toml`](config/default.toml) を参照してください（各設定行に日本語コメント付き）。
 
