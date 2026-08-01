@@ -1,4 +1,4 @@
-default_model = "jinen-v1.1-beta-q5"
+default_model = "jinen-v1-small-q5"
 
 [models.jinen-v1-xsmall]
 repo_id = "togatogah/jinen-v1-xsmall.gguf"
