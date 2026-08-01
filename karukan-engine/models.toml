@@ -19,7 +19,7 @@ filename = "jinen-v1-small-Q5_K_M.gguf"
 display_name = "jinen-v1-small (Q5_K_M)"
 
 [models."jinen-v1.1-beta"]
-repo_id = "togatogah/jinen-v1.1-beta"
+repo_id = "togatogah/jinen-v1.1-beta.gguf"
 display_name = "jinen-v1.1-beta (Qwen3, 109M)"
 
 [models."jinen-v1.1-beta".variants.q5]
