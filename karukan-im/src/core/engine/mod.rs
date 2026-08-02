@@ -370,10 +370,12 @@ impl InputMethodEngine {
         // Only consume the key when actually switching; otherwise pass through
         // so the system can properly track modifier state.
         if key.is_press && self.mode.current() != InputMode::Hiragana {
-            // Settle pending romaji first so it gets baked along with the rest
-            self.settle_romaji();
-            // Bake katakana before switching so preedit doesn't revert
+            // Bake katakana before switching so preedit doesn't revert. No
+            // settling otherwise — the mode switch must not touch the
+            // elements, so live romaji (`ky` typed before an alphabet word)
+            // still combines after coming back to kana mode.
             if self.mode.current() == InputMode::Katakana {
+                self.settle_romaji();
                 self.bake_katakana();
             }
             self.mode.set(InputMode::Hiragana);

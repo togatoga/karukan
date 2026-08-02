@@ -102,6 +102,26 @@ fn test_combine_before_converted_and_direct() {
     assert_eq!(engine.preedit().unwrap().caret(), 2);
 }
 
+/// `ky123に`, cursor back to after `ky`, then `o` → 「きょ123に」.
+#[test]
+fn test_ky123ni_cursor_return_combines() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "ky123ni".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "ky123に");
+
+    for _ in 0..4 {
+        engine.process_key(&press_key(Keysym::LEFT));
+    }
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょ123に");
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+}
+
 /// Deleting a converted element re-exposes the live consonants before it,
 /// one conversion at a time: `ytko` → BS → `o` → BS → `o` → BS → `o`.
 #[test]
@@ -282,4 +302,44 @@ fn test_type_before_direct_element_combines() {
     engine.process_key(&press('o'));
     assert_eq!(preedit_text(&engine), "きょK");
     assert_eq!(engine.preedit().unwrap().caret(), 2);
+}
+
+/// Returning from a temporary alphabet word via the mode-toggle key must
+/// not settle the live romaji before it: `ky1K` → toggle → ←← → `o`
+/// still combines to 「きょ1K」.
+#[test]
+fn test_mode_toggle_back_keeps_live_romaji() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('y'));
+    engine.process_key(&press('1'));
+    engine.process_key(&press_shift('K'));
+    assert_eq!(preedit_text(&engine), "ky1K");
+
+    engine.process_key(&press_key(Keysym::HENKAN));
+    assert_eq!(preedit_text(&engine), "ky1K");
+
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょ1K");
+}
+
+/// Same via backspace: `kyK` → BS → toggle to kana → `o` → 「きょ」.
+#[test]
+fn test_mode_toggle_after_backspace_combines() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('y'));
+    engine.process_key(&press_shift('K'));
+    assert_eq!(preedit_text(&engine), "kyK");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "ky");
+
+    engine.process_key(&press_key(Keysym::HENKAN));
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょ");
 }
