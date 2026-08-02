@@ -25,9 +25,12 @@
 //! Romaji(y), Direct(K)]` plus `o` typed before the `K` evaluates to
 //! 「きょK」.
 //!
-//! Backspace and delete remove exactly one element. Removing こ (recorded
-//! from `ko`) drops both its keystrokes and re-exposes the live element
-//! before it: `ytko` → BS → `o` gives 「yと」, again 「よ」.
+//! Every record edit ends with an evaluation. Typing evaluates the run
+//! ending at the caret; backspace/delete remove exactly one element and
+//! then evaluate the run the removal joined, so the result always equals
+//! typing the remaining keystrokes fresh: removing こ from `ytko`
+//! re-exposes the live elements (`o` → 「yと」, again 「よ」), and
+//! removing the `1` from `yt1t` evaluates `ytt` → 「yっt」.
 
 use karukan_engine::RomajiConverter;
 
@@ -105,52 +108,81 @@ impl InputBuffer {
     /// Record settled text at the caret (reconversion reading and other
     /// programmatic strings).
     pub fn insert(&mut self, text: &str) {
-        let settled = text.chars().map(Element::Converted);
-        let count = self
-            .elements
-            .splice(self.cursor..self.cursor, settled)
-            .count();
-        debug_assert_eq!(count, 0);
-        self.cursor += text.chars().count();
+        let count = text.chars().count();
+        self.elements.splice(
+            self.cursor..self.cursor,
+            text.chars().map(Element::Converted),
+        );
+        self.cursor += count;
     }
 
-    /// Remove the element before the caret. Returns false when the caret
-    /// is at the start.
-    pub fn backspace(&mut self) -> bool {
+    /// Remove the element before the caret, then evaluate the Romaji run
+    /// the removal joined, so the result matches typing the remaining
+    /// keystrokes fresh (`yt1t` minus the `1` → 「yっt」). Returns false
+    /// when the caret is at the start.
+    pub fn backspace(&mut self, romaji: &RomajiConverter) -> bool {
         if self.cursor == 0 {
             return false;
         }
         self.cursor -= 1;
         self.elements.remove(self.cursor);
+        self.evaluate_joined_run(romaji);
         true
     }
 
-    /// Remove the element at the caret (delete key). Returns false when
-    /// the caret is at the end.
-    pub fn delete_at_cursor(&mut self) -> bool {
+    /// Remove the element at the caret (delete key), then evaluate the
+    /// Romaji run the removal joined. Returns false when the caret is at
+    /// the end.
+    pub fn delete_at_cursor(&mut self, romaji: &RomajiConverter) -> bool {
         if self.cursor == self.elements.len() {
             return false;
         }
         self.elements.remove(self.cursor);
+        self.evaluate_joined_run(romaji);
         true
     }
 
     /// Evaluate the active run (the Romaji run ending at the cursor),
-    /// re-recording keystrokes a rule consumed as its output. A run no
-    /// fresh keystroke touched is already at a fixpoint, so only
-    /// [`Self::push_romaji`] needs to call this.
+    /// re-recording keystrokes a rule consumed as its output. Typing never
+    /// combines across the caret, so this stops there.
     fn evaluate_active_run(&mut self, romaji: &RomajiConverter) {
         let range = self.active_run();
+        let evaluated_len = self.evaluate_range(range.clone(), romaji);
+        self.cursor = range.start + evaluated_len;
+    }
+
+    /// Evaluate the Romaji run containing the caret — both sides of a
+    /// deletion point. The caret keeps its offset from the run start,
+    /// clamped to the evaluated length.
+    fn evaluate_joined_run(&mut self, romaji: &RomajiConverter) {
+        let start = self.elements[..self.cursor]
+            .iter()
+            .rposition(|e| !e.is_romaji())
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let end = self.cursor
+            + self.elements[self.cursor..]
+                .iter()
+                .position(|e| !e.is_romaji())
+                .unwrap_or(self.elements.len() - self.cursor);
+        let offset = self.cursor - start;
+        let evaluated_len = self.evaluate_range(start..end, romaji);
+        self.cursor = start + offset.min(evaluated_len);
+    }
+
+    /// Replace a Romaji range with its evaluation; returns the new length.
+    fn evaluate_range(&mut self, range: std::ops::Range<usize>, romaji: &RomajiConverter) -> usize {
         if range.is_empty() {
-            return;
+            return 0;
         }
         let run: String = self.elements[range.clone()]
             .iter()
             .map(Element::ch)
             .collect();
         let evaluated = evaluate_run(&run, romaji);
-        self.cursor = range.start + evaluated.len();
+        let len = evaluated.len();
         self.elements.splice(range, evaluated);
+        len
     }
 
     /// Settle all Romaji keystrokes in place (`ltu` → っ; unmatched

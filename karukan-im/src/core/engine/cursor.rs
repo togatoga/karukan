@@ -28,7 +28,7 @@ impl InputMethodEngine {
         // element vanishes whole, re-exposing the live element before it
         // (`ytko` → BS → `o` → 「yと」); きょ is truncated per character.
         let reading_before = self.input_buf.reading();
-        if !self.input_buf.backspace() {
+        if !self.input_buf.backspace(&self.converters.romaji) {
             // Nothing to delete
             return EngineResult::consumed();
         }
@@ -60,7 +60,7 @@ impl InputMethodEngine {
 
     /// Handle delete key in composing mode
     pub(super) fn delete_composing(&mut self) -> EngineResult {
-        if !self.input_buf.delete_at_cursor() {
+        if !self.input_buf.delete_at_cursor(&self.converters.romaji) {
             return EngineResult::consumed();
         }
 

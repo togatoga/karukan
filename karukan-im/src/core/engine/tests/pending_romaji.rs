@@ -139,11 +139,15 @@ fn test_editing_scenarios() {
             "mode_toggle_after_backspace_combines",
             &[("kyK", "kyK"), ("⌫", "ky"), ("変o", "きょ")],
         ),
-        // Deleting the separator between two live runs leaves every
-        // keystroke live in place
+        // Deleting the separator between two live runs evaluates the
+        // joined keystrokes, matching fresh typing of the remainder
         (
-            "delete_separator_between_live_runs",
-            &[("ty1y", "ty1y"), ("←⌫", "tyy@2"), ("a", "ちゃy")],
+            "delete_separator_evaluates_joined_run",
+            &[("ty1y", "ty1y"), ("←⌫", "tっy@2"), ("⇥o", "tっよ")],
+        ),
+        (
+            "delete_separator_fires_sokuon",
+            &[("yt1t", "yt1t"), ("←⌫", "yっt@2"), ("⇥o", "yっと")],
         ),
         // A doubled consonant after a rule prefix keeps the prefix alive
         (
