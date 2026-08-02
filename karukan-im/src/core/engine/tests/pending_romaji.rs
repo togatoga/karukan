@@ -343,3 +343,24 @@ fn test_mode_toggle_after_backspace_combines() {
     engine.process_key(&press('o'));
     assert_eq!(preedit_text(&engine), "きょ");
 }
+
+/// Deleting the separator between two live runs leaves every keystroke
+/// live in place: `ty1y` → BS over the `1` → 「tyy」. Typing at the
+/// deletion point evaluates only the run left of the caret.
+#[test]
+fn test_delete_separator_between_live_runs() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "ty1y".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "ty1y");
+
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "tyy");
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+
+    engine.process_key(&press('a'));
+    assert_eq!(preedit_text(&engine), "ちゃy");
+}
