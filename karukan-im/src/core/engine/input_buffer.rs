@@ -2,7 +2,7 @@
 //! derived by evaluation.
 //!
 //! **The record** is the single source of truth: one element per display
-//! character plus `gap`, the caret index. Typing `kyo` records
+//! character plus `cursor`, the caret as an element index. Typing `kyo` records
 //! `[Romaji(k), Romaji(y), Romaji(o)]`, which evaluation re-records as
 //! `[Converted(き), Converted(ょ)]` — elements and displayed characters
 //! always correspond one to one, so the record can never disagree with
@@ -18,9 +18,9 @@
 //!
 //! **Evaluation** derives everything else: the display, the conversion
 //! reading, and the aux romaji tail. After a romaji keystroke is recorded,
-//! the Romaji run ending at the gap is evaluated through the converter:
+//! the Romaji run ending at the cursor is evaluated through the converter:
 //! keystrokes a rule consumed are re-recorded as its output. Elements
-//! right of the gap are never touched, so nothing combines across the
+//! right of the cursor are never touched, so nothing combines across the
 //! caret, and the caret moves without settling anything — `[Romaji(k),
 //! Romaji(y), Direct(K)]` plus `o` typed before the `K` evaluates to
 //! 「きょK」.
@@ -57,21 +57,28 @@ impl Element {
 /// The recorded composition: elements plus the caret index.
 pub(super) struct InputBuffer {
     elements: Vec<Element>,
-    /// Caret: an index into `elements`, which is also the display position
-    gap: usize,
+    /// Caret: a boundary index into `elements`, which — with one element
+    /// per display character — is also the display position.
+    ///
+    /// ```text
+    /// elements: [Romaji(k), Romaji(y), Converted(1), Direct(K)]
+    /// boundary: 0         1          2             3          4
+    ///                                ↑ cursor = 2 (between y and 1)
+    /// ```
+    cursor: usize,
 }
 
 impl InputBuffer {
     pub fn new() -> Self {
         Self {
             elements: Vec::new(),
-            gap: 0,
+            cursor: 0,
         }
     }
 
     pub fn clear(&mut self) {
         self.elements.clear();
-        self.gap = 0;
+        self.cursor = 0;
     }
 
     pub fn has_elements(&self) -> bool {
@@ -84,48 +91,51 @@ impl InputBuffer {
     /// run it now ends.
     pub fn push_romaji(&mut self, ch: char, romaji: &RomajiConverter) {
         self.elements
-            .insert(self.gap, Element::Romaji(ch.to_ascii_lowercase()));
-        self.gap += 1;
+            .insert(self.cursor, Element::Romaji(ch.to_ascii_lowercase()));
+        self.cursor += 1;
         self.evaluate_active_run(romaji);
     }
 
     /// Record a direct-input keystroke at the caret.
     pub fn push_direct(&mut self, ch: char) {
-        self.elements.insert(self.gap, Element::Direct(ch));
-        self.gap += 1;
+        self.elements.insert(self.cursor, Element::Direct(ch));
+        self.cursor += 1;
     }
 
     /// Record settled text at the caret (reconversion reading and other
     /// programmatic strings).
     pub fn insert(&mut self, text: &str) {
         let settled = text.chars().map(Element::Converted);
-        let count = self.elements.splice(self.gap..self.gap, settled).count();
+        let count = self
+            .elements
+            .splice(self.cursor..self.cursor, settled)
+            .count();
         debug_assert_eq!(count, 0);
-        self.gap += text.chars().count();
+        self.cursor += text.chars().count();
     }
 
     /// Remove the element before the caret. Returns false when the caret
     /// is at the start.
     pub fn backspace(&mut self) -> bool {
-        if self.gap == 0 {
+        if self.cursor == 0 {
             return false;
         }
-        self.gap -= 1;
-        self.elements.remove(self.gap);
+        self.cursor -= 1;
+        self.elements.remove(self.cursor);
         true
     }
 
     /// Remove the element at the caret (delete key). Returns false when
     /// the caret is at the end.
     pub fn delete_at_cursor(&mut self) -> bool {
-        if self.gap == self.elements.len() {
+        if self.cursor == self.elements.len() {
             return false;
         }
-        self.elements.remove(self.gap);
+        self.elements.remove(self.cursor);
         true
     }
 
-    /// Evaluate the active run (the Romaji run ending at the gap),
+    /// Evaluate the active run (the Romaji run ending at the cursor),
     /// re-recording keystrokes a rule consumed as its output. A run no
     /// fresh keystroke touched is already at a fixpoint, so only
     /// [`Self::push_romaji`] needs to call this.
@@ -139,7 +149,7 @@ impl InputBuffer {
             .map(Element::ch)
             .collect();
         let evaluated = evaluate_run(&run, romaji);
-        self.gap = range.start + evaluated.len();
+        self.cursor = range.start + evaluated.len();
         self.elements.splice(range, evaluated);
     }
 
@@ -151,7 +161,7 @@ impl InputBuffer {
         if !self.elements.iter().any(Element::is_romaji) {
             return;
         }
-        let from_end = self.elements.len() - self.gap;
+        let from_end = self.elements.len() - self.cursor;
         let mut settled: Vec<Element> = Vec::with_capacity(self.elements.len());
         let mut run = String::new();
         for element in self.elements.drain(..) {
@@ -165,7 +175,7 @@ impl InputBuffer {
         }
         flush_run(&mut settled, &mut run, romaji);
         self.elements = settled;
-        self.gap = self.elements.len().saturating_sub(from_end);
+        self.cursor = self.elements.len().saturating_sub(from_end);
     }
 
     /// Convert every settled element to katakana permanently. Called when
@@ -181,14 +191,14 @@ impl InputBuffer {
 
     /// Move the caret to a display position (also its element index).
     pub fn set_cursor(&mut self, pos: usize) {
-        self.gap = pos.min(self.elements.len());
+        self.cursor = pos.min(self.elements.len());
     }
 
     // --- Evaluation: views derived from the record ------------------------
 
-    /// Display caret position (== the element index of the gap).
+    /// Display caret position (== the element index of the caret).
     pub fn cursor(&self) -> usize {
-        self.gap
+        self.cursor
     }
 
     /// Full composition display.
@@ -201,16 +211,16 @@ impl InputBuffer {
     }
 
     /// Element indices of the active run: the maximal Romaji run ending at
-    /// the gap — the keystrokes currently being typed. Empty when the
-    /// element left of the gap is settled (a stranded consonant elsewhere
+    /// the cursor — the keystrokes currently being typed. Empty when the
+    /// element left of the cursor is settled (a stranded consonant elsewhere
     /// is NOT active; it stays part of the reading at its position).
     fn active_run(&self) -> std::ops::Range<usize> {
-        let start = self.elements[..self.gap]
+        let start = self.elements[..self.cursor]
             .iter()
             .rposition(|e| !e.is_romaji())
             .map(|i| i + 1)
             .unwrap_or(0);
-        start..self.gap
+        start..self.cursor
     }
 
     /// Keystrokes of the active run (shown as the aux romaji tail).
@@ -235,10 +245,10 @@ impl InputBuffer {
     }
 
     /// Caret position within [`Self::reading`]. The active run sits just
-    /// before the gap and is excluded from the reading, so this is the
+    /// before the cursor and is excluded from the reading, so this is the
     /// caret minus the active run's length.
     pub fn reading_cursor(&self) -> usize {
-        self.gap - self.active_run().len()
+        self.cursor - self.active_run().len()
     }
 }
 
