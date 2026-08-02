@@ -182,16 +182,16 @@ impl InputMethodEngine {
     /// candidates (Space/Down keep the default learning-included behavior).
     pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
         // Settle any remaining romaji into composed_hiragana
-        self.freeze_pending_romaji();
+        self.settle_romaji();
 
-        let reading = self.input_buf.text.clone();
+        let reading = self.input_buf.reading();
 
         // Save auto-suggest/live conversion result before clearing state.
         // This ensures the candidate that was displayed during input is preserved
         // in the conversion candidate list even if the re-inference uses a different strategy.
         let prev_suggest_text = std::mem::take(&mut self.live.text);
 
-        self.input_buf.cursor_pos = 0;
+        self.input_buf.set_cursor(0);
 
         if reading.is_empty() {
             return EngineResult::consumed();
@@ -651,7 +651,7 @@ impl InputMethodEngine {
         }
 
         self.state = InputState::Empty;
-        self.input_buf.text.clear();
+        self.input_buf.clear();
         self.mode.exit_temporary();
     }
 
@@ -724,7 +724,7 @@ impl InputMethodEngine {
         // prefix-matched candidate carries a longer reading of its own, but
         // every entry that surfaces it has the typed reading as a prefix, so
         // removing by the typed reading clears the shown row and its twins.
-        let reading = self.input_buf.text.clone();
+        let reading = self.input_buf.reading();
         let removed = self
             .learning
             .as_mut()
@@ -748,7 +748,7 @@ impl InputMethodEngine {
         if !matches!(self.state, InputState::Conversion { .. }) {
             return EngineResult::not_consumed();
         }
-        let reading = self.input_buf.text.clone();
+        let reading = self.input_buf.reading();
 
         if reading.is_empty() {
             self.state = InputState::Empty;

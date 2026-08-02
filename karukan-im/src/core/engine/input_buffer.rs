@@ -1,274 +1,359 @@
-//! InputBuffer: composed hiragana text with cursor and per-input elements.
+//! InputBuffer: the composition as a per-input element array plus a cursor.
 //!
-//! `text` holds settled output (frozen on cursor move, conversion, commit).
-//! `elements` is the active composition at the cursor, one element per
-//! input unit. Typing `wasedaytk` yields
+//! The array is the single source of truth. Typing `wasedaytk` yields
 //! `[Converted(わ), Converted(せ), Converted(だ), Romaji(y), Romaji(t), Romaji(k)]`.
 //!
-//! - [`Element::Romaji`]: raw keystrokes still forming a rule prefix (`y`,
-//!   `ky`, a lone `n`). Shown verbatim; the next key may extend or convert
-//!   them.
-//! - [`Element::Converted`]: a fired rule's output. Never re-evaluated,
-//!   so it never reverts to romaji.
-//! - [`Element::Direct`]: direct input (alphabet/emoji mode). Never
-//!   romaji-evaluated.
+//! - [`Element::Romaji`]: one keystroke not yet consumed by a rule (`y`,
+//!   `k`, a lone `n`). Shown verbatim; evaluation may later consume it.
+//! - [`Element::Converted`]: a fired rule's output (or a settled
+//!   passthrough like `1`). Opaque to evaluation — it never reverts.
+//! - [`Element::Direct`]: one directly-input keystroke (alphabet/emoji
+//!   mode). Opaque to evaluation.
 //!
-//! Backspace removes the last element whole when it displays one character
-//! (こ vanishes with both its keystrokes, re-exposing the still-live element
-//! before it: `ytko` → BS → `o` gives 「yと」, again 「よ」); a longer
-//! display like きょ is truncated per character.
+//! Every edit is an array splice at the cursor (a display-character
+//! position). After a romaji keystroke is inserted, the run of Romaji
+//! elements ending at the cursor is re-evaluated through the converter:
+//! keystrokes a rule consumed become one `Converted`, the rest stay
+//! `Romaji`. Elements right of the cursor are never touched, so nothing
+//! combines across the cursor.
+//!
+//! Backspace removes one display character: a single-character element is
+//! removed whole (こ vanishes with its keystrokes, re-exposing the live
+//! element before it — `ytko` → BS → `o` gives 「yと」, again 「よ」), and
+//! a longer `Converted` like きょ is truncated per character. The cursor
+//! moves freely without settling anything, so `[Romaji(k), Romaji(y),
+//! Direct(K)]` plus `o` typed before the `K` evaluates to 「きょK」.
 
 use karukan_engine::RomajiConverter;
 
-/// One composition unit.
+/// One input unit.
+#[derive(Clone)]
 enum Element {
-    /// Raw romaji keystrokes, still a rule prefix — may extend or convert
-    Romaji(String),
-    /// Settled kana-mode output: fired rule (`ko` → こ) or passthrough (`1`)
+    /// A keystroke not yet consumed by a conversion rule
+    Romaji(char),
+    /// Settled output: fired rule (`ko` → こ) or passthrough (`1`)
     Converted(String),
-    /// Direct input — excluded from romaji evaluation
-    Direct(String),
+    /// A directly-input keystroke — excluded from romaji evaluation
+    Direct(char),
 }
 
 impl Element {
-    fn display(&self) -> &str {
+    fn display(&self) -> String {
         match self {
-            Element::Romaji(raw) => raw,
-            Element::Converted(display) => display,
-            Element::Direct(text) => text,
+            Element::Romaji(ch) | Element::Direct(ch) => ch.to_string(),
+            Element::Converted(display) => display.clone(),
         }
     }
 
-    /// Whether the next kana key may still extend or convert this element.
-    fn is_open(&self) -> bool {
+    fn char_count(&self) -> usize {
+        match self {
+            Element::Romaji(_) | Element::Direct(_) => 1,
+            Element::Converted(display) => display.chars().count(),
+        }
+    }
+
+    fn is_romaji(&self) -> bool {
         matches!(self, Element::Romaji(_))
     }
 }
 
-/// Composed input buffer with cursor.
+/// The composition: element array plus a cursor in display characters.
 pub(super) struct InputBuffer {
-    /// Settled text
-    pub text: String,
-    /// Cursor position in `text` (in characters, not bytes); the active
-    /// elements render here
-    pub cursor_pos: usize,
-    /// Active composition elements
     elements: Vec<Element>,
+    cursor: usize,
 }
 
 impl InputBuffer {
-    /// Create a new empty buffer.
     pub fn new() -> Self {
         Self {
-            text: String::new(),
-            cursor_pos: 0,
             elements: Vec::new(),
+            cursor: 0,
         }
     }
 
-    /// Clear the buffer (text, cursor, elements).
     pub fn clear(&mut self) {
-        self.text.clear();
-        self.cursor_pos = 0;
         self.elements.clear();
+        self.cursor = 0;
     }
 
     pub fn has_elements(&self) -> bool {
         !self.elements.is_empty()
     }
 
-    /// Concatenated display of the active elements (rendered at the cursor).
-    pub fn composing_display(&self) -> String {
-        self.elements.iter().map(Element::display).collect()
+    /// Cursor position in display characters.
+    pub fn cursor(&self) -> usize {
+        self.cursor
     }
 
-    pub fn composing_char_count(&self) -> usize {
+    pub fn set_cursor(&mut self, pos: usize) {
+        self.cursor = pos.min(self.char_count());
+    }
+
+    /// Full composition display.
+    pub fn display(&self) -> String {
+        self.elements.iter().map(|e| e.display()).collect()
+    }
+
+    pub fn char_count(&self) -> usize {
+        self.elements.iter().map(Element::char_count).sum()
+    }
+
+    /// Unevaluated romaji keystrokes (shown as the aux romaji tail).
+    pub fn pending(&self) -> String {
         self.elements
             .iter()
-            .map(|e| e.display().chars().count())
-            .sum()
-    }
-
-    /// Raw keystrokes of the trailing Romaji elements — the unconverted romaji
-    /// tail shown in aux text (`d` in わせだd, or a consonant run `ytk`).
-    pub fn pending(&self) -> String {
-        self.elements[self.settled_count()..]
-            .iter()
-            .map(Element::display)
+            .filter_map(|e| match e {
+                Element::Romaji(ch) => Some(*ch),
+                _ => None,
+            })
             .collect()
     }
 
-    /// Conversion reading: settled text plus element displays, excluding the
-    /// trailing Romaji elements (still being typed).
+    /// Conversion reading: everything except unevaluated Romaji keystrokes.
     pub fn reading(&self) -> String {
-        let element_part: String = self.elements[..self.settled_count()]
-            .iter()
-            .map(Element::display)
-            .collect();
-        let byte_pos = self
-            .text
-            .char_indices()
-            .nth(self.cursor_pos)
-            .map(|(i, _)| i)
-            .unwrap_or(self.text.len());
-        let mut reading = String::with_capacity(self.text.len() + element_part.len());
-        reading.push_str(&self.text[..byte_pos]);
-        reading.push_str(&element_part);
-        reading.push_str(&self.text[byte_pos..]);
-        reading
-    }
-
-    /// Cursor position in reading coordinates: `cursor_pos` plus the settled
-    /// element characters that precede the caret in [`Self::reading`].
-    pub fn reading_cursor(&self) -> usize {
-        let settled_chars: usize = self.elements[..self.settled_count()]
-            .iter()
-            .map(|e| e.display().chars().count())
-            .sum();
-        self.cursor_pos + settled_chars
-    }
-
-    /// Number of leading elements before the trailing Romaji run.
-    fn settled_count(&self) -> usize {
         self.elements
             .iter()
-            .rposition(|e| !e.is_open())
-            .map(|i| i + 1)
-            .unwrap_or(0)
+            .filter(|e| !e.is_romaji())
+            .map(|e| e.display())
+            .collect()
     }
 
-    /// Push a kana-mode keystroke.
-    ///
-    /// Tries to extend or convert the last Romaji element; when the key cannot
-    /// combine, that element stays live and the key starts its own element.
-    pub fn push_romaji(&mut self, ch: char, romaji: &RomajiConverter) {
-        let ch = ch.to_ascii_lowercase();
-
-        if let Some(Element::Romaji(raw)) = self.elements.last_mut() {
-            let mut candidate = raw.clone();
-            candidate.push(ch);
-            let derived = romaji.convert(&candidate);
-
-            if derived.text.is_empty() {
-                // Still a rule prefix (`k` + `y` → `ky`): keep buffering
-                *raw = candidate;
-                return;
-            }
-
-            if !derived.text.starts_with(raw.as_str()) {
-                // A rule fired and consumed the element (`ko` → こ, `nk` →
-                // ん+k). Any leftover pending starts a fresh Romaji element.
-                *self.elements.last_mut().expect("last element exists") =
-                    Element::Converted(derived.text);
-                if !derived.pending.is_empty() {
-                    self.elements.push(Element::Romaji(derived.pending));
-                }
-                return;
-            }
-            // No combine — the old raw passed through unchanged (`k` + `t`).
-            // Leave it live and give the key its own element below.
-        }
-
-        self.push_fresh(ch, romaji);
-    }
-
-    /// Start a new element from a single kana-mode keystroke.
-    fn push_fresh(&mut self, ch: char, romaji: &RomajiConverter) {
-        let raw = ch.to_string();
-        let derived = romaji.convert(&raw);
-        if derived.text.is_empty() {
-            // Rule prefix (`k`, `y`, `n`): live element shown verbatim
-            self.elements.push(Element::Romaji(raw));
-        } else {
-            // Fired (`a` → あ, `.` → 。) or passed through (`1`): settled
-            self.elements.push(Element::Converted(derived.text));
-        }
-    }
-
-    /// Push a direct-input character (alphabet/emoji mode).
-    pub fn push_direct(&mut self, ch: char) {
-        self.elements.push(Element::Direct(ch.to_string()));
-    }
-
-    /// Backspace over the active elements. A single-character display is
-    /// removed whole (こ vanishes with both its keystrokes); a multi-character
-    /// display like きょ is truncated by one character and settles as
-    /// literal text. Returns false when there are no elements.
-    pub fn backspace_element(&mut self, romaji: &RomajiConverter) -> bool {
-        let Some(last) = self.elements.last_mut() else {
-            return false;
-        };
-        let mut display = last.display().to_string();
-        if display.chars().count() > 1 {
-            display.pop();
-            *last = match last {
-                Element::Direct(_) => Element::Direct(display),
-                _ if romaji.is_rule_prefix(&display) => Element::Romaji(display),
-                _ => Element::Converted(display),
-            };
-        } else {
-            self.elements.pop();
-        }
-        true
-    }
-
-    /// Settle the active elements into `text` at the cursor. Romaji elements
-    /// are force-converted (`ltu` → っ; unmatched consonants pass through).
-    pub fn freeze_pending(&mut self, romaji: &RomajiConverter) {
-        if self.elements.is_empty() {
-            return;
-        }
-        let mut settled = String::new();
+    /// Cursor position within [`Self::reading`]: non-Romaji display
+    /// characters before the cursor.
+    pub fn reading_cursor(&self) -> usize {
+        let mut remaining = self.cursor;
+        let mut pos = 0;
         for element in &self.elements {
-            match element {
-                Element::Romaji(raw) => settled.push_str(&romaji.flush_pending(raw)),
-                _ => settled.push_str(element.display()),
+            let len = element.char_count();
+            let step = len.min(remaining);
+            if !element.is_romaji() {
+                pos += step;
+            }
+            remaining -= step;
+            if remaining == 0 {
+                break;
             }
         }
-        self.elements.clear();
-        self.insert(&settled);
+        pos
     }
 
-    /// Insert text at the current cursor position.
+    /// Push a kana-mode keystroke at the cursor and re-evaluate the Romaji
+    /// run ending there.
+    pub fn push_romaji(&mut self, ch: char, romaji: &RomajiConverter) {
+        let at = self.split_at_cursor();
+        self.elements
+            .insert(at, Element::Romaji(ch.to_ascii_lowercase()));
+
+        // Maximal Romaji run ending at the inserted key
+        let end = at + 1;
+        let start = self.elements[..end]
+            .iter()
+            .rposition(|e| !e.is_romaji())
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let run: String = self.elements[start..end]
+            .iter()
+            .filter_map(|e| match e {
+                Element::Romaji(c) => Some(*c),
+                _ => None,
+            })
+            .collect();
+        let evaluated = evaluate_run(&run, romaji);
+        let evaluated_chars: usize = evaluated.iter().map(Element::char_count).sum();
+        self.elements.splice(start..end, evaluated);
+
+        let prefix_chars: usize = self.elements[..start].iter().map(Element::char_count).sum();
+        self.cursor = prefix_chars + evaluated_chars;
+    }
+
+    /// Push a direct-input keystroke at the cursor.
+    pub fn push_direct(&mut self, ch: char) {
+        let at = self.split_at_cursor();
+        self.elements.insert(at, Element::Direct(ch));
+        self.cursor += 1;
+    }
+
+    /// Insert settled text at the cursor (reconversion reading and other
+    /// programmatic strings).
     pub fn insert(&mut self, text: &str) {
         if text.is_empty() {
             return;
         }
-        let byte_pos = self
-            .text
-            .char_indices()
-            .nth(self.cursor_pos)
-            .map(|(i, _)| i)
-            .unwrap_or(self.text.len());
-        self.text.insert_str(byte_pos, text);
-        let char_count = text.chars().count();
-        self.cursor_pos += char_count;
+        let at = self.split_at_cursor();
+        self.elements
+            .insert(at, Element::Converted(text.to_string()));
+        self.cursor += text.chars().count();
     }
 
-    /// Remove the character at the given character position.
-    pub fn remove_char_at(&mut self, char_pos: usize) -> Option<char> {
-        let (byte_start, removed) = self.text.char_indices().nth(char_pos)?;
-        let byte_end = self
-            .text
-            .char_indices()
-            .nth(char_pos + 1)
-            .map(|(i, _)| i)
-            .unwrap_or(self.text.len());
-        self.text.replace_range(byte_start..byte_end, "");
-        Some(removed)
-    }
-
-    /// Remove the character before the cursor.
-    pub fn remove_char_before_cursor(&mut self) -> Option<char> {
-        if self.cursor_pos == 0 {
-            return None;
+    /// Remove the display character before the cursor. A single-character
+    /// element is removed whole; a longer `Converted` is truncated. Returns
+    /// false when the cursor is at the start.
+    pub fn backspace(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
         }
-        self.cursor_pos -= 1;
-        self.remove_char_at(self.cursor_pos)
+        self.remove_display_char(self.cursor - 1);
+        self.cursor -= 1;
+        true
     }
 
-    /// Remove the character at the cursor position (delete key).
-    pub fn remove_char_at_cursor(&mut self) -> Option<char> {
-        self.remove_char_at(self.cursor_pos)
+    /// Remove the display character at the cursor (delete key). Returns
+    /// false when the cursor is at the end.
+    pub fn delete_at_cursor(&mut self) -> bool {
+        if self.cursor >= self.char_count() {
+            return false;
+        }
+        self.remove_display_char(self.cursor);
+        true
     }
+
+    /// Settle all Romaji keystrokes in place (`ltu` → っ; unmatched
+    /// consonants pass through literally). Called before conversion,
+    /// commit, and katakana baking. The cursor keeps its distance from the
+    /// end, so an end-of-composition cursor stays at the end.
+    pub fn settle_romaji(&mut self, romaji: &RomajiConverter) {
+        if !self.elements.iter().any(Element::is_romaji) {
+            return;
+        }
+        let from_end = self.char_count() - self.cursor;
+        let mut settled: Vec<Element> = Vec::with_capacity(self.elements.len());
+        let mut run = String::new();
+        for element in self.elements.drain(..) {
+            match element {
+                Element::Romaji(ch) => run.push(ch),
+                other => {
+                    flush_run(&mut settled, &mut run, romaji);
+                    settled.push(other);
+                }
+            }
+        }
+        flush_run(&mut settled, &mut run, romaji);
+        self.elements = settled;
+        self.cursor = self.char_count().saturating_sub(from_end);
+    }
+
+    /// Convert every settled element's display to katakana permanently.
+    /// Called when leaving katakana mode so the preedit doesn't revert.
+    pub fn bake_katakana(&mut self) {
+        for element in &mut self.elements {
+            if let Element::Converted(display) = element {
+                *display = karukan_engine::hiragana_to_katakana(display);
+            }
+        }
+    }
+
+    /// Remove one display character, truncating a multi-character
+    /// `Converted` or removing a single-character element whole.
+    fn remove_display_char(&mut self, pos: usize) {
+        let (index, offset) = self.locate(pos);
+        let element = &mut self.elements[index];
+        if element.char_count() == 1 {
+            self.elements.remove(index);
+            return;
+        }
+        let Element::Converted(display) = element else {
+            unreachable!("multi-char elements are always Converted");
+        };
+        let byte_start = display.char_indices().nth(offset).map(|(i, _)| i).unwrap();
+        let byte_end = display
+            .char_indices()
+            .nth(offset + 1)
+            .map(|(i, _)| i)
+            .unwrap_or(display.len());
+        display.replace_range(byte_start..byte_end, "");
+    }
+
+    /// Ensure an element boundary at the cursor (splitting a `Converted`
+    /// when the cursor is inside it) and return the boundary index.
+    fn split_at_cursor(&mut self) -> usize {
+        let (index, offset) = self.locate(self.cursor);
+        if offset == 0 {
+            return index;
+        }
+        let Element::Converted(display) = &self.elements[index] else {
+            unreachable!("multi-char elements are always Converted");
+        };
+        let byte_offset = display.char_indices().nth(offset).map(|(i, _)| i).unwrap();
+        let right = display[byte_offset..].to_string();
+        let left = display[..byte_offset].to_string();
+        self.elements[index] = Element::Converted(left);
+        self.elements.insert(index + 1, Element::Converted(right));
+        index + 1
+    }
+
+    /// Element index and character offset for a display position. A
+    /// position on a boundary returns the element starting there (offset
+    /// 0); the end of the composition returns `(len, 0)`.
+    fn locate(&self, pos: usize) -> (usize, usize) {
+        let mut remaining = pos;
+        for (i, element) in self.elements.iter().enumerate() {
+            let len = element.char_count();
+            if remaining < len {
+                return (i, remaining);
+            }
+            remaining -= len;
+        }
+        (self.elements.len(), 0)
+    }
+}
+
+/// Settle one Romaji run into `out` and clear it.
+fn flush_run(out: &mut Vec<Element>, run: &mut String, romaji: &RomajiConverter) {
+    if run.is_empty() {
+        return;
+    }
+    out.push(Element::Converted(romaji.convert_flush(run)));
+    run.clear();
+}
+
+/// Evaluate a run of romaji keystrokes into elements: keystrokes consumed
+/// by a fired rule become one `Converted`; passthrough keystrokes that can
+/// still start a rule (`y`, `k`) stay `Romaji`, others settle (`1`); the
+/// converter's trailing pending stays `Romaji` per keystroke.
+fn evaluate_run(run: &str, romaji: &RomajiConverter) -> Vec<Element> {
+    let mut elements = Vec::new();
+    let mut processed = String::new();
+    let mut prev = karukan_engine::Converted {
+        text: String::new(),
+        pending: String::new(),
+    };
+
+    for ch in run.chars() {
+        processed.push(ch);
+        let curr = romaji.convert(&processed);
+        // Input consumed this step and output it produced
+        let consumed: String = {
+            let mut c = prev.pending.clone();
+            c.push(ch);
+            c.strip_suffix(curr.pending.as_str())
+                .unwrap_or(&c)
+                .to_string()
+        };
+        let mut produced = curr.text[prev.text.len()..].to_string();
+
+        // Peel leading passthrough characters (input == output), then the
+        // rest is a fired rule's output
+        let mut consumed = consumed.as_str();
+        while let (Some(c), Some(p)) = (consumed.chars().next(), produced.chars().next()) {
+            if c != p {
+                break;
+            }
+            if romaji.is_rule_prefix(&c.to_string()) {
+                elements.push(Element::Romaji(c));
+            } else {
+                elements.push(Element::Converted(c.to_string()));
+            }
+            consumed = &consumed[c.len_utf8()..];
+            produced.drain(..p.len_utf8());
+        }
+        if !produced.is_empty() {
+            elements.push(Element::Converted(produced));
+        }
+        prev = curr;
+    }
+
+    for ch in prev.pending.chars() {
+        elements.push(Element::Romaji(ch));
+    }
+    elements
 }

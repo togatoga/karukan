@@ -275,14 +275,12 @@ impl InputMethodEngine {
     /// Convert hiragana in input_buf to katakana permanently.
     /// Called when leaving Katakana mode so the preedit doesn't revert.
     fn bake_katakana(&mut self) {
-        if !self.input_buf.text.is_empty() {
-            self.input_buf.text = karukan_engine::hiragana_to_katakana(&self.input_buf.text);
-        }
+        self.input_buf.bake_katakana();
     }
 
     /// Settle the pending romaji segment into the composed text at the cursor
-    fn freeze_pending_romaji(&mut self) {
-        self.input_buf.freeze_pending(&self.converters.romaji);
+    fn settle_romaji(&mut self) {
+        self.input_buf.settle_romaji(&self.converters.romaji);
     }
 
     /// Set surrounding context from the full text plus a cursor offset in
@@ -373,7 +371,7 @@ impl InputMethodEngine {
         // so the system can properly track modifier state.
         if key.is_press && self.mode.current() != InputMode::Hiragana {
             // Settle pending romaji first so it gets baked along with the rest
-            self.freeze_pending_romaji();
+            self.settle_romaji();
             // Bake katakana before switching so preedit doesn't revert
             if self.mode.current() == InputMode::Katakana {
                 self.bake_katakana();
@@ -459,8 +457,8 @@ impl InputMethodEngine {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
                 // Settle pending romaji into composed_hiragana
-                self.freeze_pending_romaji();
-                let reading = self.input_buf.text.clone();
+                self.settle_romaji();
+                let reading = self.input_buf.reading();
                 let text = if !self.live.text.is_empty() {
                     self.live.text.clone()
                 } else {

@@ -18,7 +18,7 @@ impl InputMethodEngine {
         // Clear live conversion text so katakana mode takes priority on commit
         self.live.text.clear();
 
-        if self.input_buf.text.is_empty() && !self.input_buf.has_elements() {
+        if !self.input_buf.has_elements() {
             return EngineResult::consumed();
         }
 

@@ -15,8 +15,7 @@ use super::*;
 /// Engine in Composing state with the kanji model explicitly disabled.
 fn composing_engine(reading: &str) -> InputMethodEngine {
     let mut engine = InputMethodEngine::new();
-    engine.input_buf.text = reading.to_string();
-    engine.input_buf.cursor_pos = reading.chars().count();
+    engine.input_buf.insert(reading);
     engine.state = InputState::Composing {
         preedit: Preedit::new(),
     };

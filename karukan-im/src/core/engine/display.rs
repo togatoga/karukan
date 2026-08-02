@@ -8,39 +8,20 @@ use super::*;
 pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Backspaceで履歴から削除";
 
 impl InputMethodEngine {
-    /// Build display text from the input buffer and active elements
-    /// Format: composed[:cursor] + elements + composed[cursor:]
+    /// Build display text from the element array.
     /// In katakana mode, kana parts are converted to katakana.
     pub(super) fn build_input_display(&self) -> String {
-        let before: String = self
-            .input_buf
-            .text
-            .chars()
-            .take(self.input_buf.cursor_pos)
-            .collect();
-        let after: String = self
-            .input_buf
-            .text
-            .chars()
-            .skip(self.input_buf.cursor_pos)
-            .collect();
-        let middle = self.input_buf.composing_display();
-
-        let katakana = self.mode.current() == InputMode::Katakana;
-        let convert = |s: String| {
-            if katakana {
-                karukan_engine::hiragana_to_katakana(&s)
-            } else {
-                s
-            }
-        };
-
-        format!("{}{}{}", convert(before), convert(middle), convert(after))
+        let display = self.input_buf.display();
+        if self.mode.current() == InputMode::Katakana {
+            karukan_engine::hiragana_to_katakana(&display)
+        } else {
+            display
+        }
     }
 
     /// Get the caret position in the display text (in characters)
     pub(super) fn display_caret_position(&self) -> usize {
-        self.input_buf.cursor_pos + self.input_buf.composing_char_count()
+        self.input_buf.cursor()
     }
 
     /// Build a preedit for composing state.

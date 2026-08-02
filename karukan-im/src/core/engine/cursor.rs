@@ -3,12 +3,17 @@
 use super::*;
 
 impl InputMethodEngine {
-    /// Common helper for cursor movement: settle pending romaji, clear live
-    /// conversion, then compute the new position from the settled buffer.
+    /// Common helper for cursor movement: clear live conversion and set the
+    /// new display position. Nothing settles — unevaluated romaji stays
+    /// live, so typing after a move can still combine with it. Moving does
+    /// end a temporary alphabet word (the user left the word they were
+    /// typing), so the next key is evaluated as romaji again.
     fn move_caret(&mut self, new_pos: impl FnOnce(&InputBuffer) -> usize) -> EngineResult {
-        self.freeze_pending_romaji();
+        if self.mode.current() == InputMode::Alphabet {
+            self.mode.exit_temporary();
+        }
         self.live.text.clear();
-        self.input_buf.cursor_pos = new_pos(&self.input_buf);
+        self.input_buf.set_cursor(new_pos(&self.input_buf));
         self.log_chunk_state("cursor");
         let preedit = self.set_composing_state();
         EngineResult::consumed()
@@ -19,30 +24,11 @@ impl InputMethodEngine {
 
     /// Handle backspace in composing mode
     pub(super) fn backspace_composing(&mut self) -> EngineResult {
-        // Active elements first: remove the last one whole. The elements
-        // before it stay live, so a freed consonant still combines with the
-        // next key (`ytko` → BS → `o` → 「yと」).
+        // Remove one display character before the cursor: a single-character
+        // element vanishes whole, re-exposing the live element before it
+        // (`ytko` → BS → `o` → 「yと」); きょ is truncated per character.
         let reading_before = self.input_buf.reading();
-        if self.input_buf.backspace_element(&self.converters.romaji) {
-            if let Some(result) = self.try_reset_if_empty() {
-                return result;
-            }
-
-            // Reading unchanged (a live keystroke was popped): keep the
-            // candidate window as-is
-            if self.input_buf.reading() == reading_before {
-                let preedit = self.set_composing_state();
-                return EngineResult::consumed()
-                    .with_action(EngineAction::UpdatePreedit(preedit))
-                    .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
-            }
-            return self.refresh_input_state();
-        }
-
-        // Remove character before cursor from composed_hiragana
-        if self.input_buf.cursor_pos > 0 {
-            self.input_buf.remove_char_before_cursor();
-        } else {
+        if !self.input_buf.backspace() {
             // Nothing to delete
             return EngineResult::consumed();
         }
@@ -51,28 +37,30 @@ impl InputMethodEngine {
             return result;
         }
 
+        // Reading unchanged (a live keystroke was popped): keep the
+        // candidate window as-is
+        if self.input_buf.reading() == reading_before {
+            let preedit = self.set_composing_state();
+            return EngineResult::consumed()
+                .with_action(EngineAction::UpdatePreedit(preedit))
+                .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
+        }
         self.refresh_input_state()
     }
 
-    /// Move caret left within hiragana input
+    /// Move caret left within the composition
     pub(super) fn move_caret_left(&mut self) -> EngineResult {
-        self.move_caret(|buf| buf.cursor_pos.saturating_sub(1))
+        self.move_caret(|buf| buf.cursor().saturating_sub(1))
     }
 
-    /// Move caret right within hiragana input
+    /// Move caret right within the composition
     pub(super) fn move_caret_right(&mut self) -> EngineResult {
-        self.move_caret(|buf| (buf.cursor_pos + 1).min(buf.text.chars().count()))
+        self.move_caret(|buf| buf.cursor() + 1)
     }
 
-    /// Handle delete key in hiragana mode
+    /// Handle delete key in composing mode
     pub(super) fn delete_composing(&mut self) -> EngineResult {
-        // Active elements sit at the cursor; don't delete from composed text
-        if self.input_buf.has_elements() {
-            return EngineResult::consumed();
-        }
-
-        // Delete character at cursor position
-        if self.input_buf.remove_char_at_cursor().is_none() {
+        if !self.input_buf.delete_at_cursor() {
             return EngineResult::consumed();
         }
 
@@ -90,6 +78,6 @@ impl InputMethodEngine {
 
     /// Move caret to end of input
     pub(super) fn move_caret_end(&mut self) -> EngineResult {
-        self.move_caret(|buf| buf.text.chars().count())
+        self.move_caret(|buf| buf.char_count())
     }
 }

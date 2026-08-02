@@ -168,9 +168,10 @@ fn test_conversion_escape_then_continue_typing() {
     assert_eq!(preedit_text(&engine), "きょう");
 }
 
-/// Cursor movement settles the pending romaji at the old cursor position.
+/// Cursor movement keeps unevaluated romaji live: coming back and typing a
+/// vowel still combines.
 #[test]
-fn test_cursor_move_settles_pending() {
+fn test_cursor_move_keeps_pending_live() {
     let mut engine = InputMethodEngine::new();
 
     engine.process_key(&press('a'));
@@ -181,8 +182,28 @@ fn test_cursor_move_settles_pending() {
     assert_eq!(preedit_text(&engine), "あk");
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 
-    // The settled `k` no longer combines with new input
     engine.process_key(&press_key(Keysym::END));
     engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "あkお");
+    assert_eq!(preedit_text(&engine), "あこ");
+}
+
+/// Typing before a Direct element combines with the live romaji to its
+/// left: `k`, `y`, `Shift+K`, ←, `o` → 「きょK」. Nothing combines across
+/// the cursor, so the `K` stays untouched.
+#[test]
+fn test_type_before_direct_element_combines() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('y'));
+    engine.process_key(&press_shift('K'));
+    assert_eq!(preedit_text(&engine), "kyK");
+
+    // Moving ends the temporary alphabet word; `ky` is still live
+    engine.process_key(&press_key(Keysym::LEFT));
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょK");
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
 }

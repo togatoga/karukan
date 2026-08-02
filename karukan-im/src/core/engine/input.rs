@@ -113,7 +113,7 @@ impl InputMethodEngine {
         // Ctrl+Space: start input with full-width space
         if key.modifiers.control_key && key.keysym == Keysym::SPACE {
             self.input_buf.clear();
-            self.input_buf.insert("\u{3000}");
+            self.input_buf.push_direct('\u{3000}');
             let preedit = self.set_composing_state();
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(preedit))
@@ -270,11 +270,11 @@ impl InputMethodEngine {
                         ch.is_ascii_uppercase() || (shift_active && ch.is_ascii_alphabetic());
 
                     if is_shift_alpha && self.mode.current() != InputMode::Alphabet {
-                        // Settle pending romaji first so it gets baked along
-                        // with the rest of the buffer
-                        self.freeze_pending_romaji();
-                        // Bake katakana before switching so preedit doesn't revert
+                        // Bake katakana before switching so preedit doesn't
+                        // revert; in kana mode the live romaji stays live so
+                        // typing next to it can still combine
                         if self.mode.current() == InputMode::Katakana {
+                            self.settle_romaji();
                             self.bake_katakana();
                         }
                         // Shift-alphabet is a temporary per-word mode:
@@ -311,7 +311,7 @@ impl InputMethodEngine {
         // on re-entry just in case start_emoji_mode is ever called while
         // already in Emoji mode.
         self.mode.enter_temporary(InputMode::Emoji);
-        self.input_buf.insert(":");
+        self.input_buf.push_direct(':');
         self.refresh_input_state()
     }
 
@@ -351,9 +351,9 @@ impl InputMethodEngine {
     /// In live conversion mode, commits the converted text instead of hiragana.
     pub(super) fn commit_composing(&mut self) -> EngineResult {
         // Settle any pending romaji into composed_hiragana
-        self.freeze_pending_romaji();
+        self.settle_romaji();
 
-        let reading = self.input_buf.text.clone();
+        let reading = self.input_buf.reading();
         let text = if self.mode.current() == InputMode::Emoji {
             // Emoji mode: Enter should select the first emoji candidate the
             // EmojiRewriter would surface, not commit the literal `:smile`.

@@ -185,7 +185,7 @@ fn test_toggle_key_is_inert_during_conversion() {
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(engine.mode.current() == InputMode::Katakana);
     // The conversion reading must not have been katakana-baked
-    assert_eq!(engine.input_buf.text, "かか");
+    assert_eq!(engine.input_buf.reading(), "かか");
 
     // Escape back to Composing: the typed hiragana reading is intact
     engine.process_key(&press_key(Keysym::ESCAPE));

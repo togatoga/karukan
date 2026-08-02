@@ -169,7 +169,7 @@ fn test_current_chunk_index_tracks_cursor() {
     engine.process_key(&press_key(Keysym::LEFT));
     engine.process_key(&press_key(Keysym::LEFT));
     engine.process_key(&press_key(Keysym::LEFT));
-    assert_eq!(engine.input_buf.cursor_pos, 0);
+    assert_eq!(engine.input_buf.reading_cursor(), 0);
     assert_eq!(engine.current_chunk_index(), 0);
 }
 
@@ -186,7 +186,7 @@ fn test_current_chunk_index_with_variable_length_chunks() {
 
     // cursor pos → expected chunk index
     for (pos, expected) in [(0, 0), (1, 0), (2, 1), (3, 2), (4, 3), (5, 4)] {
-        engine.input_buf.cursor_pos = pos;
+        engine.input_buf.set_cursor(pos);
         assert_eq!(
             engine.current_chunk_index(),
             expected,
@@ -247,7 +247,7 @@ fn test_delete_all_chars_clears_chunks() {
         engine.process_key(&press_key(Keysym::BACKSPACE));
     }
     assert!(matches!(engine.state(), InputState::Empty));
-    assert_eq!(engine.input_buf.text, "");
+    assert_eq!(engine.input_buf.reading(), "");
     assert!(engine.chunks.is_empty(), "chunk cache must be cleared");
     assert!(engine.live.text.is_empty(), "live text must be cleared");
 }
@@ -274,7 +274,7 @@ fn test_delete_first_chunk_reuses_remaining_suffix() {
     engine.process_key(&press_key(Keysym::DELETE));
     engine.process_key(&press_key(Keysym::DELETE));
 
-    assert_eq!(engine.input_buf.text, "うえ");
+    assert_eq!(engine.input_buf.reading(), "うえ");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
     assert_eq!(readings, vec!["うえ"]);
     // Reused from the suffix → cached conversion survives (no reconvert).
@@ -298,7 +298,7 @@ fn test_middle_delete_reconverts_only_touched_chunk() {
     engine.process_key(&press_key(Keysym::RIGHT));
     engine.process_key(&press_key(Keysym::BACKSPACE));
 
-    assert_eq!(engine.input_buf.text, "あいえおか");
+    assert_eq!(engine.input_buf.reading(), "あいえおか");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
     assert_eq!(readings, vec!["あい", "え", "おか"]);
     // Neighbors reused (sentinels survive); only the middle chunk reconverted.
