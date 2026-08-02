@@ -1,5 +1,11 @@
-//! Pending-romaji editing tests: backspace over the raw segment must let
-//! remaining keystrokes re-combine, while settled text never reverts.
+//! Pending-romaji editing scenarios, table-driven.
+//!
+//! Each case is a list of (keys, expected) steps: the keys are sent one
+//! keystroke at a time, then the preedit is asserted. Key tokens:
+//! `←` Left, `⌫` Backspace, `⇥` End, `␛` Escape, `␣` Space, `変` HENKAN
+//! (mode toggle to hiragana); an ASCII uppercase letter is typed with
+//! Shift; anything else is a plain key. An expected value of `"きょ@2"`
+//! also asserts the caret, and `"∅"` asserts the Empty state.
 
 use super::*;
 
@@ -7,23 +13,153 @@ fn preedit_text(engine: &InputMethodEngine) -> String {
     engine.preedit().unwrap().text().to_string()
 }
 
-/// The original bug: `ykt` → BS → `o` used to produce 「ykお」 because the
-/// passed-through `k` was settled the moment `t` arrived. Keeping the whole
-/// consonant run pending lets `o` re-derive `yko` → 「yこ」.
-#[test]
-fn test_ykt_backspace_then_o() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "ykt".chars() {
-        engine.process_key(&press(ch));
+fn send(engine: &mut InputMethodEngine, keys: &str) {
+    for ch in keys.chars() {
+        let key = match ch {
+            '←' => press_key(Keysym::LEFT),
+            '⌫' => press_key(Keysym::BACKSPACE),
+            '⇥' => press_key(Keysym::END),
+            '␛' => press_key(Keysym::ESCAPE),
+            '␣' => press_key(Keysym::SPACE),
+            '変' => press_key(Keysym::HENKAN),
+            c if c.is_ascii_uppercase() => press_shift(c),
+            c => press(c),
+        };
+        engine.process_key(&key);
     }
-    assert_eq!(preedit_text(&engine), "ykt");
+}
 
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "yk");
+fn run_scenario(name: &str, steps: &[(&str, &str)]) {
+    let mut engine = InputMethodEngine::new();
+    for (keys, expected) in steps {
+        send(&mut engine, keys);
+        if *expected == "∅" {
+            assert!(
+                matches!(engine.state(), InputState::Empty),
+                "{name}: expected Empty state after {keys:?}"
+            );
+            continue;
+        }
+        let (text, caret) = match expected.split_once('@') {
+            Some((text, caret)) => (text, Some(caret.parse::<usize>().expect("caret number"))),
+            None => (*expected, None),
+        };
+        assert_eq!(preedit_text(&engine), text, "{name}: after {keys:?}");
+        if let Some(caret) = caret {
+            assert_eq!(
+                engine.preedit().unwrap().caret(),
+                caret,
+                "{name}: caret after {keys:?}"
+            );
+        }
+    }
+}
 
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "yこ");
+#[test]
+fn test_editing_scenarios() {
+    let cases: &[(&str, &[(&str, &str)])] = &[
+        // The original bug: the passed-through consonants stay live, so
+        // erasing the pending `t` lets `o` re-combine with the `k`
+        (
+            "ykt_backspace_then_o",
+            &[("ykt", "ykt"), ("⌫", "yk"), ("o", "yこ")],
+        ),
+        // Deleting a converted element re-exposes the live consonants
+        // before it, one conversion at a time
+        (
+            "ytko_backspace_recombines_stepwise",
+            &[
+                ("ytko", "ytこ"),
+                ("⌫", "yt"),
+                ("o", "yと"),
+                ("⌫", "y"),
+                ("o", "よ"),
+            ],
+        ),
+        // A multi-key rule prefix survives deletion of the element after it
+        (
+            "kyt_backspace_then_o",
+            &[("kyt", "kyt"), ("⌫", "ky"), ("o", "きょ")],
+        ),
+        // Settled text never reverts
+        (
+            "kk_backspace_keeps_sokuon",
+            &[("kk", "っk"), ("⌫", "っ"), ("a", "っあ")],
+        ),
+        (
+            "nk_backspace_keeps_n",
+            &[("nk", "んk"), ("⌫", "ん"), ("a", "んあ")],
+        ),
+        (
+            "kyo_backspace_then_o",
+            &[("kyo", "きょ"), ("⌫", "き"), ("o", "きお")],
+        ),
+        // Erasing everything resets the state
+        (
+            "kan_backspace_to_empty",
+            &[("kan", "かn"), ("⌫", "か"), ("⌫", "∅")],
+        ),
+        (
+            "consonant_run_backspace_to_empty",
+            &[("ykt", "ykt"), ("⌫", "yk"), ("⌫", "y"), ("⌫", "∅")],
+        ),
+        // Stranded consonants stay live across cursor movement and combine
+        // when typing returns next to them
+        (
+            "cursor_move_keeps_pending_live",
+            &[("ak", "あk"), ("←", "あk@1"), ("⇥o", "あこ")],
+        ),
+        (
+            "stranded_consonants_combine_after_cursor_return",
+            &[("ky123", "ky123"), ("←←←", "ky123@2"), ("o", "きょ123@2")],
+        ),
+        (
+            "ky123ni_cursor_return_combines",
+            &[
+                ("ky123ni", "ky123に"),
+                ("←←←←", "ky123に@2"),
+                ("o", "きょ123に@2"),
+            ],
+        ),
+        // Evaluation never crosses the caret: elements right of it stay put
+        (
+            "type_before_direct_element_combines",
+            &[("kyK", "kyK"), ("←", "kyK@2"), ("o", "きょK@2")],
+        ),
+        (
+            "combine_before_converted_and_direct",
+            &[("ky1K", "ky1K"), ("←←", "ky1K@2"), ("o", "きょ1K@2")],
+        ),
+        // Mode transitions never touch the element array
+        (
+            "mode_toggle_back_keeps_live_romaji",
+            &[("ky1K", "ky1K"), ("変", "ky1K"), ("←←o", "きょ1K")],
+        ),
+        (
+            "mode_toggle_after_backspace_combines",
+            &[("kyK", "kyK"), ("⌫", "ky"), ("変o", "きょ")],
+        ),
+        // Deleting the separator between two live runs leaves every
+        // keystroke live in place
+        (
+            "delete_separator_between_live_runs",
+            &[("ty1y", "ty1y"), ("←⌫", "tyy@2"), ("a", "ちゃy")],
+        ),
+        // A doubled consonant after a rule prefix keeps the prefix alive
+        (
+            "prefixed_double_consonant_keeps_prefix",
+            &[("tyy", "tっy"), ("⌫", "tっ"), ("⌫", "t"), ("a", "た")],
+        ),
+        // Returning from conversion keeps the reading editable
+        (
+            "conversion_escape_then_continue_typing",
+            &[("kyo", "きょ"), ("␣␛", "きょ"), ("u", "きょう")],
+        ),
+    ];
+
+    for (name, steps) in cases {
+        run_scenario(name, steps);
+    }
 }
 
 /// A consonant stranded behind settled text stays at its position — it is
@@ -33,15 +169,13 @@ fn test_ykt_backspace_then_o() {
 fn test_stranded_consonant_stays_in_place() {
     let mut engine = InputMethodEngine::new();
 
-    for ch in "y1k".chars() {
-        engine.process_key(&press(ch));
-    }
+    send(&mut engine, "y1k");
     assert_eq!(preedit_text(&engine), "y1k");
-    // Only the k (adjacent to the cursor) is being typed; y is stranded
+    // Only the k (adjacent to the caret) is being typed; y is stranded
     assert_eq!(engine.input_buf.reading(), "y1");
     assert_eq!(engine.input_buf.pending(), "k");
 
-    engine.process_key(&press('a'));
+    send(&mut engine, "a");
     assert_eq!(preedit_text(&engine), "y1か");
     assert_eq!(engine.input_buf.reading(), "y1か");
     assert_eq!(engine.input_buf.pending(), "");
@@ -53,335 +187,6 @@ fn test_stranded_consonant_stays_in_place() {
 fn test_stranded_consonant_stays_in_place_live() {
     let mut engine = make_live_conversion_engine();
 
-    for ch in "y1a".chars() {
-        engine.process_key(&press(ch));
-    }
+    send(&mut engine, "y1a");
     assert_eq!(preedit_text(&engine), "y1あ");
-}
-
-/// Stranded consonants stay live: `ky123`, cursor back to after `ky`,
-/// then `o` completes the rule → 「きょ123」.
-#[test]
-fn test_stranded_consonants_combine_after_cursor_return() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "ky123".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "ky123");
-
-    for _ in 0..3 {
-        engine.process_key(&press_key(Keysym::LEFT));
-    }
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょ123");
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-}
-
-/// Mixed tail after the cursor: `ky1K`, cursor back to after `ky`, then
-/// `o` combines with the run on the left → 「きょ1K」. Evaluation never
-/// crosses the cursor, so the `1` and `K` are untouched.
-#[test]
-fn test_combine_before_converted_and_direct() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('k'));
-    engine.process_key(&press('y'));
-    engine.process_key(&press('1'));
-    engine.process_key(&press_shift('K'));
-    assert_eq!(preedit_text(&engine), "ky1K");
-
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょ1K");
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-}
-
-/// `ky123に`, cursor back to after `ky`, then `o` → 「きょ123に」.
-#[test]
-fn test_ky123ni_cursor_return_combines() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "ky123ni".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "ky123に");
-
-    for _ in 0..4 {
-        engine.process_key(&press_key(Keysym::LEFT));
-    }
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょ123に");
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-}
-
-/// Deleting a converted element re-exposes the live consonants before it,
-/// one conversion at a time: `ytko` → BS → `o` → BS → `o` → BS → `o`.
-#[test]
-fn test_ytko_backspace_recombines_stepwise() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "ytko".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "ytこ");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "yt");
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "yと");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "y");
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "よ");
-}
-
-/// A multi-key rule prefix survives deletion of the element after it:
-/// `kyt` → BS → `o` re-combines to きょ.
-#[test]
-fn test_kyt_backspace_then_o() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "kyt".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "kyt");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "ky");
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょ");
-}
-
-/// Settled text never reverts: っ stays っ after the pending `k` is erased.
-#[test]
-fn test_kk_backspace_keeps_sokuon() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('k'));
-    engine.process_key(&press('k'));
-    assert_eq!(preedit_text(&engine), "っk");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "っ");
-
-    engine.process_key(&press('a'));
-    assert_eq!(preedit_text(&engine), "っあ");
-}
-
-/// ん from the n-before-consonant rule stays settled after backspace.
-#[test]
-fn test_nk_backspace_keeps_n() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('n'));
-    engine.process_key(&press('k'));
-    assert_eq!(preedit_text(&engine), "んk");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "ん");
-
-    engine.process_key(&press('a'));
-    assert_eq!(preedit_text(&engine), "んあ");
-}
-
-/// Backspace on fully converted text removes one display character.
-#[test]
-fn test_kyo_backspace_then_o() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "kyo".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "きょ");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "き");
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きお");
-}
-
-/// Pending keystrokes pop one at a time; erasing everything resets the state.
-#[test]
-fn test_kan_backspace_to_empty() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "kan".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "かn");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "か");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert!(matches!(engine.state(), InputState::Empty));
-}
-
-/// A consonant run stays fully erasable key by key.
-#[test]
-fn test_consonant_run_backspace_to_empty() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "ykt".chars() {
-        engine.process_key(&press(ch));
-    }
-    for expected in ["yk", "y"] {
-        engine.process_key(&press_key(Keysym::BACKSPACE));
-        assert_eq!(preedit_text(&engine), expected);
-    }
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert!(matches!(engine.state(), InputState::Empty));
-}
-
-/// Returning from conversion to composing keeps the reading editable
-/// (no stale pending romaji).
-#[test]
-fn test_conversion_escape_then_continue_typing() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "kyo".chars() {
-        engine.process_key(&press(ch));
-    }
-    engine.process_key(&press_key(Keysym::SPACE));
-    engine.process_key(&press_key(Keysym::ESCAPE));
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(preedit_text(&engine), "きょ");
-
-    engine.process_key(&press('u'));
-    assert_eq!(preedit_text(&engine), "きょう");
-}
-
-/// Cursor movement keeps unevaluated romaji live: coming back and typing a
-/// vowel still combines.
-#[test]
-fn test_cursor_move_keeps_pending_live() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('a'));
-    engine.process_key(&press('k'));
-    assert_eq!(preedit_text(&engine), "あk");
-
-    engine.process_key(&press_key(Keysym::LEFT));
-    assert_eq!(preedit_text(&engine), "あk");
-    assert_eq!(engine.preedit().unwrap().caret(), 1);
-
-    engine.process_key(&press_key(Keysym::END));
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "あこ");
-}
-
-/// Typing before a Direct element combines with the live romaji to its
-/// left: `k`, `y`, `Shift+K`, ←, `o` → 「きょK」. Nothing combines across
-/// the cursor, so the `K` stays untouched.
-#[test]
-fn test_type_before_direct_element_combines() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('k'));
-    engine.process_key(&press('y'));
-    engine.process_key(&press_shift('K'));
-    assert_eq!(preedit_text(&engine), "kyK");
-
-    // Moving ends the temporary alphabet word; `ky` is still live
-    engine.process_key(&press_key(Keysym::LEFT));
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょK");
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-}
-
-/// Returning from a temporary alphabet word via the mode-toggle key must
-/// not settle the live romaji before it: `ky1K` → toggle → ←← → `o`
-/// still combines to 「きょ1K」.
-#[test]
-fn test_mode_toggle_back_keeps_live_romaji() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('k'));
-    engine.process_key(&press('y'));
-    engine.process_key(&press('1'));
-    engine.process_key(&press_shift('K'));
-    assert_eq!(preedit_text(&engine), "ky1K");
-
-    engine.process_key(&press_key(Keysym::HENKAN));
-    assert_eq!(preedit_text(&engine), "ky1K");
-
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょ1K");
-}
-
-/// Same via backspace: `kyK` → BS → toggle to kana → `o` → 「きょ」.
-#[test]
-fn test_mode_toggle_after_backspace_combines() {
-    let mut engine = InputMethodEngine::new();
-
-    engine.process_key(&press('k'));
-    engine.process_key(&press('y'));
-    engine.process_key(&press_shift('K'));
-    assert_eq!(preedit_text(&engine), "kyK");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "ky");
-
-    engine.process_key(&press_key(Keysym::HENKAN));
-    engine.process_key(&press('o'));
-    assert_eq!(preedit_text(&engine), "きょ");
-}
-
-/// Deleting the separator between two live runs leaves every keystroke
-/// live in place: `ty1y` → BS over the `1` → 「tyy」. Typing at the
-/// deletion point evaluates only the run left of the caret.
-#[test]
-fn test_delete_separator_between_live_runs() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "ty1y".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "ty1y");
-
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "tyy");
-    assert_eq!(engine.preedit().unwrap().caret(), 2);
-
-    engine.process_key(&press('a'));
-    assert_eq!(preedit_text(&engine), "ちゃy");
-}
-
-/// A doubled consonant after a rule prefix keeps the prefix alive:
-/// `tyy` → 「tっy」, and erasing back down to the `t` lets it combine.
-#[test]
-fn test_prefixed_double_consonant_keeps_prefix() {
-    let mut engine = InputMethodEngine::new();
-
-    for ch in "tyy".chars() {
-        engine.process_key(&press(ch));
-    }
-    assert_eq!(preedit_text(&engine), "tっy");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "tっ");
-
-    engine.process_key(&press_key(Keysym::BACKSPACE));
-    assert_eq!(preedit_text(&engine), "t");
-
-    engine.process_key(&press('a'));
-    assert_eq!(preedit_text(&engine), "た");
 }
