@@ -309,35 +309,40 @@ fn evaluate_run(run: &str, romaji: &RomajiConverter) -> Vec<Element> {
     for ch in run.chars() {
         processed.push(ch);
         let curr = romaji.convert(&processed);
-        // Input consumed this step and output it produced
-        let consumed: String = {
-            let mut c = prev.pending.clone();
-            c.push(ch);
-            c.strip_suffix(curr.pending.as_str())
-                .unwrap_or(&c)
-                .to_string()
-        };
-        let mut produced = curr.text[prev.text.len()..].to_string();
 
-        // Peel leading passthrough characters (input == output), then the
-        // rest is a fired rule's output
-        let mut consumed = consumed.as_str();
-        while let (Some(c), Some(p)) = (consumed.chars().next(), produced.chars().next()) {
-            if c != p {
+        // The converter drains its buffer from the front: it was holding
+        // `prev.pending`, this keystroke appended `ch`, and it now holds
+        // `curr.pending` — always a tail of the former. Chopping that
+        // tail off leaves the input this step consumed.
+        let mut held = prev.pending.clone();
+        held.push(ch);
+        debug_assert!(held.ends_with(curr.pending.as_str()));
+        let consumed = held.strip_suffix(curr.pending.as_str()).unwrap_or(&held);
+
+        // Output that appeared this step (`convert` only ever appends)
+        let produced = &curr.text[prev.text.len()..];
+
+        // Walk both in lockstep. While input == output the keystroke
+        // passed through unchanged: it stays live if it can still begin
+        // a rule (`ykt` → BS → `o` → 「yこ」), otherwise it settles
+        // (`1`). Once they differ, the rest of the output is a fired
+        // rule's — settled, one element per character; the matching
+        // consumed keystrokes are represented by that output.
+        let mut input = consumed.chars().peekable();
+        let mut output = produced.chars().peekable();
+        while let (Some(&i), Some(&o)) = (input.peek(), output.peek()) {
+            if i != o {
                 break;
             }
-            // A keystroke that can still begin a rule stays live so a
-            // later edit can combine it (`ykt` → BS → `o` → 「yこ」);
-            // one that can't (`1`) settles and stays in the reading
-            if romaji.starts_rule(c) {
-                elements.push(Element::Romaji(c));
+            input.next();
+            output.next();
+            if romaji.starts_rule(i) {
+                elements.push(Element::Romaji(i));
             } else {
-                elements.push(Element::Converted(c));
+                elements.push(Element::Converted(i));
             }
-            consumed = &consumed[c.len_utf8()..];
-            produced.drain(..p.len_utf8());
         }
-        elements.extend(produced.chars().map(Element::Converted));
+        elements.extend(output.map(Element::Converted));
         prev = curr;
     }
 
