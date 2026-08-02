@@ -70,6 +70,21 @@ pub struct LlamaCppModel {
     n_threads: u32,
 }
 
+/// llama.cpp aborts the process when the model file is absent, so check
+/// first and fail as an ordinary error the caller can degrade on.
+fn ensure_model_file_exists(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Err(KanjiError::ModelLoad(
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("model file not found: {}", path.display()),
+            )
+            .into(),
+        ));
+    }
+    Ok(())
+}
+
 impl LlamaCppModel {
     /// Load a GGUF model using llama.cpp with an external tokenizer.
     ///
@@ -92,6 +107,7 @@ impl LlamaCppModel {
         use std::ffi::CString;
         use std::pin::pin;
 
+        ensure_model_file_exists(path.as_ref())?;
         let backend = get_backend()?;
 
         let mut params = pin!(LlamaModelParams::default().with_n_gpu_layers(0));
@@ -120,6 +136,7 @@ impl LlamaCppModel {
         tokenizer_json: T,
         n_ctx: u32,
     ) -> Result<Self> {
+        ensure_model_file_exists(path.as_ref())?;
         let backend = get_backend()?;
 
         // GPT-2 has Metal issues, use CPU
@@ -778,5 +795,16 @@ impl<'a> NllScorer<'a> {
 
         let n_chars = surface.chars().count().max(1);
         Ok(total_nll / n_chars as f32)
+    }
+}
+
+#[cfg(test)]
+mod missing_file_tests {
+    use super::*;
+
+    #[test]
+    fn missing_model_file_is_err_not_panic() {
+        let result = LlamaCppModel::from_file("/nonexistent/model.gguf", "/nonexistent/tok.json");
+        assert!(matches!(result, Err(KanjiError::ModelLoad(_))));
     }
 }
