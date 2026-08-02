@@ -26,6 +26,39 @@ fn test_ykt_backspace_then_o() {
     assert_eq!(preedit_text(&engine), "yこ");
 }
 
+/// A consonant stranded behind settled text stays at its position — it is
+/// part of the reading, not the aux/live tail, so it never teleports to
+/// the end of the display.
+#[test]
+fn test_stranded_consonant_stays_in_place() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "y1k".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "y1k");
+    // Only the k (adjacent to the cursor) is being typed; y is stranded
+    assert_eq!(engine.input_buf.reading(), "y1");
+    assert_eq!(engine.input_buf.pending(), "k");
+
+    engine.process_key(&press('a'));
+    assert_eq!(preedit_text(&engine), "y1か");
+    assert_eq!(engine.input_buf.reading(), "y1か");
+    assert_eq!(engine.input_buf.pending(), "");
+}
+
+/// Same scenario with live conversion on: the preedit is built from
+/// live text + pending, which must not move the stranded y to the end.
+#[test]
+fn test_stranded_consonant_stays_in_place_live() {
+    let mut engine = make_live_conversion_engine();
+
+    for ch in "y1a".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "y1あ");
+}
+
 /// Deleting a converted element re-exposes the live consonants before it,
 /// one conversion at a time: `ytko` → BS → `o` → BS → `o` → BS → `o`.
 #[test]

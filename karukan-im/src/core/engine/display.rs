@@ -25,10 +25,15 @@ impl InputMethodEngine {
     }
 
     /// Build a preedit for composing state.
-    /// If live conversion text is present, shows live_text + pending romaji with caret at end.
+    /// If live conversion text is present, shows live_text + pending romaji
+    /// with caret at end. That layout is only faithful while typing at the
+    /// end of the composition — when the cursor is elsewhere the pending is
+    /// not the visual tail, so fall back to the kana display.
     /// Otherwise shows the input buffer display with cursor-based caret.
     pub(super) fn build_composing_preedit(&self) -> Preedit {
-        let (display, caret) = if !self.live.text.is_empty() {
+        let live_at_end =
+            !self.live.text.is_empty() && self.input_buf.cursor() == self.input_buf.char_count();
+        let (display, caret) = if live_at_end {
             let buffer = self.input_buf.pending();
             let display = format!("{}{}", self.live.text, buffer);
             let caret = display.chars().count();

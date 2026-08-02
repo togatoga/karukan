@@ -98,43 +98,53 @@ impl InputBuffer {
         self.elements.iter().map(Element::char_count).sum()
     }
 
-    /// Unevaluated romaji keystrokes (shown as the aux romaji tail).
-    pub fn pending(&self) -> String {
-        self.elements
+    /// Element indices of the active run: the maximal Romaji run ending at
+    /// the cursor — the keystrokes currently being typed. Empty when the
+    /// element left of the cursor is settled (a stranded consonant elsewhere
+    /// is NOT active; it stays part of the reading at its position).
+    fn active_run(&self) -> std::ops::Range<usize> {
+        let (index, offset) = self.locate(self.cursor);
+        if offset != 0 {
+            return index..index;
+        }
+        let start = self.elements[..index]
             .iter()
-            .filter_map(|e| match e {
-                Element::Romaji(ch) => Some(*ch),
-                _ => None,
-            })
-            .collect()
+            .rposition(|e| !e.is_romaji())
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        start..index
     }
 
-    /// Conversion reading: everything except unevaluated Romaji keystrokes.
-    pub fn reading(&self) -> String {
-        self.elements
+    /// Keystrokes of the active run (shown as the aux romaji tail).
+    pub fn pending(&self) -> String {
+        self.elements[self.active_run()]
             .iter()
-            .filter(|e| !e.is_romaji())
             .map(|e| e.display())
             .collect()
     }
 
-    /// Cursor position within [`Self::reading`]: non-Romaji display
-    /// characters before the cursor.
+    /// Conversion reading: everything except the active run. A Romaji
+    /// keystroke stranded away from the cursor counts as a literal
+    /// character at its position, so `y1` + `ka` reads 「y1か」.
+    pub fn reading(&self) -> String {
+        let active = self.active_run();
+        self.elements
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !active.contains(i))
+            .map(|(_, e)| e.display())
+            .collect()
+    }
+
+    /// Cursor position within [`Self::reading`]. The active run sits just
+    /// before the cursor and is excluded from the reading, so this is the
+    /// cursor minus the active run's characters.
     pub fn reading_cursor(&self) -> usize {
-        let mut remaining = self.cursor;
-        let mut pos = 0;
-        for element in &self.elements {
-            let len = element.char_count();
-            let step = len.min(remaining);
-            if !element.is_romaji() {
-                pos += step;
-            }
-            remaining -= step;
-            if remaining == 0 {
-                break;
-            }
-        }
-        pos
+        let active_chars: usize = self.elements[self.active_run()]
+            .iter()
+            .map(Element::char_count)
+            .sum();
+        self.cursor - active_chars
     }
 
     /// Push a kana-mode keystroke at the cursor and re-evaluate the Romaji
