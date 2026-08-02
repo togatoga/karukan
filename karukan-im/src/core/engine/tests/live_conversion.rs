@@ -147,6 +147,44 @@ fn test_live_conversion_commit_empty_falls_back_to_hiragana() {
 }
 
 #[test]
+fn test_live_conversion_commit_keeps_pending_tail() {
+    // "wasedad" + Enter without any Space: the display was 早稲田 + pending
+    // `d`, so the commit must be 早稲田d, not 早稲田.
+    let mut engine = make_live_conversion_engine();
+    for ch in "wasedad".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.live.text = "早稲田".to_string();
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let commit_text = result
+        .actions
+        .iter()
+        .find_map(|a| {
+            if let EngineAction::Commit(text) = a {
+                Some(text.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(commit_text, "早稲田d");
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+#[test]
+fn test_engine_commit_keeps_pending_tail() {
+    // Same as above through the programmatic commit() path (focus-out).
+    let mut engine = make_live_conversion_engine();
+    for ch in "wasedad".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.live.text = "早稲田".to_string();
+
+    assert_eq!(engine.commit(), "早稲田d");
+}
+
+#[test]
 fn test_conversion_keeps_pending_tail_of_live_candidate() {
     // "wasedad": the live suggestion converts only the settled reading
     // (わせだ→早稲田) and the pending `d` is displayed after it. Starting a

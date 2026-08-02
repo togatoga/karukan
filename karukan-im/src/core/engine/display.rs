@@ -46,6 +46,23 @@ impl InputMethodEngine {
         preedit
     }
 
+    /// The live conversion result as displayed: `live.text` plus the settled
+    /// pending romaji tail (早稲田 + d → 早稲田d). Committing or preserving
+    /// `live.text` alone would drop the tail, since the live suggestion only
+    /// covers the settled reading. Empty when live conversion has no result.
+    /// Must be called before `settle_romaji` (which empties the pending run).
+    pub(super) fn live_text_with_pending(&self) -> String {
+        if self.live.text.is_empty() {
+            return String::new();
+        }
+        let pending = self.input_buf.pending();
+        format!(
+            "{}{}",
+            self.live.text,
+            self.converters.romaji.convert_flush(&pending)
+        )
+    }
+
     /// Format an `lctx: … rctx: …` line from explicit left/right context
     /// strings, each truncated to `display_context_len` (left keeps its tail,
     /// right keeps its head). Empty when both are absent or the limit is 0.

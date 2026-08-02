@@ -198,14 +198,8 @@ impl InputMethodEngine {
         // Save auto-suggest/live conversion result before clearing state.
         // This ensures the candidate that was displayed during input is preserved
         // in the conversion candidate list even if the re-inference uses a different strategy.
-        let mut prev_suggest_text = std::mem::take(&mut self.live.text);
-        // The live suggestion covers only the settled part of the buffer;
-        // the pending romaji was displayed after it (早稲田 + d). Append its
-        // settled form so the preserved candidate doesn't drop the tail.
-        if !prev_suggest_text.is_empty() {
-            let pending = self.input_buf.pending();
-            prev_suggest_text.push_str(&self.converters.romaji.convert_flush(&pending));
-        }
+        let prev_suggest_text = self.live_text_with_pending();
+        self.live.text.clear();
 
         if reading.is_empty() {
             return EngineResult::consumed();
