@@ -49,10 +49,13 @@ impl InputMethodEngine {
     /// The live conversion result as displayed: `live.text` plus the settled
     /// pending romaji tail (早稲田 + d → 早稲田d). Committing or preserving
     /// `live.text` alone would drop the tail, since the live suggestion only
-    /// covers the settled reading. Empty when live conversion has no result.
+    /// covers the settled reading. Empty when live conversion has no result
+    /// or the cursor is away from the end — there the display already fell
+    /// back to kana (see `build_composing_preedit`) and the pending run sits
+    /// mid-buffer, so the concatenation would not match what is shown.
     /// Must be called before `settle_romaji` (which empties the pending run).
     pub(super) fn live_text_with_pending(&self) -> String {
-        if self.live.text.is_empty() {
+        if self.live.text.is_empty() || self.input_buf.cursor() != self.input_buf.char_count() {
             return String::new();
         }
         let pending = self.input_buf.pending();

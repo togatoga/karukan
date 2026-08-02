@@ -216,6 +216,34 @@ fn test_conversion_keeps_pending_tail_of_live_candidate() {
 }
 
 #[test]
+fn test_commit_mid_buffer_ignores_live_text() {
+    // Typing away from the end shows the kana display (live text is not
+    // faithful there), so Enter must commit what is shown — あdい — and not
+    // splice the live text with the mid-buffer pending run (愛d).
+    let mut engine = make_live_conversion_engine();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press('d'));
+    assert_eq!(engine.preedit().unwrap().text(), "あdい");
+    engine.live.text = "愛".to_string();
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let commit_text = result
+        .actions
+        .iter()
+        .find_map(|a| {
+            if let EngineAction::Commit(text) = a {
+                Some(text.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(commit_text, "あdい");
+}
+
+#[test]
 fn test_live_conversion_cursor_move_clears() {
     // Moving cursor should clear live conversion text
     let mut engine = make_live_conversion_engine();
