@@ -79,8 +79,13 @@ impl Dictionary {
     /// Build a Dictionary from pre-sorted entries.
     ///
     /// Entries must already be sorted by `reading` bytes and deduplicated.
-    /// This is the shared final step for all dictionary builders.
-    fn build_from_entries(entries: Vec<DictEntry>) -> Result<Self> {
+    /// This is the shared final step for all dictionary builders; it also
+    /// sorts each entry's candidates by score ascending, the invariant
+    /// every lookup relies on (`load` enforces the same on read).
+    fn build_from_entries(mut entries: Vec<DictEntry>) -> Result<Self> {
+        for entry in &mut entries {
+            entry.candidates.sort_by(|a, b| a.score.total_cmp(&b.score));
+        }
         let keyset: Vec<(&[u8], u32)> = entries
             .iter()
             .enumerate()
@@ -111,18 +116,14 @@ impl Dictionary {
             .into_iter()
             .map(|je| DictEntry {
                 reading: katakana_to_hiragana(&je.reading),
-                candidates: {
-                    let mut cands: Vec<Candidate> = je
-                        .candidates
-                        .into_iter()
-                        .map(|jc| Candidate {
-                            surface: jc.surface,
-                            score: jc.score,
-                        })
-                        .collect();
-                    cands.sort_by(|a, b| a.score.total_cmp(&b.score));
-                    cands
-                },
+                candidates: je
+                    .candidates
+                    .into_iter()
+                    .map(|jc| Candidate {
+                        surface: jc.surface,
+                        score: jc.score,
+                    })
+                    .collect(),
             })
             .collect();
 
@@ -301,7 +302,8 @@ impl Dictionary {
         }
         let pool: Vec<&DictEntry> = self
             .entries_with_prefix(prefix)
-            .filter(|e| e.reading != prefix)
+            .filter(|(_, e)| e.reading != prefix)
+            .map(|(_, e)| e)
             .collect();
         Self::rank_predictive(pool, prefix.chars().count(), limit)
     }
@@ -321,9 +323,8 @@ impl Dictionary {
         let mut pool = Vec::new();
         for expansion in expansions {
             let prefix = format!("{base}{expansion}");
-            for entry in self.entries_with_prefix(&prefix) {
-                let key: *const DictEntry = entry;
-                if seen.insert(key) {
+            for (index, entry) in self.entries_with_prefix(&prefix) {
+                if seen.insert(index) {
                     pool.push(entry);
                 }
             }
@@ -331,16 +332,21 @@ impl Dictionary {
         Self::rank_predictive(pool, base.chars().count(), limit)
     }
 
-    /// Entries whose reading starts with `prefix`. Relies on `entries`
-    /// being sorted by reading (the build invariant).
-    fn entries_with_prefix<'s>(&'s self, prefix: &str) -> impl Iterator<Item = &'s DictEntry> + 's {
+    /// Entries whose reading starts with `prefix`, with their indices.
+    /// Relies on `entries` being sorted by reading (the build invariant).
+    fn entries_with_prefix<'s>(
+        &'s self,
+        prefix: &str,
+    ) -> impl Iterator<Item = (usize, &'s DictEntry)> + 's {
         let start = self
             .entries
             .partition_point(|e| e.reading.as_str() < prefix);
         let prefix = prefix.to_string();
         self.entries[start..]
             .iter()
-            .take_while(move |e| e.reading.starts_with(&prefix))
+            .enumerate()
+            .take_while(move |(_, e)| e.reading.starts_with(&prefix))
+            .map(move |(i, e)| (start + i, e))
     }
 
     /// Rank predictive matches by `score + 500·ln(50·remaining_chars)`.

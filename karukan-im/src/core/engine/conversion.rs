@@ -293,41 +293,25 @@ impl InputMethodEngine {
         pending: &str,
         limit: usize,
     ) -> Vec<AnnotatedCandidate> {
+        let dicts = [
+            (self.dicts.user.as_ref(), CandidateSource::UserDictionary),
+            (self.dicts.system.as_ref(), CandidateSource::Dictionary),
+        ];
         let mut candidates = Vec::new();
         let mut seen = HashSet::new();
 
-        // User dictionary (higher priority)
-        if let Some(dict) = &self.dicts.user
-            && let Some(result) = dict.exact_match_search(reading)
-        {
+        // Exact matches, user dictionary first. Candidates are sorted by
+        // score at build/load time
+        for (dict, source) in dicts {
+            let Some(result) = dict.and_then(|d| d.exact_match_search(reading)) else {
+                continue;
+            };
             for cand in result.candidates {
                 if candidates.len() >= limit {
                     break;
                 }
                 if seen.insert(cand.surface.clone()) {
-                    candidates.push(AnnotatedCandidate::new(
-                        cand.surface.clone(),
-                        CandidateSource::UserDictionary,
-                    ));
-                }
-            }
-        }
-
-        // System dictionary (sorted by score)
-        if let Some(dict) = &self.dicts.system
-            && let Some(result) = dict.exact_match_search(reading)
-        {
-            let mut dict_candidates: Vec<_> = result.candidates.to_vec();
-            dict_candidates.sort_by(|a, b| a.score.total_cmp(&b.score));
-            for cand in dict_candidates {
-                if candidates.len() >= limit {
-                    break;
-                }
-                if seen.insert(cand.surface.clone()) {
-                    candidates.push(AnnotatedCandidate::new(
-                        cand.surface,
-                        CandidateSource::Dictionary,
-                    ));
+                    candidates.push(AnnotatedCandidate::new(cand.surface.clone(), source));
                 }
             }
         }
@@ -338,14 +322,18 @@ impl InputMethodEngine {
         // the right key. An unresolved romaji tail narrows the lookup to
         // the kana it can still become; a tail that can't become kana
         // (`yk`) suppresses prediction entirely.
-        let expansions = self.converters.romaji.pending_expansions(pending);
-        let tail_is_dead = !pending.is_empty() && expansions.is_empty();
-        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS && !tail_is_dead {
-            let mut budget = MAX_PREDICTIVE_CANDIDATES;
-            for (dict, source) in [
-                (self.dicts.user.as_ref(), CandidateSource::UserDictionary),
-                (self.dicts.system.as_ref(), CandidateSource::Dictionary),
-            ] {
+        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS {
+            let expansions = self.converters.romaji.pending_expansions(pending);
+            let tail_is_dead = !pending.is_empty() && expansions.is_empty();
+            let mut budget = if tail_is_dead {
+                0
+            } else {
+                MAX_PREDICTIVE_CANDIDATES
+            };
+            for (dict, source) in dicts {
+                if budget == 0 {
+                    break;
+                }
                 let Some(dict) = dict else { continue };
                 let matches = if expansions.is_empty() {
                     dict.predictive_search(reading, budget)
