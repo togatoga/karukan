@@ -225,7 +225,6 @@ impl InputMethodEngine {
     /// and the first keyEvent, which would wipe the context.
     pub fn reset(&mut self) {
         self.state = InputState::Empty;
-        self.converters.romaji.reset();
         self.mode = ModeState::default();
         self.input_buf.clear();
         self.live.text.clear();
@@ -266,7 +265,7 @@ impl InputMethodEngine {
     /// Update state to Composing with current preedit and romaji buffer, returning the preedit.
     /// Automatically uses live conversion display when `live.text` is non-empty.
     fn set_composing_state(&mut self) -> Preedit {
-        let romaji_buffer = self.converters.romaji.buffer().to_string();
+        let romaji_buffer = self.input_buf.pending().to_string();
         let preedit = self.build_composing_preedit();
         self.state = InputState::Composing {
             preedit: preedit.clone(),
@@ -283,24 +282,9 @@ impl InputMethodEngine {
         }
     }
 
-    /// Flush the romaji buffer and insert result at cursor position
-    fn flush_romaji_to_composed(&mut self) {
-        if self.converters.romaji.buffer().is_empty() {
-            return;
-        }
-        let prev_output_len = self.converters.romaji.output().chars().count();
-        let _flushed = self.converters.romaji.flush();
-        // flush() appends converted buffer to output internally
-        let new_from_flush: String = self
-            .converters
-            .romaji
-            .output()
-            .chars()
-            .skip(prev_output_len)
-            .collect();
-        if !new_from_flush.is_empty() {
-            self.input_buf.insert(&new_from_flush);
-        }
+    /// Settle the pending romaji segment into the composed text at the cursor
+    fn freeze_pending_romaji(&mut self) {
+        self.input_buf.freeze_pending(&self.converters.romaji);
     }
 
     /// Set surrounding context from the full text plus a cursor offset in
@@ -390,12 +374,13 @@ impl InputMethodEngine {
         // Only consume the key when actually switching; otherwise pass through
         // so the system can properly track modifier state.
         if key.is_press && self.mode.current() != InputMode::Hiragana {
+            // Settle pending romaji first so it gets baked along with the rest
+            self.freeze_pending_romaji();
             // Bake katakana before switching so preedit doesn't revert
             if self.mode.current() == InputMode::Katakana {
                 self.bake_katakana();
             }
             self.mode.set(InputMode::Hiragana);
-            self.flush_romaji_to_composed();
             let aux = self.format_aux_composing();
             if matches!(self.state, InputState::Composing { .. }) {
                 let preedit = self.set_composing_state();
@@ -475,8 +460,8 @@ impl InputMethodEngine {
         match &self.state {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
-                // Flush romaji buffer into composed_hiragana
-                self.flush_romaji_to_composed();
+                // Settle pending romaji into composed_hiragana
+                self.freeze_pending_romaji();
                 let reading = self.input_buf.text.clone();
                 let text = if !self.live.text.is_empty() {
                     self.live.text.clone()
@@ -485,7 +470,6 @@ impl InputMethodEngine {
                 };
                 // Record live conversion result in learning cache
                 self.record_learning(&reading, &text);
-                self.converters.romaji.reset();
                 self.input_buf.clear();
                 self.live.text.clear();
                 self.state = InputState::Empty;

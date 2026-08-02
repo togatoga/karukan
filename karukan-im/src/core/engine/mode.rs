@@ -18,9 +18,7 @@ impl InputMethodEngine {
         // Clear live conversion text so katakana mode takes priority on commit
         self.live.text.clear();
 
-        let romaji_buffer = self.converters.romaji.buffer().to_string();
-
-        if self.input_buf.text.is_empty() && romaji_buffer.is_empty() {
+        if self.input_buf.text.is_empty() && self.input_buf.pending().is_empty() {
             return EngineResult::consumed();
         }
 

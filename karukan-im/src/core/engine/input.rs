@@ -110,7 +110,6 @@ impl InputMethodEngine {
     pub(super) fn process_key_empty(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
         // Ctrl+Space: start input with full-width space
         if key.modifiers.control_key && key.keysym == Keysym::SPACE {
-            self.converters.romaji.reset();
             self.input_buf.clear();
             self.input_buf.insert("\u{3000}");
             let preedit = self.set_composing_state();
@@ -193,37 +192,16 @@ impl InputMethodEngine {
     /// Start input with a character (first character of a new input session).
     /// In alphabet mode, inserts directly; otherwise goes through romaji conversion.
     pub(super) fn start_input(&mut self, ch: char) -> EngineResult {
-        self.converters.romaji.reset();
         self.input_buf.clear();
 
         if self.mode.current() == InputMode::Alphabet {
             self.input_buf.insert(&ch.to_string());
         } else {
-            let prev_output_len = 0;
-            let _event = self.converters.romaji.push(ch);
-            let romaji_buffer = self.converters.romaji.buffer().to_string();
-
             // PassThrough chars (no romaji rule, e.g. `'`, `;`, `<`, `(`) used to
             // auto-commit immediately, but that prevented users from composing
             // sequences like `「」` or getting symbol variants. Treat them like
             // digits — let them enter Composing and accumulate in the preedit.
-
-            if self.converters.romaji.output().is_empty() && romaji_buffer.is_empty() {
-                return EngineResult::not_consumed();
-            }
-
-            // Consume new converter output into composed_hiragana
-            let new_output_len = self.converters.romaji.output().chars().count();
-            if new_output_len > prev_output_len {
-                let new_chars: String = self
-                    .converters
-                    .romaji
-                    .output()
-                    .chars()
-                    .skip(prev_output_len)
-                    .collect();
-                self.input_buf.insert(&new_chars);
-            }
+            self.input_buf.push_kana(ch, &self.converters.romaji);
         }
 
         let preedit = self.set_composing_state();
@@ -290,6 +268,9 @@ impl InputMethodEngine {
                         ch.is_ascii_uppercase() || (shift_active && ch.is_ascii_alphabetic());
 
                     if is_shift_alpha && self.mode.current() != InputMode::Alphabet {
+                        // Settle pending romaji first so it gets baked along
+                        // with the rest of the buffer
+                        self.freeze_pending_romaji();
                         // Bake katakana before switching so preedit doesn't revert
                         if self.mode.current() == InputMode::Katakana {
                             self.bake_katakana();
@@ -299,7 +280,6 @@ impl InputMethodEngine {
                         // commit/cancel, so the next word returns to the
                         // prior mode (issue #37).
                         self.mode.enter_temporary(InputMode::Alphabet);
-                        self.flush_romaji_to_composed();
                         self.live.text.clear();
                     }
                     let ch = if self.mode.current() == InputMode::Alphabet && is_shift_alpha {
@@ -321,7 +301,6 @@ impl InputMethodEngine {
     /// the candidate list so the user sees emoji suggestions appear
     /// the moment they press `:`.
     pub(super) fn start_emoji_mode(&mut self) -> EngineResult {
-        self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
         // Remember where the user was so commit/cancel/erase-to-empty
@@ -354,28 +333,10 @@ impl InputMethodEngine {
             return self.refresh_input_state();
         }
 
-        let prev_output_len = self.converters.romaji.output().chars().count();
-        let _event = self.converters.romaji.push(ch);
-        let curr_output_len = self.converters.romaji.output().chars().count();
-
-        // Consume ALL new converter output into composed_hiragana at cursor position.
-        // The converter may recursively pass through multiple chars (e.g., "thx" →
-        // output="th", buffer="x"), so capture all of them via delta detection.
-        // PassThrough chars are already included in the converter output.
-        if curr_output_len > prev_output_len {
-            let new_chars: String = self
-                .converters
-                .romaji
-                .output()
-                .chars()
-                .skip(prev_output_len)
-                .collect();
-            self.input_buf.insert(&new_chars);
-        }
-
-        // PassThrough chars no longer auto-commit. They accumulate in the preedit
-        // alongside hiragana, allowing users to compose `「」`, type `'word'`,
-        // and access symbol variants from the candidate list.
+        // PassThrough chars accumulate in the preedit alongside hiragana,
+        // allowing users to compose `「」`, type `'word'`, and access symbol
+        // variants from the candidate list.
+        self.input_buf.push_kana(ch, &self.converters.romaji);
 
         if let Some(result) = self.try_reset_if_empty() {
             return result;
@@ -387,8 +348,8 @@ impl InputMethodEngine {
     /// Commit the current hiragana input (or katakana if in katakana mode)
     /// In live conversion mode, commits the converted text instead of hiragana.
     pub(super) fn commit_composing(&mut self) -> EngineResult {
-        // Flush any pending romaji into composed_hiragana
-        self.flush_romaji_to_composed();
+        // Settle any pending romaji into composed_hiragana
+        self.freeze_pending_romaji();
 
         let reading = self.input_buf.text.clone();
         let text = if self.mode.current() == InputMode::Emoji {
@@ -426,7 +387,6 @@ impl InputMethodEngine {
             self.record_learning(&reading, &text);
         }
 
-        self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
         self.chunks.clear();
@@ -473,7 +433,6 @@ impl InputMethodEngine {
                 None
             };
 
-        self.converters.romaji.reset();
         self.input_buf.clear();
         self.live.text.clear();
         self.chunks.clear();

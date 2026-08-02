@@ -1,0 +1,146 @@
+//! Pending-romaji editing tests: backspace over the raw segment must let
+//! remaining keystrokes re-combine, while settled text never reverts.
+
+use super::*;
+
+fn preedit_text(engine: &InputMethodEngine) -> String {
+    engine.preedit().unwrap().text().to_string()
+}
+
+/// The original bug: `ykt` → BS → `o` used to produce 「ykお」 because the
+/// passed-through `k` was settled the moment `t` arrived. Keeping the whole
+/// consonant run pending lets `o` re-derive `yko` → 「yこ」.
+#[test]
+fn test_ykt_backspace_then_o() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "ykt".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "ykt");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "yk");
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "yこ");
+}
+
+/// Settled text never reverts: っ stays っ after the pending `k` is erased.
+#[test]
+fn test_kk_backspace_keeps_sokuon() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('k'));
+    assert_eq!(preedit_text(&engine), "っk");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "っ");
+
+    engine.process_key(&press('a'));
+    assert_eq!(preedit_text(&engine), "っあ");
+}
+
+/// ん from the n-before-consonant rule stays settled after backspace.
+#[test]
+fn test_nk_backspace_keeps_n() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('n'));
+    engine.process_key(&press('k'));
+    assert_eq!(preedit_text(&engine), "んk");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "ん");
+
+    engine.process_key(&press('a'));
+    assert_eq!(preedit_text(&engine), "んあ");
+}
+
+/// Backspace on fully converted text removes one display character.
+#[test]
+fn test_kyo_backspace_then_o() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "kyo".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "きょ");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "き");
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きお");
+}
+
+/// Pending keystrokes pop one at a time; erasing everything resets the state.
+#[test]
+fn test_kan_backspace_to_empty() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "kan".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "かn");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "か");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+/// A consonant run stays fully erasable key by key.
+#[test]
+fn test_consonant_run_backspace_to_empty() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "ykt".chars() {
+        engine.process_key(&press(ch));
+    }
+    for expected in ["yk", "y"] {
+        engine.process_key(&press_key(Keysym::BACKSPACE));
+        assert_eq!(preedit_text(&engine), expected);
+    }
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+/// Returning from conversion to composing keeps the reading editable
+/// (no stale pending romaji).
+#[test]
+fn test_conversion_escape_then_continue_typing() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "kyo".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_key(Keysym::ESCAPE));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(preedit_text(&engine), "きょ");
+
+    engine.process_key(&press('u'));
+    assert_eq!(preedit_text(&engine), "きょう");
+}
+
+/// Cursor movement settles the pending romaji at the old cursor position.
+#[test]
+fn test_cursor_move_settles_pending() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('k'));
+    assert_eq!(preedit_text(&engine), "あk");
+
+    engine.process_key(&press_key(Keysym::LEFT));
+    assert_eq!(preedit_text(&engine), "あk");
+    assert_eq!(engine.preedit().unwrap().caret(), 1);
+
+    // The settled `k` no longer combines with new input
+    engine.process_key(&press_key(Keysym::END));
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "あkお");
+}

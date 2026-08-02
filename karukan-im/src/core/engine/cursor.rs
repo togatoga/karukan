@@ -3,14 +3,12 @@
 use super::*;
 
 impl InputMethodEngine {
-    /// Common helper for cursor movement: flush romaji, clear live conversion, set new position
-    fn move_caret(&mut self, new_pos: usize) -> EngineResult {
-        if !self.converters.romaji.buffer().is_empty() {
-            self.flush_romaji_to_composed();
-            self.converters.romaji.reset();
-        }
+    /// Common helper for cursor movement: settle pending romaji, clear live
+    /// conversion, then compute the new position from the settled buffer.
+    fn move_caret(&mut self, new_pos: impl FnOnce(&InputBuffer) -> usize) -> EngineResult {
+        self.freeze_pending_romaji();
         self.live.text.clear();
-        self.input_buf.cursor_pos = new_pos;
+        self.input_buf.cursor_pos = new_pos(&self.input_buf);
         self.log_chunk_state("cursor");
         let preedit = self.set_composing_state();
         EngineResult::consumed()
@@ -21,9 +19,10 @@ impl InputMethodEngine {
 
     /// Handle backspace in composing mode
     pub(super) fn backspace_composing(&mut self) -> EngineResult {
-        // If romaji buffer is not empty, backspace from buffer (not from composed text)
-        if !self.converters.romaji.buffer().is_empty() {
-            self.converters.romaji.backspace();
+        // Pending romaji first: drop the last raw keystroke. The settled text
+        // is untouched and the rest re-derives, so a consonant freed this way
+        // can still combine with the next key (`ykt` → BS → `o` → 「yこ」).
+        if self.input_buf.backspace_pending() {
             if let Some(result) = self.try_reset_if_empty() {
                 return result;
             }
@@ -51,21 +50,18 @@ impl InputMethodEngine {
 
     /// Move caret left within hiragana input
     pub(super) fn move_caret_left(&mut self) -> EngineResult {
-        let new_pos = self.input_buf.cursor_pos.saturating_sub(1);
-        self.move_caret(new_pos)
+        self.move_caret(|buf| buf.cursor_pos.saturating_sub(1))
     }
 
     /// Move caret right within hiragana input
     pub(super) fn move_caret_right(&mut self) -> EngineResult {
-        let total = self.input_buf.text.chars().count();
-        let new_pos = (self.input_buf.cursor_pos + 1).min(total);
-        self.move_caret(new_pos)
+        self.move_caret(|buf| (buf.cursor_pos + 1).min(buf.text.chars().count()))
     }
 
     /// Handle delete key in hiragana mode
     pub(super) fn delete_composing(&mut self) -> EngineResult {
-        // If romaji buffer is not empty, don't delete from composed (buffer is at cursor)
-        if !self.converters.romaji.buffer().is_empty() {
+        // If pending romaji is not empty, don't delete from composed (pending is at cursor)
+        if !self.input_buf.pending().is_empty() {
             return EngineResult::consumed();
         }
 
@@ -83,12 +79,11 @@ impl InputMethodEngine {
 
     /// Move caret to start of input
     pub(super) fn move_caret_home(&mut self) -> EngineResult {
-        self.move_caret(0)
+        self.move_caret(|_| 0)
     }
 
     /// Move caret to end of input
     pub(super) fn move_caret_end(&mut self) -> EngineResult {
-        let total = self.input_buf.text.chars().count();
-        self.move_caret(total)
+        self.move_caret(|buf| buf.text.chars().count())
     }
 }

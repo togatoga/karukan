@@ -1,9 +1,18 @@
 use super::rules::build_rules;
 use super::trie::TrieNode;
 
+/// Result of converting a raw input string.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Converted {
+    /// Converted output: hiragana plus passed-through characters
+    pub text: String,
+    /// Unresolved trailing input that may still extend to a longer rule
+    pub pending: String,
+}
+
 /// Events that can occur during conversion
 #[derive(Debug, Clone, PartialEq)]
-pub enum ConversionEvent {
+enum ConversionEvent {
     /// Characters were converted to hiragana
     Converted(String),
     /// Character added to buffer, waiting for more input
@@ -12,23 +21,13 @@ pub enum ConversionEvent {
     PassThrough(char),
 }
 
-/// Result of a backspace operation
-#[derive(Debug, Clone, PartialEq)]
-pub enum BackspaceResult {
-    /// Removed from output
-    RemovedOutput(char),
-    /// Removed from buffer
-    RemovedBuffer(char),
-    /// Nothing to remove
-    Empty,
-}
-
-/// Romaji to Hiragana converter with state management
+/// Stateless romaji-to-hiragana converter.
+///
+/// Holds only the rule trie; each call derives its result from the full raw
+/// input, so the caller owns all editing state.
 #[derive(Debug)]
 pub struct RomajiConverter {
     trie: TrieNode,
-    buffer: String,
-    output: String,
 }
 
 impl RomajiConverter {
@@ -36,13 +35,74 @@ impl RomajiConverter {
     pub fn new() -> Self {
         Self {
             trie: build_rules(),
-            buffer: String::new(),
-            output: String::new(),
         }
     }
 
+    /// Convert `raw` left to right. `pending` holds the trailing input that
+    /// may still combine with future keys (e.g. `k`, `ky`, a lone `n`).
+    pub fn convert(&self, raw: &str) -> Converted {
+        let mut scratch = Scratch {
+            trie: &self.trie,
+            buffer: String::new(),
+            output: String::new(),
+        };
+        for ch in raw.chars() {
+            scratch.push(ch);
+        }
+        Converted {
+            text: scratch.output,
+            pending: scratch.buffer,
+        }
+    }
+
+    /// Force-convert leftover pending input (`ltu` → っ); characters with no
+    /// rule pass through literally (a trailing `n` stays `n`).
+    pub fn flush_pending(&self, pending: &str) -> String {
+        let mut buffer = pending.to_string();
+        let mut result = String::new();
+
+        while !buffer.is_empty() {
+            let search = self.trie.search_longest(&buffer);
+            if let Some(h) = search.output {
+                result.push_str(h);
+                buffer.drain(..search.matched_len);
+            } else {
+                result.push(buffer.remove(0));
+            }
+        }
+
+        result
+    }
+
+    /// Convert then flush the leftover: the committed form of `raw`.
+    pub fn convert_flush(&self, raw: &str) -> String {
+        let Converted { mut text, pending } = self.convert(raw);
+        text.push_str(&self.flush_pending(&pending));
+        text
+    }
+
+    /// Whether `ch` can start a conversion rule (e.g. `k`, `y`, `n`).
+    pub fn starts_rule(&self, ch: char) -> bool {
+        self.trie.children.contains_key(&ch)
+    }
+}
+
+impl Default for RomajiConverter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Working state for one `convert` call.
+struct Scratch<'a> {
+    trie: &'a TrieNode,
+    buffer: String,
+    output: String,
+}
+
+impl Scratch<'_> {
     /// Push a character and attempt conversion
-    pub fn push(&mut self, ch: char) -> ConversionEvent {
+    fn push(&mut self, ch: char) -> ConversionEvent {
         // Handle uppercase by converting to lowercase
         let ch = ch.to_ascii_lowercase();
 
@@ -144,7 +204,7 @@ impl RomajiConverter {
             if first_char_has_children {
                 // Check if the current buffer could still lead to a match
                 // by walking the trie to see if we're on a valid path
-                let mut node = &self.trie;
+                let mut node = self.trie;
                 let mut on_valid_path = true;
                 for ch in self.buffer.chars() {
                     if let Some(child) = node.children.get(&ch) {
@@ -191,245 +251,107 @@ impl RomajiConverter {
 
         ConversionEvent::Buffered
     }
-
-    /// Flush remaining buffer by converting what we can
-    pub fn flush(&mut self) -> String {
-        let mut result = String::new();
-
-        while !self.buffer.is_empty() {
-            let search = self.trie.search_longest(&self.buffer);
-
-            if let Some(h) = search.output {
-                result.push_str(h);
-                self.output.push_str(h);
-                self.buffer.drain(..search.matched_len);
-            } else {
-                // No match, pass through first character
-                if let Some(ch) = self.buffer.chars().next() {
-                    result.push(ch);
-                    self.output.push(ch);
-                    self.buffer.remove(0);
-                }
-            }
-        }
-
-        result
-    }
-
-    /// Handle backspace
-    pub fn backspace(&mut self) -> BackspaceResult {
-        if let Some(ch) = self.buffer.pop() {
-            BackspaceResult::RemovedBuffer(ch)
-        } else if let Some(ch) = self.output.pop() {
-            BackspaceResult::RemovedOutput(ch)
-        } else {
-            BackspaceResult::Empty
-        }
-    }
-
-    /// Get the current output
-    pub fn output(&self) -> &str {
-        &self.output
-    }
-
-    /// Get the current buffer (unconverted input)
-    pub fn buffer(&self) -> &str {
-        &self.buffer
-    }
-
-    /// Reset the converter state
-    pub fn reset(&mut self) {
-        self.buffer.clear();
-        self.output.clear();
-    }
-}
-
-impl Default for RomajiConverter {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn conv(raw: &str) -> (String, String) {
+        let c = RomajiConverter::new();
+        let r = c.convert(raw);
+        (r.text, r.pending)
+    }
+
     #[test]
     fn test_basic_conversion() {
-        let mut conv = RomajiConverter::new();
-        conv.push('k');
-        conv.push('a');
-        assert_eq!(conv.output(), "か");
-        assert_eq!(conv.buffer(), "");
+        assert_eq!(conv("ka"), ("か".to_string(), "".to_string()));
     }
 
     #[test]
     fn test_buffering() {
-        let mut conv = RomajiConverter::new();
-        let result = conv.push('k');
-        assert_eq!(result, ConversionEvent::Buffered);
-        assert_eq!(conv.buffer(), "k");
+        assert_eq!(conv("k"), ("".to_string(), "k".to_string()));
     }
 
     #[test]
     fn test_sokuon() {
-        let mut conv = RomajiConverter::new();
-        conv.push('k');
-        conv.push('k');
-        assert_eq!(conv.output(), "っ");
-        assert_eq!(conv.buffer(), "k");
-
-        conv.push('a');
-        assert_eq!(conv.output(), "っか");
-        assert_eq!(conv.buffer(), "");
+        assert_eq!(conv("kk"), ("っ".to_string(), "k".to_string()));
+        assert_eq!(conv("kka"), ("っか".to_string(), "".to_string()));
     }
 
     #[test]
     fn test_n_context() {
-        let mut conv = RomajiConverter::new();
-        conv.push('n');
-        assert_eq!(conv.buffer(), "n"); // Wait for context
-
-        conv.push('a');
-        assert_eq!(conv.output(), "な");
-        assert_eq!(conv.buffer(), "");
+        assert_eq!(conv("n"), ("".to_string(), "n".to_string()));
+        assert_eq!(conv("na"), ("な".to_string(), "".to_string()));
     }
 
     #[test]
     fn test_nn() {
-        let mut conv = RomajiConverter::new();
-
-        // Test "nn" - should convert immediately to ん
-        conv.push('n');
-        assert_eq!(conv.buffer(), "n"); // First 'n' is buffered
-        conv.push('n');
-        assert_eq!(conv.buffer(), ""); // Buffer cleared after conversion
-        assert_eq!(conv.output(), "ん"); // Immediately converted to ん
-
-        // Test "nni" - should produce "んい" (nn -> ん immediately, i -> い)
-        conv.reset();
-        "nni".chars().for_each(|c| {
-            conv.push(c);
-        });
-        assert_eq!(conv.output(), "んい");
-
-        // Test "nna" - should produce "んあ" (nn -> ん immediately, a -> あ)
-        conv.reset();
-        "nna".chars().for_each(|c| {
-            conv.push(c);
-        });
-        assert_eq!(conv.output(), "んあ");
-
-        // Test "nnk" - should produce "んk" (nn -> ん immediately, k buffered)
-        conv.reset();
-        "nnk".chars().for_each(|c| {
-            conv.push(c);
-        });
-        assert_eq!(conv.output(), "ん");
-        assert_eq!(conv.buffer(), "k");
+        // "nn" converts immediately to ん
+        assert_eq!(conv("nn"), ("ん".to_string(), "".to_string()));
+        assert_eq!(conv("nni"), ("んい".to_string(), "".to_string()));
+        assert_eq!(conv("nna"), ("んあ".to_string(), "".to_string()));
+        assert_eq!(conv("nnk"), ("ん".to_string(), "k".to_string()));
     }
 
     #[test]
     fn test_youon() {
-        let mut conv = RomajiConverter::new();
-        "kya".chars().for_each(|c| {
-            conv.push(c);
-        });
-        assert_eq!(conv.output(), "きゃ");
+        assert_eq!(conv("kya"), ("きゃ".to_string(), "".to_string()));
     }
 
     #[test]
     fn test_flush() {
-        let mut conv = RomajiConverter::new();
-        conv.push('k');
-        assert_eq!(conv.buffer(), "k");
-
-        let flushed = conv.flush();
-        assert_eq!(flushed, "k");
-        assert_eq!(conv.output(), "k");
-        assert_eq!(conv.buffer(), "");
+        let c = RomajiConverter::new();
+        assert_eq!(c.flush_pending("k"), "k");
+        assert_eq!(c.flush_pending("ltu"), "っ");
+        assert_eq!(c.convert_flush("k"), "k");
+        assert_eq!(c.convert_flush("kan"), "かn");
     }
 
     #[test]
-    fn test_backspace() {
-        let mut conv = RomajiConverter::new();
-        conv.push('k');
-        conv.push('a');
-        assert_eq!(conv.output(), "か");
-
-        conv.push('k');
-        assert_eq!(conv.buffer(), "k");
-
-        let result = conv.backspace();
-        assert_eq!(result, BackspaceResult::RemovedBuffer('k'));
-        assert_eq!(conv.buffer(), "");
-
-        let result = conv.backspace();
-        assert_eq!(result, BackspaceResult::RemovedOutput('か'));
+    fn test_starts_rule() {
+        let c = RomajiConverter::new();
+        assert!(c.starts_rule('k'));
+        assert!(c.starts_rule('y'));
+        assert!(c.starts_rule('n'));
+        assert!(!c.starts_rule('1'));
+        assert!(!c.starts_rule('こ'));
     }
 
     #[test]
     fn test_full_sentence() {
-        let mut conv = RomajiConverter::new();
         // IME style: "nn" is always ん, so こんにちは requires 3 n's: "konnnichiha"
         // (ko -> こ, nn -> ん, ni -> に, chi -> ち, ha -> は)
-        let input = "konnnichiha";
-        for ch in input.chars() {
-            conv.push(ch);
-        }
-        assert_eq!(conv.output(), "こんにちは");
+        assert_eq!(conv("konnnichiha").0, "こんにちは");
     }
 
     #[test]
     fn test_punctuation_passthrough() {
-        let mut conv = RomajiConverter::new();
-        // Test that punctuation passes through and conversion continues after
-        let input = "kokohadoko?watashihadare?";
-        for ch in input.chars() {
-            conv.push(ch);
-        }
-        assert_eq!(conv.output(), "ここはどこ？わたしはだれ？");
-        assert_eq!(conv.buffer(), "");
+        assert_eq!(
+            conv("kokohadoko?watashihadare?"),
+            ("ここはどこ？わたしはだれ？".to_string(), "".to_string())
+        );
     }
 
     #[test]
     fn test_mixed_punctuation() {
-        let mut conv = RomajiConverter::new();
-        let input = "a!b?c";
-        for ch in input.chars() {
-            conv.push(ch);
-        }
-        // 'c' stays in buffer because it could start 'ca', 'chi', etc.
-        assert_eq!(conv.output(), "あ！b？");
-        assert_eq!(conv.buffer(), "c");
-
-        // After flush, 'c' passes through
-        conv.flush();
-        assert_eq!(conv.output(), "あ！b？c");
-        assert_eq!(conv.buffer(), "");
+        // 'c' stays pending because it could start 'ca', 'chi', etc.
+        assert_eq!(conv("a!b?c"), ("あ！b？".to_string(), "c".to_string()));
+        let c = RomajiConverter::new();
+        assert_eq!(c.convert_flush("a!b?c"), "あ！b？c");
     }
 
     #[test]
     fn test_watashiha() {
-        let mut conv = RomajiConverter::new();
-        let input = "kokohadoko?watashiha?";
-        for ch in input.chars() {
-            conv.push(ch);
-        }
-        assert_eq!(conv.output(), "ここはどこ？わたしは？");
-        assert_eq!(conv.buffer(), "");
+        assert_eq!(
+            conv("kokohadoko?watashiha?"),
+            ("ここはどこ？わたしは？".to_string(), "".to_string())
+        );
     }
 
     #[test]
     fn test_punctuation_then_youon() {
-        let mut conv = RomajiConverter::new();
-        // a?b?cya should become あ？b？ちゃ
-        // 'c' must stay in buffer after '?' until 'ya' completes 'cya'
-        let input = "a?b?cya";
-        for ch in input.chars() {
-            conv.push(ch);
-        }
-        assert_eq!(conv.output(), "あ？b？ちゃ");
-        assert_eq!(conv.buffer(), "");
+        // 'c' must stay pending after '?' until 'ya' completes 'cya'
+        assert_eq!(conv("a?b?cya"), ("あ？b？ちゃ".to_string(), "".to_string()));
     }
 }

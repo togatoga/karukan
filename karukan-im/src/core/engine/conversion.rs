@@ -181,8 +181,8 @@ impl InputMethodEngine {
     /// `skip_learning` is set by the Tab path to omit learning-cache
     /// candidates (Space/Down keep the default learning-included behavior).
     pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
-        // Flush any remaining romaji into composed_hiragana
-        self.flush_romaji_to_composed();
+        // Settle any remaining romaji into composed_hiragana
+        self.freeze_pending_romaji();
 
         let reading = self.input_buf.text.clone();
 
@@ -191,7 +191,6 @@ impl InputMethodEngine {
         // in the conversion candidate list even if the re-inference uses a different strategy.
         let prev_suggest_text = std::mem::take(&mut self.live.text);
 
-        self.converters.romaji.reset();
         self.input_buf.cursor_pos = 0;
 
         if reading.is_empty() {
@@ -761,16 +760,9 @@ impl InputMethodEngine {
                 .with_action(EngineAction::HideAuxText);
         }
 
-        // Set up composed_hiragana with the reading
-        self.input_buf.text = reading.clone();
-        self.input_buf.cursor_pos = self.input_buf.text.chars().count();
-
-        // Reset romaji converter and set output to reading
-        self.converters.romaji.reset();
-        // We need to push each character to rebuild the state
-        for ch in reading.chars() {
-            self.converters.romaji.push(ch);
-        }
+        // Set up composed_hiragana with the reading (no pending romaji)
+        self.input_buf.clear();
+        self.input_buf.insert(&reading);
 
         let preedit = self.set_composing_state();
 
