@@ -326,7 +326,10 @@ fn evaluate_run(run: &str, romaji: &RomajiConverter) -> Vec<Element> {
             if c != p {
                 break;
             }
-            if romaji.is_rule_prefix(&c.to_string()) {
+            // A keystroke that can still begin a rule stays live so a
+            // later edit can combine it (`ykt` → BS → `o` → 「yこ」);
+            // one that can't (`1`) settles and stays in the reading
+            if romaji.starts_rule(c) {
                 elements.push(Element::Romaji(c));
             } else {
                 elements.push(Element::Converted(c));

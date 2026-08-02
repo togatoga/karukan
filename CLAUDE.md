@@ -104,7 +104,7 @@ cargo clippy --workspace  # Lint all crates
 - `romaji/` — Romaji-to-hiragana conversion
   - `trie.rs` — Trie data structure
   - `rules.rs` — 200+ conversion rule
-  - `converter.rs` — Stateless converter (`convert`/`flush_pending`/`is_rule_prefix`)
+  - `converter.rs` — Stateless converter (`convert`/`flush_pending`/`starts_rule`)
 - `kanji/` — Kana-kanji conversion via llama.cpp
   - `backend.rs` — Backend + KanaKanjiConverter
   - `llamacpp.rs` — GGUF inference
