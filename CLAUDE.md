@@ -134,7 +134,7 @@ cargo clippy --workspace  # Lint all crates
   - `mod.rs` — Main InputMethodEngine struct and core processing logic
   - `types.rs` — EngineConfig, EngineResult, EngineAction, Converters, ConversionStrategy
   - `input.rs` — Key input handling for Composing state
-  - `input_buffer.rs` — Composition record: per-display-char element array (`Romaji`/`Converted`/`Direct`) + caret index; display/reading/pending are derived views
+  - `input_buffer.rs` — Composition record: per-display-char element array (`Romaji`/`Converted`) + caret index; display/reading/pending are derived views
   - `conversion.rs` — Conversion mode handling (candidate building, commit)
   - `chunk.rs` — Live-conversion chunking: the Japanese/non-Japanese split (`is_japanese`, `group_chunks`), incremental re-chunk diff (`ChunkPlan`), and `chunked_auto_suggest`
   - `cursor.rs` — Cursor movement
@@ -183,7 +183,7 @@ The engine-internal `InputMode::Alphabet` (entered via Shift+letter on Linux/fci
 ## Key Design Patterns
 
 - IMEEngine uses a state machine: Empty → Composing → Conversion
-- `input_buf: InputBuffer` in IMEEngine is the source of truth: an element array (one element per display character — `Romaji(char)` unfired keystroke / `Converted(char)` fired output / `Direct(char)` direct input) plus a caret index. All views (display, conversion reading, aux romaji tail) are derived from it
+- `input_buf: InputBuffer` in IMEEngine is the source of truth: an element array (one element per display character — `Romaji(char)` unfired keystroke / `Converted(char)` settled character: fired output, passthrough, or direct input) plus a caret index. All views (display, conversion reading, aux romaji tail) are derived from it
 - `RomajiConverter` is stateless (pure `convert`/`flush_pending`); after each romaji keystroke the engine re-evaluates only the Romaji run ending at the caret (`evaluate_run`), re-recording fired keystrokes as `Converted`. `Converted` never re-enters evaluation, so settled text never reverts. Backspace/delete remove one element and then evaluate the run the removal joined, so the result always equals typing the remaining keystrokes fresh (`ykt` → BS → `o` → 「yこ」; `yt1t` minus the `1` → 「yっt」). Cursor moves and mode toggles never touch the array
 - Models use jinen format with special Unicode tokens (U+EE00–U+EE02) from the Private Use Area; model input is katakana (hiragana is converted to katakana before inference)
 - Model registry defined in `karukan-engine/models.toml`; default models use Q5_K_M quantization

@@ -10,11 +10,9 @@
 //!
 //! - [`Element::Romaji`]: one keystroke not yet consumed by a rule (`y`,
 //!   `k`, a lone `n`). Shown verbatim; evaluation may later consume it.
-//! - [`Element::Converted`]: one character of settled output — a fired
-//!   rule's kana or a passthrough like `1`. Opaque to evaluation; it never
-//!   reverts.
-//! - [`Element::Direct`]: one directly-input keystroke (alphabet/emoji
-//!   mode). Opaque to evaluation.
+//! - [`Element::Converted`]: one settled character — a fired rule's kana,
+//!   a passthrough like `1`, or direct input (alphabet/emoji mode). Opaque
+//!   to evaluation; it never reverts.
 //!
 //! **Evaluation** derives everything else: the display, the conversion
 //! reading, and the aux romaji tail. After a romaji keystroke is recorded,
@@ -22,7 +20,7 @@
 //! keystrokes a rule consumed are re-recorded as its output. Elements
 //! right of the cursor are never touched, so nothing combines across the
 //! caret, and the caret moves without settling anything — `[Romaji(k),
-//! Romaji(y), Direct(K)]` plus `o` typed before the `K` evaluates to
+//! Romaji(y), Converted(K)]` plus `o` typed before the `K` evaluates to
 //! 「きょK」.
 //!
 //! Every record edit ends with an evaluation. Typing evaluates the run
@@ -39,16 +37,15 @@ use karukan_engine::RomajiConverter;
 enum Element {
     /// A keystroke not yet consumed by a conversion rule
     Romaji(char),
-    /// Settled output: a fired rule's character (`ko` → こ) or passthrough (`1`)
+    /// A settled character: fired rule output (`ko` → こ), passthrough
+    /// (`1`), or direct input — excluded from romaji evaluation
     Converted(char),
-    /// A directly-input keystroke — excluded from romaji evaluation
-    Direct(char),
 }
 
 impl Element {
     fn ch(&self) -> char {
         match self {
-            Element::Romaji(ch) | Element::Converted(ch) | Element::Direct(ch) => *ch,
+            Element::Romaji(ch) | Element::Converted(ch) => *ch,
         }
     }
 
@@ -64,8 +61,8 @@ pub(super) struct InputBuffer {
     /// per display character — is also the display position.
     ///
     /// ```text
-    /// elements: [Romaji(k), Romaji(y), Converted(1), Direct(K)]
-    /// boundary: 0         1          2             3          4
+    /// elements: [Romaji(k), Romaji(y), Converted(1), Converted(K)]
+    /// boundary: 0         1          2             3             4
     ///                                ↑ cursor = 2 (between y and 1)
     /// ```
     cursor: usize,
@@ -99,9 +96,10 @@ impl InputBuffer {
         self.evaluate_active_run(romaji);
     }
 
-    /// Record a direct-input keystroke at the caret.
+    /// Record a direct-input keystroke (alphabet/emoji mode) at the caret,
+    /// settled as-is.
     pub fn push_direct(&mut self, ch: char) {
-        self.elements.insert(self.cursor, Element::Direct(ch));
+        self.elements.insert(self.cursor, Element::Converted(ch));
         self.cursor += 1;
     }
 
