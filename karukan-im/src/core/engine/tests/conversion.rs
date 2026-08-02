@@ -45,6 +45,29 @@ fn test_conversion_char_commits_and_continues_romaji() {
 }
 
 #[test]
+fn test_shift_space_moves_to_prev_candidate() {
+    let mut engine = InputMethodEngine::new();
+
+    // Type "あ" and enter conversion
+    engine.process_key(&press('a'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    // Space → next candidate
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    // Shift+Space → prev candidate (should stay in conversion, not commit)
+    let result = engine.process_key(&press_shift_key(Keysym::SPACE));
+    assert!(result.consumed);
+    assert!(
+        matches!(engine.state(), InputState::Conversion { .. }),
+        "Shift+Space should navigate candidates, not commit"
+    );
+}
+
+#[test]
 fn test_alphabet_mode_space_inserts_literal_space() {
     let mut engine = InputMethodEngine::new();
 

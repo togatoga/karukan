@@ -39,6 +39,10 @@ fn press_shift(ch: char) -> KeyEvent {
     )
 }
 
+fn press_shift_key(keysym: Keysym) -> KeyEvent {
+    KeyEvent::new(keysym, KeyModifiers::new().with_shift(true), true)
+}
+
 fn press_ctrl(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(keysym, KeyModifiers::new().with_control(true), true)
 }
