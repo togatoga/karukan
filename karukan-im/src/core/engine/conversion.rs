@@ -11,6 +11,14 @@ use super::*;
 /// Maximum number of learning candidates to show
 const MAX_LEARNING_CANDIDATES: usize = 3;
 
+/// Max predictive (prefix-extending) dictionary candidates appended after
+/// the exact matches
+const MAX_PREDICTIVE_CANDIDATES: usize = 3;
+
+/// Min typed characters before predictive dictionary lookup kicks in — a
+/// single key would flood the list from a large dictionary
+const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
+
 /// Mozc-style width/script annotation for a pure-kana candidate, or `None`
 /// if the text mixes scripts or contains kanji/punctuation. Used to label
 /// `あ` / `ア` / `ｱ` candidates in the conversion list.
@@ -315,6 +323,32 @@ impl InputMethodEngine {
             }
         }
 
+        // Predictive: dictionary readings extending the typed prefix,
+        // mirroring the learning cache's prefix lookup. The full reading
+        // rides on the candidate so selecting it commits and records under
+        // the right key.
+        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS {
+            let mut budget = MAX_PREDICTIVE_CANDIDATES;
+            for (dict, source) in [
+                (self.dicts.user.as_ref(), CandidateSource::UserDictionary),
+                (self.dicts.system.as_ref(), CandidateSource::Dictionary),
+            ] {
+                let Some(dict) = dict else { continue };
+                for m in dict.predictive_search(reading, budget) {
+                    if budget == 0 || candidates.len() >= limit {
+                        break;
+                    }
+                    if seen.insert(m.candidate.surface.clone()) {
+                        budget -= 1;
+                        candidates.push(
+                            AnnotatedCandidate::new(m.candidate.surface.clone(), source)
+                                .with_reading(Some(m.reading.to_string())),
+                        );
+                    }
+                }
+            }
+        }
+
         candidates
     }
 
@@ -528,7 +562,8 @@ impl InputMethodEngine {
             .into_iter()
             .map(|ac| Candidate {
                 text: ac.text,
-                reading: Some(reading.to_string()),
+                // Predictive results carry their own (longer) reading
+                reading: ac.reading.or_else(|| Some(reading.to_string())),
                 source: Some(ac.source),
                 description: None,
             })

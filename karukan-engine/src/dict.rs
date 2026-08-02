@@ -49,6 +49,13 @@ pub struct LookupResult<'a> {
     pub candidates: &'a [Candidate],
 }
 
+/// A predictive match: a candidate whose reading extends the searched prefix.
+#[derive(Debug)]
+pub struct PredictiveMatch<'a> {
+    pub reading: &'a str,
+    pub candidate: &'a Candidate,
+}
+
 /// A double-array trie dictionary for kana-kanji conversion.
 pub struct Dictionary {
     trie: DoubleArray<Vec<u8>>,
@@ -279,6 +286,44 @@ impl Dictionary {
                 })
             })
             .collect()
+    }
+
+    /// Predictive search: candidates whose reading strictly extends `prefix`
+    /// (a reading equal to `prefix` is excluded — that's `exact_match_search`).
+    ///
+    /// Ranked ascending by `score + 500·ln(50·remaining_chars)`: scores are
+    /// -500·log(p) costs, so demoting longer completions stays on the same
+    /// scale and a common long word can still beat a rare short one.
+    /// Relies on `entries` being sorted by reading (the build invariant).
+    pub fn predictive_search(&self, prefix: &str, limit: usize) -> Vec<PredictiveMatch<'_>> {
+        if prefix.is_empty() || limit == 0 {
+            return Vec::new();
+        }
+        let prefix_chars = prefix.chars().count();
+        let start = self
+            .entries
+            .partition_point(|e| e.reading.as_str() < prefix);
+        let mut ranked: Vec<(f32, PredictiveMatch<'_>)> = self.entries[start..]
+            .iter()
+            .take_while(|e| e.reading.starts_with(prefix))
+            .filter(|e| e.reading != prefix)
+            .flat_map(|entry| {
+                let remaining = (entry.reading.chars().count() - prefix_chars) as f32;
+                let penalty = 500.0 * (50.0 * remaining).ln();
+                entry.candidates.iter().map(move |candidate| {
+                    (
+                        candidate.score + penalty,
+                        PredictiveMatch {
+                            reading: &entry.reading,
+                            candidate,
+                        },
+                    )
+                })
+            })
+            .collect();
+        ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
+        ranked.truncate(limit);
+        ranked.into_iter().map(|(_, m)| m).collect()
     }
 
     /// Exact match search: returns the entry whose reading exactly matches `input`.
@@ -657,6 +702,44 @@ mod tests {
         assert!((result.candidates[1].score - 1.5).abs() < f32::EPSILON);
 
         assert!(dict.exact_match_search("きょうとふ").is_none());
+    }
+
+    #[test]
+    fn test_predictive_search() {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        // 和船 (remaining 1, cost 100)      -> 100 + 500·ln(50)  ≈ 2056
+        // 早稲田大学 (remaining 5, cost 1000) -> 1000 + 500·ln(250) ≈ 3761
+        // 早稲田 (remaining 1, cost 4000)    -> 4000 + 500·ln(50)  ≈ 5956
+        write!(
+            f,
+            r#"[
+                {{"reading":"わせ","candidates":[{{"surface":"和瀬","score":3000.0}}]}},
+                {{"reading":"わせだ","candidates":[{{"surface":"早稲田","score":4000.0}}]}},
+                {{"reading":"わせだだいがく","candidates":[{{"surface":"早稲田大学","score":1000.0}}]}},
+                {{"reading":"わせん","candidates":[{{"surface":"和船","score":100.0}}]}},
+                {{"reading":"とうきょう","candidates":[{{"surface":"東京","score":1.0}}]}}
+            ]"#
+        )
+        .unwrap();
+        f.flush().unwrap();
+        let dict = Dictionary::build_from_json(f.path()).unwrap();
+
+        let matches = dict.predictive_search("わせ", 10);
+        let surfaces: Vec<&str> = matches
+            .iter()
+            .map(|m| m.candidate.surface.as_str())
+            .collect();
+        // Exact わせ excluded; common long completion beats rare short one
+        assert_eq!(surfaces, ["和船", "早稲田大学", "早稲田"]);
+        assert_eq!(matches[1].reading, "わせだだいがく");
+
+        // Limit caps the ranked result
+        let top = dict.predictive_search("わせ", 1);
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].candidate.surface, "和船");
+
+        assert!(dict.predictive_search("", 10).is_empty());
+        assert!(dict.predictive_search("わせだだいがくいん", 10).is_empty());
     }
 
     #[test]
