@@ -147,21 +147,27 @@ impl InputBuffer {
         self.cursor - active_chars
     }
 
-    /// Push a kana-mode keystroke at the cursor and re-evaluate the Romaji
-    /// run ending there.
+    /// Push a kana-mode keystroke at the cursor: insert it like any other
+    /// element, then re-evaluate the active run it now ends.
     pub fn push_romaji(&mut self, ch: char, romaji: &RomajiConverter) {
         let at = self.split_at_cursor();
         self.elements
             .insert(at, Element::Romaji(ch.to_ascii_lowercase()));
+        self.cursor += 1;
+        self.evaluate_active_run(romaji);
+    }
 
-        // Maximal Romaji run ending at the inserted key
-        let end = at + 1;
-        let start = self.elements[..end]
-            .iter()
-            .rposition(|e| !e.is_romaji())
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        let run: String = self.elements[start..end]
+    /// Re-evaluate the active run (the Romaji run ending at the cursor),
+    /// replacing keystrokes a rule consumed with its output. The cursor
+    /// lands after the run, whose display may have shrunk (`kyo` → きょ).
+    /// A run that no fresh keystroke touched is already at a fixpoint, so
+    /// only [`Self::push_romaji`] needs to call this.
+    fn evaluate_active_run(&mut self, romaji: &RomajiConverter) {
+        let range = self.active_run();
+        if range.is_empty() {
+            return;
+        }
+        let run: String = self.elements[range.clone()]
             .iter()
             .filter_map(|e| match e {
                 Element::Romaji(c) => Some(*c),
@@ -170,9 +176,11 @@ impl InputBuffer {
             .collect();
         let evaluated = evaluate_run(&run, romaji);
         let evaluated_chars: usize = evaluated.iter().map(Element::char_count).sum();
-        self.elements.splice(start..end, evaluated);
-
-        let prefix_chars: usize = self.elements[..start].iter().map(Element::char_count).sum();
+        let prefix_chars: usize = self.elements[..range.start]
+            .iter()
+            .map(Element::char_count)
+            .sum();
+        self.elements.splice(range, evaluated);
         self.cursor = prefix_chars + evaluated_chars;
     }
 
