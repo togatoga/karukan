@@ -19,18 +19,24 @@ impl InputMethodEngine {
 
     /// Handle backspace in composing mode
     pub(super) fn backspace_composing(&mut self) -> EngineResult {
-        // Pending romaji first: drop the last raw keystroke. The settled text
-        // is untouched and the rest re-derives, so a consonant freed this way
-        // can still combine with the next key (`ykt` → BS → `o` → 「yこ」).
-        if self.input_buf.backspace_pending() {
+        // Active elements first: remove the last one whole. The elements
+        // before it stay live, so a freed consonant still combines with the
+        // next key (`ytko` → BS → `o` → 「yと」).
+        let reading_before = self.input_buf.reading();
+        if self.input_buf.backspace_element(&self.converters.romaji) {
             if let Some(result) = self.try_reset_if_empty() {
                 return result;
             }
 
-            let preedit = self.set_composing_state();
-            return EngineResult::consumed()
-                .with_action(EngineAction::UpdatePreedit(preedit))
-                .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
+            // Reading unchanged (a live keystroke was popped): keep the
+            // candidate window as-is
+            if self.input_buf.reading() == reading_before {
+                let preedit = self.set_composing_state();
+                return EngineResult::consumed()
+                    .with_action(EngineAction::UpdatePreedit(preedit))
+                    .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
+            }
+            return self.refresh_input_state();
         }
 
         // Remove character before cursor from composed_hiragana
@@ -60,8 +66,8 @@ impl InputMethodEngine {
 
     /// Handle delete key in hiragana mode
     pub(super) fn delete_composing(&mut self) -> EngineResult {
-        // If pending romaji is not empty, don't delete from composed (pending is at cursor)
-        if !self.input_buf.pending().is_empty() {
+        // Active elements sit at the cursor; don't delete from composed text
+        if self.input_buf.has_elements() {
             return EngineResult::consumed();
         }
 

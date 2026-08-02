@@ -14,13 +14,15 @@ fn append_candidates_dedup(target: &mut Vec<Candidate>, source: Vec<Candidate>) 
 impl InputMethodEngine {
     /// Refresh the input state: rebuild preedit and run auto-suggest for candidates.
     pub(super) fn refresh_input_state(&mut self) -> EngineResult {
+        let full_reading = self.input_buf.reading();
+
         // Alphabet mode with active live conversion but no kana left to convert:
         // preserve the existing conversion display without re-running the model.
         // (When the buffer still contains kana we fall through and reconvert below,
         // so a mixed reading like `きょうはABC` keeps live-converting.)
         if self.mode.current() == InputMode::Alphabet
             && !self.live.text.is_empty()
-            && !karukan_engine::contains_kana(&self.input_buf.text)
+            && !karukan_engine::contains_kana(&full_reading)
         {
             let preedit = self.set_composing_state();
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
@@ -33,11 +35,11 @@ impl InputMethodEngine {
         // stays alive. `chunked_auto_suggest` splits long input into
         // bounded-length chunks so per-keystroke latency stays flat; for input
         // within one chunk this is identical to a whole-buffer call.
-        let convert = !self.input_buf.text.is_empty()
+        let convert = !full_reading.is_empty()
             && (self.mode.current() != InputMode::Alphabet
-                || karukan_engine::contains_kana(&self.input_buf.text));
+                || karukan_engine::contains_kana(&full_reading));
         let candidates = if convert {
-            let reading = self.input_buf.text.clone();
+            let reading = full_reading.clone();
             self.chunked_auto_suggest()
                 .map(|converted| (vec![converted], reading))
         } else {
@@ -51,7 +53,7 @@ impl InputMethodEngine {
             // (e.g. `「` → `『`, `【`, ...) for symbol-only inputs where the model is skipped.
             self.live.text.clear();
             let preedit = self.set_composing_state();
-            let reading = self.input_buf.text.clone();
+            let reading = full_reading;
             let mut all_candidates = self.lookup_learning_candidates(&reading);
             append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(&reading));
             append_candidates_dedup(&mut all_candidates, self.lookup_rewriter_variants(&reading));
@@ -97,7 +99,7 @@ impl InputMethodEngine {
             .collect();
         append_candidates_dedup(&mut all_candidates, model_candidates);
         append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(reading));
-        let aux = self.format_aux_suggest(&self.input_buf.text.clone());
+        let aux = self.format_aux_suggest(reading);
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(preedit))
             .with_action(EngineAction::ShowCandidates(CandidateList::new(
@@ -195,13 +197,13 @@ impl InputMethodEngine {
         self.input_buf.clear();
 
         if self.mode.current() == InputMode::Alphabet {
-            self.input_buf.insert(&ch.to_string());
+            self.input_buf.push_direct(ch);
         } else {
             // PassThrough chars (no romaji rule, e.g. `'`, `;`, `<`, `(`) used to
             // auto-commit immediately, but that prevented users from composing
             // sequences like `「」` or getting symbol variants. Treat them like
             // digits — let them enter Composing and accumulate in the preedit.
-            self.input_buf.push_kana(ch, &self.converters.romaji);
+            self.input_buf.push_romaji(ch, &self.converters.romaji);
         }
 
         let preedit = self.set_composing_state();
@@ -211,9 +213,9 @@ impl InputMethodEngine {
             .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()))
     }
 
-    /// Insert a full-width space (U+3000) at cursor position
+    /// Insert a full-width space (U+3000) after the active elements
     pub(super) fn input_fullwidth_space(&mut self) -> EngineResult {
-        self.input_buf.insert("\u{3000}");
+        self.input_buf.push_direct('\u{3000}');
         self.refresh_input_state()
     }
 
@@ -329,14 +331,14 @@ impl InputMethodEngine {
     /// In alphabet mode, inserts directly; otherwise goes through romaji conversion.
     pub(super) fn input_char(&mut self, ch: char) -> EngineResult {
         if matches!(self.mode.current(), InputMode::Alphabet | InputMode::Emoji) {
-            self.input_buf.insert(&ch.to_string());
+            self.input_buf.push_direct(ch);
             return self.refresh_input_state();
         }
 
         // PassThrough chars accumulate in the preedit alongside hiragana,
         // allowing users to compose `「」`, type `'word'`, and access symbol
         // variants from the candidate list.
-        self.input_buf.push_kana(ch, &self.converters.romaji);
+        self.input_buf.push_romaji(ch, &self.converters.romaji);
 
         if let Some(result) = self.try_reset_if_empty() {
             return result;
@@ -426,12 +428,11 @@ impl InputMethodEngine {
         // typed as plain text". Without this, Escape would silently
         // discard the typed characters which is surprising when the
         // user just wanted to dismiss the candidate list.
-        let emoji_literal =
-            if self.mode.current() == InputMode::Emoji && !self.input_buf.text.is_empty() {
-                Some(self.input_buf.text.clone())
-            } else {
-                None
-            };
+        let emoji_literal = if self.mode.current() == InputMode::Emoji {
+            Some(self.input_buf.reading()).filter(|r| !r.is_empty())
+        } else {
+            None
+        };
 
         self.input_buf.clear();
         self.live.text.clear();

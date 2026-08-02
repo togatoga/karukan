@@ -26,6 +26,48 @@ fn test_ykt_backspace_then_o() {
     assert_eq!(preedit_text(&engine), "yこ");
 }
 
+/// Deleting a converted element re-exposes the live consonants before it,
+/// one conversion at a time: `ytko` → BS → `o` → BS → `o` → BS → `o`.
+#[test]
+fn test_ytko_backspace_recombines_stepwise() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "ytko".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "ytこ");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "yt");
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "yと");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "y");
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "よ");
+}
+
+/// A multi-key rule prefix survives deletion of the element after it:
+/// `kyt` → BS → `o` re-combines to きょ.
+#[test]
+fn test_kyt_backspace_then_o() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "kyt".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "kyt");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "ky");
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょ");
+}
+
 /// Settled text never reverts: っ stays っ after the pending `k` is erased.
 #[test]
 fn test_kk_backspace_keeps_sokuon() {

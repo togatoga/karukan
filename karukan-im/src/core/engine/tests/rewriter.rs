@@ -293,7 +293,7 @@ fn typing_three_dots_emits_ellipsis_in_auto_suggest_and_conversion() {
     let mut engine = InputMethodEngine::new();
     type_string(&mut engine, "..");
     let final_result = engine.process_key(&press('.'));
-    assert_eq!(engine.input_buf.text, "。。。");
+    assert_eq!(engine.input_buf.reading(), "。。。");
 
     assert_contains(&auto_suggest_texts(&final_result), "…");
 

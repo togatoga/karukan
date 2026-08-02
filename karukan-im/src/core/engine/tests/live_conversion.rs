@@ -184,7 +184,7 @@ fn test_alphabet_mode_with_kana_keeps_converting() {
     engine.process_key(&press('a'));
     engine.process_key(&press_shift('A'));
     assert!(engine.mode.current() == InputMode::Alphabet);
-    assert!(karukan_engine::contains_kana(&engine.input_buf.text));
+    assert!(karukan_engine::contains_kana(&engine.input_buf.reading()));
 
     // Simulate a previous live conversion result lingering on screen.
     engine.live.text = "亜A".to_string();
@@ -211,7 +211,7 @@ fn test_alphabet_mode_pure_latin_preserves_live_text() {
     engine.process_key(&press_shift('A'));
     engine.process_key(&press('b'));
     assert!(engine.mode.current() == InputMode::Alphabet);
-    assert!(!karukan_engine::contains_kana(&engine.input_buf.text));
+    assert!(!karukan_engine::contains_kana(&engine.input_buf.reading()));
 
     engine.live.text = "AB".to_string();
 

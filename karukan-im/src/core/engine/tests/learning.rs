@@ -63,7 +63,7 @@ fn tab_key_skips_learning_in_composing() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    assert_eq!(engine.input_buf.text, "あい");
+    assert_eq!(engine.input_buf.reading(), "あい");
 
     let result = engine.process_key(&press_key(Keysym::TAB));
     assert!(result.consumed);
@@ -309,7 +309,7 @@ fn ctrl_backspace_in_composing_deletes_char_not_history() {
 
     let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
     assert!(result.consumed);
-    assert_eq!(engine.input_buf.text, "あ");
+    assert_eq!(engine.input_buf.reading(), "あ");
     assert!(
         !engine.learning.as_ref().unwrap().lookup("あい").is_empty(),
         "the learning entry must survive — deletion only works in Conversion",

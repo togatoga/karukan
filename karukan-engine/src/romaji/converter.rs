@@ -81,9 +81,17 @@ impl RomajiConverter {
         text
     }
 
-    /// Whether `ch` can start a conversion rule (e.g. `k`, `y`, `n`).
-    pub fn starts_rule(&self, ch: char) -> bool {
-        self.trie.children.contains_key(&ch)
+    /// Whether `s` is a strict prefix of some conversion rule (e.g. `k`,
+    /// `ky`, `n`) — i.e. more input could still complete a conversion.
+    pub fn is_rule_prefix(&self, s: &str) -> bool {
+        let mut node = &self.trie;
+        for ch in s.chars() {
+            match node.children.get(&ch) {
+                Some(child) => node = child,
+                None => return false,
+            }
+        }
+        !node.children.is_empty()
     }
 }
 
@@ -309,13 +317,14 @@ mod tests {
     }
 
     #[test]
-    fn test_starts_rule() {
+    fn test_is_rule_prefix() {
         let c = RomajiConverter::new();
-        assert!(c.starts_rule('k'));
-        assert!(c.starts_rule('y'));
-        assert!(c.starts_rule('n'));
-        assert!(!c.starts_rule('1'));
-        assert!(!c.starts_rule('こ'));
+        assert!(c.is_rule_prefix("k"));
+        assert!(c.is_rule_prefix("ky"));
+        assert!(c.is_rule_prefix("n"));
+        assert!(!c.is_rule_prefix("1"));
+        assert!(!c.is_rule_prefix("こ"));
+        assert!(!c.is_rule_prefix("yk"));
     }
 
     #[test]

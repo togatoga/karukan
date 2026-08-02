@@ -185,7 +185,7 @@ impl InputMethodEngine {
     /// N=30) this produces exactly one model call over the whole buffer, i.e.
     /// identical behavior to a whole-buffer conversion.
     pub(super) fn chunked_auto_suggest(&mut self) -> Option<String> {
-        let full_reading = self.input_buf.text.clone();
+        let full_reading = self.input_buf.reading();
         if full_reading.is_empty() {
             self.chunks.clear();
             return None;
@@ -321,7 +321,7 @@ impl InputMethodEngine {
     /// chunk a character insert/delete at the cursor lands in. Returns 0 for an
     /// empty buffer or a cursor at the very start.
     pub(super) fn current_chunk_index(&self) -> usize {
-        let pos = self.input_buf.cursor_pos.saturating_sub(1);
+        let pos = self.input_buf.reading_cursor().saturating_sub(1);
         let mut end = 0;
         for (i, chunk) in self.chunks.iter().enumerate() {
             end += chunk.reading.chars().count();
@@ -348,7 +348,7 @@ impl InputMethodEngine {
             "chunks [{}]: {} chunk(s); cursor at pos {} in chunk {} ({} char(s))",
             at,
             self.chunks.len(),
-            self.input_buf.cursor_pos,
+            self.input_buf.reading_cursor(),
             current,
             current_len
         );
