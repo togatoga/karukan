@@ -2,7 +2,8 @@
 //!
 //! Each case is a list of (keys, expected) steps: the keys are sent one
 //! keystroke at a time, then the preedit is asserted. Key tokens:
-//! `←` Left, `⌫` Backspace, `⇥` End, `␛` Escape, `␣` Space, `変` HENKAN
+//! `←` Left, `⌫` Backspace, `⇥` End, `␛` Escape, `␣` Space, `↹` Tab,
+//! `変` HENKAN
 //! (mode toggle to hiragana); an ASCII uppercase letter is typed with
 //! Shift; anything else is a plain key. An expected value of `"きょ@2"`
 //! also asserts the caret, and `"∅"` asserts the Empty state.
@@ -21,6 +22,7 @@ fn send(engine: &mut InputMethodEngine, keys: &str) {
             '⇥' => press_key(Keysym::END),
             '␛' => press_key(Keysym::ESCAPE),
             '␣' => press_key(Keysym::SPACE),
+            '↹' => press_key(Keysym::TAB),
             '変' => press_key(Keysym::HENKAN),
             c if c.is_ascii_uppercase() => press_shift(c),
             c => press(c),
@@ -158,6 +160,24 @@ fn test_editing_scenarios() {
         (
             "conversion_escape_then_continue_typing",
             &[("kyo", "きょ"), ("␣␛", "きょ"), ("u", "きょう")],
+        ),
+        // Cancelling a conversion restores the live romaji: the pending
+        // `d` still combines afterwards
+        (
+            "space_escape_keeps_pending_live",
+            &[
+                ("keioud", "けいおうd"),
+                ("␣␛", "けいおうd"),
+                ("a", "けいおうだ"),
+            ],
+        ),
+        (
+            "tab_escape_keeps_pending_live",
+            &[
+                ("keioud", "けいおうd"),
+                ("↹␛", "けいおうd"),
+                ("a", "けいおうだ"),
+            ],
         ),
         // No candidates (emoji query with no match): Space keeps composing
         // with the caret at the end, so the next key appends

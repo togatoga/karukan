@@ -24,6 +24,8 @@ pub enum InputState {
         preedit: Preedit,
         /// List of conversion candidates
         candidates: CandidateList,
+        /// The (settled) reading the conversion was built from
+        reading: String,
     },
 }
 

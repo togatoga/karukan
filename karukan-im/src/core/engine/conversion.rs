@@ -190,10 +190,10 @@ impl InputMethodEngine {
     /// `skip_learning` is set by the Tab path to omit learning-cache
     /// candidates (Space/Down keep the default learning-included behavior).
     pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
-        // Settle any remaining romaji
-        self.settle_romaji();
-
-        let reading = self.input_buf.reading();
+        // Resolve the reading without touching the composition: pending
+        // romaji stays live so cancelling the conversion returns to an
+        // editable buffer (けいおうd → Tab → Esc → `a` → けいおうだ)
+        let reading = self.input_buf.settled_reading(&self.converters.romaji);
 
         // Save auto-suggest/live conversion result before clearing state.
         // This ensures the candidate that was displayed during input is preserved
@@ -222,17 +222,12 @@ impl InputMethodEngine {
         }
 
         if candidates.is_empty() {
-            // No candidates: stay composing with the caret where it was,
-            // so the next key keeps appending (emoji queries with no match
-            // land here)
-            let preedit = Preedit::with_text_underlined(&reading);
-            self.state = InputState::Composing {
-                preedit: preedit.clone(),
-            };
+            // No candidates: stay composing, untouched (emoji queries with
+            // no match land here)
+            let preedit = self.set_composing_state();
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        self.input_buf.set_cursor(0);
         let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
         self.enter_conversion_state(&reading, candidate_list)
     }
@@ -270,6 +265,7 @@ impl InputMethodEngine {
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
             candidates: candidates.clone(),
+            reading: reading.to_string(),
         };
 
         EngineResult::consumed()
@@ -772,7 +768,10 @@ impl InputMethodEngine {
         // prefix-matched candidate carries a longer reading of its own, but
         // every entry that surfaces it has the typed reading as a prefix, so
         // removing by the typed reading clears the shown row and its twins.
-        let reading = self.input_buf.reading();
+        let InputState::Conversion { reading, .. } = &self.state else {
+            return EngineResult::consumed();
+        };
+        let reading = reading.clone();
         let removed = self
             .learning
             .as_mut()
@@ -796,21 +795,17 @@ impl InputMethodEngine {
         if !matches!(self.state, InputState::Conversion { .. }) {
             return EngineResult::not_consumed();
         }
-        let reading = self.input_buf.reading();
 
-        if reading.is_empty() {
+        if !self.input_buf.has_elements() {
             self.state = InputState::Empty;
-            self.input_buf.clear();
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(Preedit::new()))
                 .with_action(EngineAction::HideCandidates)
                 .with_action(EngineAction::HideAuxText);
         }
 
-        // Rebuild the composition from the reading (no pending romaji)
-        self.input_buf.clear();
-        self.input_buf.insert(&reading);
-
+        // The composition was left untouched when the conversion started:
+        // just come back to it, pending romaji still live
         let preedit = self.set_composing_state();
 
         EngineResult::consumed()
