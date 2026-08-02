@@ -59,6 +59,27 @@ fn test_stranded_consonant_stays_in_place_live() {
     assert_eq!(preedit_text(&engine), "y1あ");
 }
 
+/// Stranded consonants stay live: `ky123`, cursor back to after `ky`,
+/// then `o` completes the rule → 「きょ123」.
+#[test]
+fn test_stranded_consonants_combine_after_cursor_return() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "ky123".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "ky123");
+
+    for _ in 0..3 {
+        engine.process_key(&press_key(Keysym::LEFT));
+    }
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょ123");
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+}
+
 /// Deleting a converted element re-exposes the live consonants before it,
 /// one conversion at a time: `ytko` → BS → `o` → BS → `o` → BS → `o`.
 #[test]
