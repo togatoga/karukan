@@ -79,11 +79,42 @@ impl RomajiConverter {
     pub fn starts_rule(&self, ch: char) -> bool {
         self.trie.children.contains_key(&ch)
     }
+
+    /// Kana the pending romaji can still become: the outputs of every rule
+    /// whose key extends `pending` (`d` → だ/ぢ/づ/で/ど/ぢゃ…; `n` includes
+    /// ん via `nn`/`n'`). Empty when `pending` is empty or cannot reach any
+    /// rule (`yk`). Used to narrow predictive dictionary lookups while a
+    /// romaji tail is being typed.
+    pub fn pending_expansions(&self, pending: &str) -> Vec<String> {
+        if pending.is_empty() {
+            return Vec::new();
+        }
+        let mut node = &self.trie;
+        for ch in pending.chars() {
+            match node.children.get(&ch) {
+                Some(child) => node = child,
+                None => return Vec::new(),
+            }
+        }
+        let mut outputs = std::collections::BTreeSet::new();
+        collect_outputs(node, &mut outputs);
+        outputs.into_iter().collect()
+    }
 }
 
 impl Default for RomajiConverter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Collect every rule output in the subtree rooted at `node`.
+fn collect_outputs(node: &TrieNode, outputs: &mut std::collections::BTreeSet<String>) {
+    if let Some(output) = &node.output {
+        outputs.insert(output.clone());
+    }
+    for child in node.children.values() {
+        collect_outputs(child, outputs);
     }
 }
 
@@ -318,6 +349,27 @@ mod tests {
                 "rule output contains ASCII: {output:?}"
             );
         });
+    }
+
+    #[test]
+    fn test_pending_expansions() {
+        let c = RomajiConverter::new();
+
+        let d = c.pending_expansions("d");
+        for kana in ["だ", "ぢ", "づ", "で", "ど", "ぢゃ"] {
+            assert!(d.iter().any(|s| s == kana), "missing {kana}");
+        }
+        assert!(!d.iter().any(|s| s == "か"));
+
+        // ん is reachable from a lone n via nn / n'
+        assert!(c.pending_expansions("n").iter().any(|s| s == "ん"));
+
+        let ky = c.pending_expansions("ky");
+        assert!(ky.iter().any(|s| s == "きょ"));
+        assert!(!ky.iter().any(|s| s == "か"));
+
+        assert!(c.pending_expansions("").is_empty());
+        assert!(c.pending_expansions("yk").is_empty());
     }
 
     #[test]

@@ -57,3 +57,58 @@ fn exact_matches_stay_ahead_of_predictive() {
     assert_eq!(candidates[0].reading.as_deref(), Some("わせ"));
     assert_eq!(candidates[1].reading.as_deref(), Some("わせだ"));
 }
+
+/// The user's scenario: typing わせ shows every completion, but the
+/// moment `d` is typed the pending narrows prediction to だ/で/ど…
+/// readings — ワセリン disappears, 早稲田 stays.
+#[test]
+fn pending_romaji_narrows_predictive_candidates() {
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.system = Some(dict_from_json(
+        r#"[
+            {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1000.0}]},
+            {"reading":"わせりん","candidates":[{"surface":"ワセリン","score":100.0}]}
+        ]"#,
+    ));
+
+    for ch in "wase".chars() {
+        engine.process_key(&press(ch));
+    }
+    let texts: Vec<String> = engine
+        .lookup_dict_candidates(&engine.input_buf.reading())
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert!(texts.contains(&"早稲田".to_string()));
+    assert!(texts.contains(&"ワセリン".to_string()));
+
+    engine.process_key(&press('d'));
+    assert_eq!(engine.input_buf.pending(), "d");
+    let texts: Vec<String> = engine
+        .lookup_dict_candidates(&engine.input_buf.reading())
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert!(texts.contains(&"早稲田".to_string()));
+    assert!(!texts.contains(&"ワセリン".to_string()));
+}
+
+/// A tail that cannot become kana (`yk`) suppresses prediction entirely.
+#[test]
+fn dead_romaji_tail_suppresses_prediction() {
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.system = Some(dict_from_json(
+        r#"[{"reading":"わせだ","candidates":[{"surface":"早稲田","score":1000.0}]}]"#,
+    ));
+
+    for ch in "waseyk".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.input_buf.pending(), "yk");
+    let texts: Vec<String> = engine
+        .lookup_dict_candidates(&engine.input_buf.reading())
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert!(!texts.contains(&"早稲田".to_string()));
+}
