@@ -219,7 +219,6 @@ impl InputMethodEngine {
             let preedit = Preedit::with_text_underlined(&reading);
             self.state = InputState::Composing {
                 preedit: preedit.clone(),
-                romaji_buffer: String::new(),
             };
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }

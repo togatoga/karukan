@@ -16,8 +16,6 @@ pub enum InputState {
     Composing {
         /// The preedit string being composed
         preedit: Preedit,
-        /// Unconverted romaji buffer (e.g., "k" waiting for next char)
-        romaji_buffer: String,
     },
 
     /// Conversion mode - selecting from candidates

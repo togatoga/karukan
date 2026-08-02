@@ -262,14 +262,12 @@ impl InputMethodEngine {
         }
     }
 
-    /// Update state to Composing with current preedit and romaji buffer, returning the preedit.
+    /// Update state to Composing with the current preedit, returning it.
     /// Automatically uses live conversion display when `live.text` is non-empty.
     fn set_composing_state(&mut self) -> Preedit {
-        let romaji_buffer = self.input_buf.pending().to_string();
         let preedit = self.build_composing_preedit();
         self.state = InputState::Composing {
             preedit: preedit.clone(),
-            romaji_buffer,
         };
         preedit
     }

@@ -19,7 +19,6 @@ fn composing_engine(reading: &str) -> InputMethodEngine {
     engine.input_buf.cursor_pos = reading.chars().count();
     engine.state = InputState::Composing {
         preedit: Preedit::new(),
-        romaji_buffer: String::new(),
     };
     engine.converters.kanji = None;
     engine
