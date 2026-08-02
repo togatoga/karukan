@@ -80,6 +80,28 @@ fn test_stranded_consonants_combine_after_cursor_return() {
     assert_eq!(engine.preedit().unwrap().caret(), 2);
 }
 
+/// Mixed tail after the cursor: `ky1K`, cursor back to after `ky`, then
+/// `o` combines with the run on the left → 「きょ1K」. Evaluation never
+/// crosses the cursor, so the `1` and `K` are untouched.
+#[test]
+fn test_combine_before_converted_and_direct() {
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('y'));
+    engine.process_key(&press('1'));
+    engine.process_key(&press_shift('K'));
+    assert_eq!(preedit_text(&engine), "ky1K");
+
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+
+    engine.process_key(&press('o'));
+    assert_eq!(preedit_text(&engine), "きょ1K");
+    assert_eq!(engine.preedit().unwrap().caret(), 2);
+}
+
 /// Deleting a converted element re-exposes the live consonants before it,
 /// one conversion at a time: `ytko` → BS → `o` → BS → `o` → BS → `o`.
 #[test]
