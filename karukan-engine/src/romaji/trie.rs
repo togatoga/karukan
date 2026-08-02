@@ -38,6 +38,17 @@ impl TrieNode {
         node.output = Some(hiragana.to_string());
     }
 
+    /// All rule outputs in this subtree (depth-first).
+    pub fn outputs(&self) -> impl Iterator<Item = &str> {
+        let mut stack = vec![self];
+        std::iter::from_fn(move || {
+            let node = stack.pop()?;
+            stack.extend(node.children.values());
+            Some(node)
+        })
+        .filter_map(|node| node.output.as_deref())
+    }
+
     /// Search for the longest matching prefix in the trie
     pub fn search_longest(&self, input: &str) -> SearchResult<'_> {
         let mut node = self;

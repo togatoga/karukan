@@ -89,32 +89,23 @@ impl RomajiConverter {
         if pending.is_empty() {
             return Vec::new();
         }
-        let mut node = &self.trie;
-        for ch in pending.chars() {
-            match node.children.get(&ch) {
-                Some(child) => node = child,
-                None => return Vec::new(),
-            }
-        }
-        let mut outputs = std::collections::BTreeSet::new();
-        collect_outputs(node, &mut outputs);
-        outputs.into_iter().collect()
+        let Some(node) = pending
+            .chars()
+            .try_fold(&self.trie, |node, ch| node.children.get(&ch))
+        else {
+            return Vec::new();
+        };
+        node.outputs()
+            .map(str::to_string)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
     }
 }
 
 impl Default for RomajiConverter {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Collect every rule output in the subtree rooted at `node`.
-fn collect_outputs(node: &TrieNode, outputs: &mut std::collections::BTreeSet<String>) {
-    if let Some(output) = &node.output {
-        outputs.insert(output.clone());
-    }
-    for child in node.children.values() {
-        collect_outputs(child, outputs);
     }
 }
 
