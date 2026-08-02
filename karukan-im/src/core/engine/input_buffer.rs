@@ -81,8 +81,8 @@ impl InputBuffer {
         self.cursor = 0;
     }
 
-    pub fn has_elements(&self) -> bool {
-        !self.elements.is_empty()
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
     }
 
     // --- Record edits -----------------------------------------------------

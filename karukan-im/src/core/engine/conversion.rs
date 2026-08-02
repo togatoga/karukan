@@ -797,7 +797,7 @@ impl InputMethodEngine {
             return EngineResult::not_consumed();
         }
 
-        if !self.input_buf.has_elements() {
+        if self.input_buf.is_empty() {
             self.state = InputState::Empty;
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(Preedit::new()))
