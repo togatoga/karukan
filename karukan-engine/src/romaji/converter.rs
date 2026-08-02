@@ -170,8 +170,14 @@ impl Scratch<'_> {
                 return self.convert_with_remainder("ん".to_string());
             }
 
-            // Double consonant rule: same consonant twice (except 'n') -> っ + consonant
-            if last == second_last && !matches!(last, 'a' | 'i' | 'u' | 'e' | 'o' | 'n') {
+            // Double consonant rule: same consonant twice (except 'n') -> っ + consonant.
+            // Only when the pair is the whole buffer; with a longer prefix
+            // (`ty` + `y`) decomposition below keeps the prefix alive, so
+            // `tyy` becomes tっ+y instead of silently dropping the t.
+            if char_count == 2
+                && last == second_last
+                && !matches!(last, 'a' | 'i' | 'u' | 'e' | 'o' | 'n')
+            {
                 // Convert to sokuon and keep the last consonant
                 self.buffer = last.to_string();
                 self.output.push('っ');
@@ -285,6 +291,15 @@ mod tests {
     fn test_sokuon() {
         assert_eq!(conv("kk"), ("っ".to_string(), "k".to_string()));
         assert_eq!(conv("kka"), ("っか".to_string(), "".to_string()));
+    }
+
+    #[test]
+    fn test_sokuon_after_rule_prefix_keeps_prefix() {
+        // `ty` + `y`: the pair fires but the prefix must survive
+        assert_eq!(conv("tyy"), ("tっ".to_string(), "y".to_string()));
+        assert_eq!(conv("tyyu"), ("tっゆ".to_string(), "".to_string()));
+        assert_eq!(conv("kyy"), ("kっ".to_string(), "y".to_string()));
+        assert_eq!(conv("tss"), ("tっ".to_string(), "s".to_string()));
     }
 
     #[test]

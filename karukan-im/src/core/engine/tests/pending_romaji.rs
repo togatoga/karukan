@@ -364,3 +364,24 @@ fn test_delete_separator_between_live_runs() {
     engine.process_key(&press('a'));
     assert_eq!(preedit_text(&engine), "ちゃy");
 }
+
+/// A doubled consonant after a rule prefix keeps the prefix alive:
+/// `tyy` → 「tっy」, and erasing back down to the `t` lets it combine.
+#[test]
+fn test_prefixed_double_consonant_keeps_prefix() {
+    let mut engine = InputMethodEngine::new();
+
+    for ch in "tyy".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(preedit_text(&engine), "tっy");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "tっ");
+
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert_eq!(preedit_text(&engine), "t");
+
+    engine.process_key(&press('a'));
+    assert_eq!(preedit_text(&engine), "た");
+}
