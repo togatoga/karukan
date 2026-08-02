@@ -112,3 +112,35 @@ fn dead_romaji_tail_suppresses_prediction() {
         .collect();
     assert!(!texts.contains(&"早稲田".to_string()));
 }
+
+/// The conversion list gets the full ranked predictive set (paged); the
+/// composing suggestion list stays capped at 3.
+#[test]
+fn conversion_list_gets_all_predictive_candidates() {
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.system = Some(dict_from_json(
+        r#"[
+            {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1000.0}]},
+            {"reading":"わせだし","candidates":[{"surface":"早稲田市","score":2000.0}]},
+            {"reading":"わせだだいがく","candidates":[{"surface":"早稲田大学","score":3000.0}]},
+            {"reading":"わせだまえ","candidates":[{"surface":"早稲田前","score":4000.0}]},
+            {"reading":"わせだえき","candidates":[{"surface":"早稲田駅","score":5000.0}]}
+        ]"#,
+    ));
+
+    let conversion: Vec<String> = engine
+        .build_conversion_candidates("わせ", 1, false)
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    for surface in ["早稲田", "早稲田市", "早稲田大学", "早稲田前", "早稲田駅"]
+    {
+        assert!(
+            conversion.contains(&surface.to_string()),
+            "missing {surface}"
+        );
+    }
+
+    let suggestions = engine.lookup_dict_candidates("わせ");
+    assert!(suggestions.len() <= 3);
+}
