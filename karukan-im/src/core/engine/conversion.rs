@@ -172,7 +172,7 @@ impl InputMethodEngine {
 
     /// Start kanji conversion for the current input buffer.
     ///
-    /// Called when DOWN/TAB/SPACE is pressed: flushes any pending romaji,
+    /// Called when DOWN/TAB/SPACE is pressed: settles any pending romaji,
     /// resolves the reading, runs `build_conversion_candidates`, and
     /// transitions into the Conversion state. The previous live-conversion
     /// result is preserved as the first model candidate so the user sees
@@ -181,7 +181,7 @@ impl InputMethodEngine {
     /// `skip_learning` is set by the Tab path to omit learning-cache
     /// candidates (Space/Down keep the default learning-included behavior).
     pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
-        // Settle any remaining romaji into composed_hiragana
+        // Settle any remaining romaji
         self.settle_romaji();
 
         let reading = self.input_buf.reading();
@@ -190,8 +190,6 @@ impl InputMethodEngine {
         // This ensures the candidate that was displayed during input is preserved
         // in the conversion candidate list even if the re-inference uses a different strategy.
         let prev_suggest_text = std::mem::take(&mut self.live.text);
-
-        self.input_buf.set_cursor(0);
 
         if reading.is_empty() {
             return EngineResult::consumed();
@@ -215,7 +213,9 @@ impl InputMethodEngine {
         }
 
         if candidates.is_empty() {
-            // No candidates, stay in hiragana mode
+            // No candidates: stay composing with the caret where it was,
+            // so the next key keeps appending (emoji queries with no match
+            // land here)
             let preedit = Preedit::with_text_underlined(&reading);
             self.state = InputState::Composing {
                 preedit: preedit.clone(),
@@ -223,6 +223,7 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
+        self.input_buf.set_cursor(0);
         let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
         self.enter_conversion_state(&reading, candidate_list)
     }
@@ -759,7 +760,7 @@ impl InputMethodEngine {
                 .with_action(EngineAction::HideAuxText);
         }
 
-        // Set up composed_hiragana with the reading (no pending romaji)
+        // Rebuild the composition from the reading (no pending romaji)
         self.input_buf.clear();
         self.input_buf.insert(&reading);
 

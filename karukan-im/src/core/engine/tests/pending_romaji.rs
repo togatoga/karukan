@@ -155,6 +155,12 @@ fn test_editing_scenarios() {
             "conversion_escape_then_continue_typing",
             &[("kyo", "きょ"), ("␣␛", "きょ"), ("u", "きょう")],
         ),
+        // No candidates (emoji query with no match): Space keeps composing
+        // with the caret at the end, so the next key appends
+        (
+            "emoji_no_match_space_keeps_appending",
+            &[(":qqqq", ":qqqq"), ("␣", ":qqqq"), ("a", ":qqqqa")],
+        ),
     ];
 
     for (name, steps) in cases {

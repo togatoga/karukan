@@ -124,7 +124,7 @@ pub struct InputMethodEngine {
     /// Current input mode plus the mode to come back to when a temporary
     /// mode (Emoji, Alphabet) ends — see [`ModeState`]
     mode: ModeState,
-    /// Composed input buffer (hiragana text, cursor position)
+    /// Composition record: per-display-char elements plus the caret
     input_buf: InputBuffer,
     /// Live conversion state
     live: LiveConversion,
@@ -458,7 +458,7 @@ impl InputMethodEngine {
         match &self.state {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
-                // Settle pending romaji into composed_hiragana
+                // Settle pending romaji
                 self.settle_romaji();
                 let reading = self.input_buf.reading();
                 let text = if !self.live.text.is_empty() {

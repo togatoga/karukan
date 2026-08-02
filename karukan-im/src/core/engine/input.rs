@@ -350,7 +350,7 @@ impl InputMethodEngine {
     /// Commit the current hiragana input (or katakana if in katakana mode)
     /// In live conversion mode, commits the converted text instead of hiragana.
     pub(super) fn commit_composing(&mut self) -> EngineResult {
-        // Settle any pending romaji into composed_hiragana
+        // Settle any pending romaji
         self.settle_romaji();
 
         let reading = self.input_buf.reading();
