@@ -293,59 +293,27 @@ fn flush_run(out: &mut Vec<Element>, run: &mut String, romaji: &RomajiConverter)
     run.clear();
 }
 
-/// Evaluate a run of romaji keystrokes into elements: keystrokes consumed
-/// by a fired rule become its output characters (`Converted` each);
-/// passthrough keystrokes that can still start a rule (`y`, `k`) stay
-/// `Romaji`, others settle (`1`); the converter's trailing pending stays
-/// `Romaji` per keystroke.
+/// Evaluate a run of romaji keystrokes: convert the whole run and record
+/// one element per output character.
+///
+/// Rule outputs never contain ASCII (see the converter's contract), so an
+/// ASCII character in the output is a keystroke that passed through: it
+/// stays live (`Romaji`) if it can still begin a rule (`ykt` → BS → `o`
+/// → 「yこ」) and settles otherwise (`1`). Everything else is a fired
+/// rule's output, settled for good. The trailing pending stays `Romaji`
+/// per keystroke.
 fn evaluate_run(run: &str, romaji: &RomajiConverter) -> Vec<Element> {
-    let mut elements = Vec::new();
-    let mut processed = String::new();
-    let mut prev = karukan_engine::Converted {
-        text: String::new(),
-        pending: String::new(),
-    };
-
-    for ch in run.chars() {
-        processed.push(ch);
-        let curr = romaji.convert(&processed);
-
-        // The converter drains its buffer from the front: it was holding
-        // `prev.pending`, this keystroke appended `ch`, and it now holds
-        // `curr.pending` — always a tail of the former. Chopping that
-        // tail off leaves the input this step consumed.
-        let mut held = prev.pending.clone();
-        held.push(ch);
-        debug_assert!(held.ends_with(curr.pending.as_str()));
-        let consumed = held.strip_suffix(curr.pending.as_str()).unwrap_or(&held);
-
-        // Output that appeared this step (`convert` only ever appends)
-        let produced = &curr.text[prev.text.len()..];
-
-        // Walk both in lockstep. While input == output the keystroke
-        // passed through unchanged: it stays live if it can still begin
-        // a rule (`ykt` → BS → `o` → 「yこ」), otherwise it settles
-        // (`1`). Once they differ, the rest of the output is a fired
-        // rule's — settled, one element per character; the matching
-        // consumed keystrokes are represented by that output.
-        let mut input = consumed.chars().peekable();
-        let mut output = produced.chars().peekable();
-        while let (Some(&i), Some(&o)) = (input.peek(), output.peek()) {
-            if i != o {
-                break;
-            }
-            input.next();
-            output.next();
-            if romaji.starts_rule(i) {
-                elements.push(Element::Romaji(i));
+    let converted = romaji.convert(run);
+    converted
+        .text
+        .chars()
+        .map(|c| {
+            if romaji.starts_rule(c) {
+                Element::Romaji(c)
             } else {
-                elements.push(Element::Converted(i));
+                Element::Converted(c)
             }
-        }
-        elements.extend(output.map(Element::Converted));
-        prev = curr;
-    }
-
-    elements.extend(prev.pending.chars().map(Element::Romaji));
-    elements
+        })
+        .chain(converted.pending.chars().map(Element::Romaji))
+        .collect()
 }

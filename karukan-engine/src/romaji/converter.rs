@@ -29,6 +29,10 @@ impl RomajiConverter {
 
     /// Convert `raw` left to right. `pending` holds the trailing input that
     /// may still combine with future keys (e.g. `k`, `ky`, a lone `n`).
+    ///
+    /// Contract: rule outputs never contain ASCII, so any ASCII character
+    /// in `text` is an input character that passed through unchanged
+    /// (guarded by `rule_outputs_are_never_ascii`).
     pub fn convert(&self, raw: &str) -> Converted {
         let mut scratch = Scratch {
             trie: &self.trie,
@@ -293,6 +297,27 @@ mod tests {
         assert_eq!(c.flush_pending("ltu"), "っ");
         assert_eq!(c.convert_flush("k"), "k");
         assert_eq!(c.convert_flush("kan"), "かn");
+    }
+
+    #[test]
+    fn rule_outputs_are_never_ascii() {
+        // Callers tell passed-through keystrokes (ASCII) apart from rule
+        // output by this property, so no rule may output an ASCII char
+        fn walk(node: &TrieNode, check: &mut impl FnMut(&str)) {
+            if let Some(output) = &node.output {
+                check(output);
+            }
+            for child in node.children.values() {
+                walk(child, check);
+            }
+        }
+        let c = RomajiConverter::new();
+        walk(&c.trie, &mut |output| {
+            assert!(
+                output.chars().all(|ch| !ch.is_ascii()),
+                "rule output contains ASCII: {output:?}"
+            );
+        });
     }
 
     #[test]
