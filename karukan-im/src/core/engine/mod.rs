@@ -232,10 +232,10 @@ impl InputMethodEngine {
         self.metrics = ConversionMetrics::default();
     }
 
-    /// If the display is empty, reset to Empty state and return the result.
-    /// Returns None if display is not empty (caller should continue normally).
+    /// If the composition is empty, reset to Empty state and return the result.
+    /// Returns None if elements remain (caller should continue normally).
     fn try_reset_if_empty(&mut self) -> Option<EngineResult> {
-        if self.build_input_display().is_empty() {
+        if !self.input_buf.has_elements() {
             self.state = InputState::Empty;
             self.input_buf.clear();
             // Erasing the whole buffer ends the composition: drop the live

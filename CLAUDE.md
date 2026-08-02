@@ -104,7 +104,7 @@ cargo clippy --workspace  # Lint all crates
 - `romaji/` — Romaji-to-hiragana conversion
   - `trie.rs` — Trie data structure
   - `rules.rs` — 200+ conversion rule
-  - `converter.rs` — FSM converter
+  - `converter.rs` — Stateless converter (`convert`/`flush_pending`/`is_rule_prefix`)
 - `kanji/` — Kana-kanji conversion via llama.cpp
   - `backend.rs` — Backend + KanaKanjiConverter
   - `llamacpp.rs` — GGUF inference
@@ -134,7 +134,7 @@ cargo clippy --workspace  # Lint all crates
   - `mod.rs` — Main InputMethodEngine struct and core processing logic
   - `types.rs` — EngineConfig, EngineResult, EngineAction, Converters, ConversionStrategy
   - `input.rs` — Key input handling for Composing state
-  - `input_buffer.rs` — Input buffer (hiragana text + cursor position)
+  - `input_buffer.rs` — Composition record: per-display-char element array (`Romaji`/`Converted`/`Direct`) + caret index; display/reading/pending are derived views
   - `conversion.rs` — Conversion mode handling (candidate building, commit)
   - `chunk.rs` — Live-conversion chunking: the Japanese/non-Japanese split (`is_japanese`, `group_chunks`), incremental re-chunk diff (`ChunkPlan`), and `chunked_auto_suggest`
   - `cursor.rs` — Cursor movement
@@ -183,8 +183,8 @@ The engine-internal `InputMode::Alphabet` (entered via Shift+letter on Linux/fci
 ## Key Design Patterns
 
 - IMEEngine uses a state machine: Empty → Composing → Conversion
-- `input_buf: InputBuffer` in IMEEngine is the source of truth for hiragana text (`.text` field holds the composed hiragana, `.cursor_pos` tracks cursor position)
-- RomajiConverter accumulates output; consumed into input_buf via delta tracking
+- `input_buf: InputBuffer` in IMEEngine is the source of truth: an element array (one element per display character — `Romaji(char)` unfired keystroke / `Converted(char)` fired output / `Direct(char)` direct input) plus a caret index. All views (display, conversion reading, aux romaji tail) are derived from it
+- `RomajiConverter` is stateless (pure `convert`/`flush_pending`); after each romaji keystroke the engine re-evaluates only the Romaji run ending at the caret (`evaluate_run`), re-recording fired keystrokes as `Converted`. `Converted` never re-enters evaluation, so settled text never reverts; Backspace removes one element whole, re-exposing still-live keystrokes before it (`ykt` → BS → `o` → 「yこ」). Cursor moves and mode toggles never touch the array
 - Models use jinen format with special Unicode tokens (U+EE00–U+EE02) from the Private Use Area; model input is katakana (hiragana is converted to katakana before inference)
 - Model registry defined in `karukan-engine/models.toml`; default models use Q5_K_M quantization
 - Live conversion (auto-suggest) splits the composing buffer into internal chunks of at most `composing_chunk_len` reading chars (default 40, configurable) so each model call stays bounded for long input. Chunking (`group_chunks`) starts a new chunk whenever the current one is full OR the character group changes between Japanese and non-Japanese (`is_japanese`: hiragana, katakana incl. `ー`, and kanji are Japanese; ASCII/full-width digits, letters, symbols, and all punctuation are non-Japanese). A non-Japanese run (digits/symbols/alphabet) is passed through to the preedit verbatim and never sent to the neural converter (which otherwise tends to drop digits mid-run, e.g. `123456`); a Japanese run is converted by the model. Because punctuation is non-Japanese, it forms its own chunk and naturally separates clauses (`今日は。明日` → `今日は`/`。`/`明日`), so there is no separate punctuation rule. A katakana word like `スーパーマーケット` is entirely Japanese, so it stays one chunk. `chunked_auto_suggest` re-chunks incrementally: it diffs the new buffer against the previous chunking by common character prefix/suffix and reconverts only the changed span (`ChunkPlan` decides which leading/trailing chunks to reuse). Each chunk's left context (lctx) is the editor surrounding text plus the converted text of the preceding chunks, truncated to `max_context_length`. Chunks are internal — the user sees one continuous preedit, and the aux text shows the current chunk's lctx as its single `lctx:`

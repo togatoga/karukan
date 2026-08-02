@@ -10,17 +10,6 @@ pub struct Converted {
     pub pending: String,
 }
 
-/// Events that can occur during conversion
-#[derive(Debug, Clone, PartialEq)]
-enum ConversionEvent {
-    /// Characters were converted to hiragana
-    Converted(String),
-    /// Character added to buffer, waiting for more input
-    Buffered,
-    /// No conversion rule found, character passed through
-    PassThrough(char),
-}
-
 /// Stateless romaji-to-hiragana converter.
 ///
 /// Holds only the rule trie; each call derives its result from the full raw
@@ -110,7 +99,7 @@ struct Scratch<'a> {
 
 impl Scratch<'_> {
     /// Push a character and attempt conversion
-    fn push(&mut self, ch: char) -> ConversionEvent {
+    fn push(&mut self, ch: char) {
         // Handle uppercase by converting to lowercase
         let ch = ch.to_ascii_lowercase();
 
@@ -118,22 +107,18 @@ impl Scratch<'_> {
         self.buffer.push(ch);
 
         // Try to convert
-        self.try_convert()
+        self.try_convert();
     }
 
-    /// Convert with the given hiragana and recursively process any remaining buffer.
-    /// Returns a Converted event combining the hiragana with any further conversions.
-    fn convert_with_remainder(&mut self, hiragana: String) -> ConversionEvent {
-        if !self.buffer.is_empty()
-            && let ConversionEvent::Converted(next) = self.try_convert()
-        {
-            return ConversionEvent::Converted(format!("{}{}", hiragana, next));
+    /// Recursively process the buffer left after a conversion.
+    fn convert_remainder(&mut self) {
+        if !self.buffer.is_empty() {
+            self.try_convert();
         }
-        ConversionEvent::Converted(hiragana)
     }
 
     /// Try to convert the current buffer
-    fn try_convert(&mut self) -> ConversionEvent {
+    fn try_convert(&mut self) {
         // Special case: "nn" + another character
         // "nn" is ALWAYS treated as a single ん, regardless of what follows.
         // This matches IME behavior where "nn" is the deliberate way to enter ん.
@@ -147,7 +132,7 @@ impl Scratch<'_> {
             // "nn" is always a single ん, rest is processed separately
             self.buffer.drain(..2);
             self.output.push('ん');
-            return self.convert_with_remainder("ん".to_string());
+            return self.convert_remainder();
         }
 
         // Special case: 'n' before consonant -> ん
@@ -167,7 +152,7 @@ impl Scratch<'_> {
                 let prefix: String = chars.iter().take(char_count - 2).collect();
                 self.buffer = format!("{}{}", prefix, last);
                 self.output.push('ん');
-                return self.convert_with_remainder("ん".to_string());
+                return self.convert_remainder();
             }
 
             // Double consonant rule: same consonant twice (except 'n') -> っ + consonant.
@@ -181,7 +166,7 @@ impl Scratch<'_> {
                 // Convert to sokuon and keep the last consonant
                 self.buffer = last.to_string();
                 self.output.push('っ');
-                return ConversionEvent::Converted("っ".to_string());
+                return;
             }
         }
 
@@ -197,21 +182,19 @@ impl Scratch<'_> {
                     // Special case: always convert n' and nn immediately
                     self.output.push_str(hiragana);
                     self.buffer.clear();
-                    return ConversionEvent::Converted(hiragana.to_string());
                 }
                 // Otherwise, wait for more input
-                return ConversionEvent::Buffered;
             } else {
                 // Convert and keep remainder in buffer
                 self.output.push_str(hiragana);
                 self.buffer.drain(..search.matched_len);
-                return self.convert_with_remainder(hiragana.to_string());
+                self.convert_remainder();
             }
         } else if search.matched_len == 0 {
             // No match at all
             // Check if the first character could start a valid conversion
             let Some(first_char) = self.buffer.chars().next() else {
-                return ConversionEvent::Buffered;
+                return;
             };
             let first_char_has_children = self.trie.children.contains_key(&first_char);
 
@@ -231,7 +214,7 @@ impl Scratch<'_> {
 
                 if on_valid_path {
                     // We're on a valid path in the trie, keep buffering
-                    return ConversionEvent::Buffered;
+                    return;
                 }
             }
 
@@ -242,28 +225,16 @@ impl Scratch<'_> {
                 // First character has a valid conversion, use it
                 self.output.push_str(hiragana);
                 self.buffer.drain(..first_search.matched_len);
-                return self.convert_with_remainder(hiragana.to_string());
+                self.convert_remainder();
             } else {
                 // No possible match, pass through the first character
                 self.buffer.remove(0);
                 self.output.push(first_char);
 
                 // Try to convert remainder after pass-through
-                if !self.buffer.is_empty() {
-                    let next_event = self.try_convert();
-                    match next_event {
-                        ConversionEvent::Converted(_) | ConversionEvent::PassThrough(_) => {
-                            return next_event;
-                        }
-                        _ => {}
-                    }
-                }
-
-                return ConversionEvent::PassThrough(first_char);
+                self.convert_remainder();
             }
         }
-
-        ConversionEvent::Buffered
     }
 }
 
