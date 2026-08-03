@@ -16,13 +16,14 @@
 
 ## プロジェクト構成
 
-| クレート | 説明 |
-|---------|------|
-| [karukan-fcitx5](karukan-im/fcitx5/) | Linux向けIMEフロントエンド — fcitx5アドオン + C FFI |
-| [karukan-macos](karukan-im/macos/) | macOS向けIMEフロントエンド — Swift/InputMethodKit |
-| [karukan-im](karukan-im/core/) | 共有IMEエンジン — ステートマシン、ローマ字変換、karukan-imserver(macOS向けJSON-RPCサーバー) |
-| [karukan-engine](karukan-engine/) | コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換 |
-| [karukan-cli](karukan-cli/) | CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー |
+IME本体(コアエンジン + 各プラットフォームのフロントエンド)は `karukan-im/` 配下にまとまっています。
+
+- [karukan-im/](karukan-im/) — IME本体
+  - [core/](karukan-im/core/) — 共有IMEエンジン(crate: `karukan-im`) — ステートマシン、ローマ字変換、karukan-imserver(macOS向けJSON-RPCサーバー)
+  - [fcitx5/](karukan-im/fcitx5/) — Linux向けフロントエンド(crate: `karukan-fcitx5`) — fcitx5アドオン + C FFI
+  - [macos/](karukan-im/macos/) — macOS向けフロントエンド — Swift/InputMethodKit
+- [karukan-engine/](karukan-engine/) — コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換
+- [karukan-cli/](karukan-cli/) — CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー
 
 ## 特徴
 
