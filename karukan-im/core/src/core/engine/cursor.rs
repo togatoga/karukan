@@ -12,7 +12,7 @@ impl InputMethodEngine {
         if self.mode.current() == InputMode::Alphabet {
             self.mode.exit_temporary();
         }
-        self.live.text.clear();
+        self.live.shown = false;
         self.input_buf.set_cursor(new_pos(&self.input_buf));
         self.log_chunk_state("cursor");
         let preedit = self.set_composing_state();

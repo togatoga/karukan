@@ -21,7 +21,7 @@ impl InputMethodEngine {
         // (When the buffer still contains kana we fall through and reconvert below,
         // so a mixed reading like `きょうはABC` keeps live-converting.)
         if self.mode.current() == InputMode::Alphabet
-            && !self.live.text.is_empty()
+            && !self.live_text().is_empty()
             && !karukan_engine::contains_kana(&full_reading)
         {
             let preedit = self.set_composing_state();
@@ -51,7 +51,7 @@ impl InputMethodEngine {
             // No useful AI suggestion — still show learning + dictionary + rule-based
             // rewriter variants. The rewriter path produces mozc-style symbol variants
             // (e.g. `「` → `『`, `【`, ...) for symbol-only inputs where the model is skipped.
-            self.live.text.clear();
+            self.live.shown = false;
             let preedit = self.set_composing_state();
             let reading = full_reading;
             let mut all_candidates = self.lookup_learning_candidates(&reading);
@@ -71,14 +71,17 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         };
 
-        // Live conversion mode: show converted text in preedit
+        // Live conversion mode: show converted text in preedit. The displayed
+        // text is derived from the chunks (`live_text`), which
+        // `chunked_auto_suggest` just rebuilt — candidates[0] is that same
+        // concatenation.
         if self.live.enabled && self.mode.current() != InputMode::Katakana {
-            self.live.text = candidates[0].clone();
+            self.live.shown = true;
             return self.suggest_result(candidates, &reading);
         }
 
         // Normal auto-suggest: show hiragana preedit
-        self.live.text.clear();
+        self.live.shown = false;
         self.suggest_result(candidates, &reading)
     }
 
@@ -282,7 +285,7 @@ impl InputMethodEngine {
                         // commit/cancel, so the next word returns to the
                         // prior mode (issue #37).
                         self.mode.enter_temporary(InputMode::Alphabet);
-                        self.live.text.clear();
+                        self.live.shown = false;
                     }
                     let ch = if self.mode.current() == InputMode::Alphabet && is_shift_alpha {
                         ch.to_ascii_uppercase()
@@ -304,7 +307,7 @@ impl InputMethodEngine {
     /// the moment they press `:`.
     pub(super) fn start_emoji_mode(&mut self) -> EngineResult {
         self.input_buf.clear();
-        self.live.text.clear();
+        self.live.shown = false;
         // Remember where the user was so commit/cancel/erase-to-empty
         // can drop them back into the same mode (e.g. Katakana stays
         // Katakana). ModeState guards against clobbering the saved mode
@@ -377,7 +380,7 @@ impl InputMethodEngine {
         if text.is_empty() {
             self.state = InputState::Empty;
             self.input_buf.clear();
-            self.live.text.clear();
+            self.live.shown = false;
             self.chunks.clear();
             return EngineResult::consumed()
                 .with_action(EngineAction::HideCandidates)
@@ -393,7 +396,7 @@ impl InputMethodEngine {
         }
 
         self.input_buf.clear();
-        self.live.text.clear();
+        self.live.shown = false;
         self.chunks.clear();
         self.state = InputState::Empty;
         // Temporary modes (Emoji, Alphabet) end with the composition:
@@ -416,8 +419,8 @@ impl InputMethodEngine {
     /// second Escape cancels input entirely.
     pub(super) fn cancel_composing(&mut self) -> EngineResult {
         // If live conversion is active, first Escape returns to hiragana display
-        if !self.live.text.is_empty() {
-            self.live.text.clear();
+        if !self.live_text().is_empty() {
+            self.live.shown = false;
             let preedit = self.set_composing_state();
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(preedit))
@@ -438,7 +441,7 @@ impl InputMethodEngine {
         };
 
         self.input_buf.clear();
-        self.live.text.clear();
+        self.live.shown = false;
         self.chunks.clear();
         self.state = InputState::Empty;
         // Temporary modes (Emoji, Alphabet) are per-session: cancelling

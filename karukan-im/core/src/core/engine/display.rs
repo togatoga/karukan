@@ -24,18 +24,30 @@ impl InputMethodEngine {
         self.input_buf.cursor()
     }
 
+    /// The current live-conversion text: the concatenated converted text of
+    /// the chunks while the live display is shown, empty otherwise. Derived
+    /// on demand — the string is never stored, so it cannot go stale against
+    /// the chunks.
+    pub(super) fn live_text(&self) -> String {
+        if !self.live.shown {
+            return String::new();
+        }
+        self.chunks.iter().map(|c| c.converted.as_str()).collect()
+    }
+
     /// Build a preedit for composing state.
-    /// If live conversion text is present, shows live_text + pending romaji
+    /// If live conversion text is present, shows live text + pending romaji
     /// with caret at end. That layout is only faithful while typing at the
     /// end of the composition — when the cursor is elsewhere the pending is
     /// not the visual tail, so fall back to the kana display.
     /// Otherwise shows the input buffer display with cursor-based caret.
     pub(super) fn build_composing_preedit(&self) -> Preedit {
+        let live = self.live_text();
         let live_at_end =
-            !self.live.text.is_empty() && self.input_buf.cursor() == self.input_buf.char_count();
+            !live.is_empty() && self.input_buf.cursor() == self.input_buf.char_count();
         let (display, caret) = if live_at_end {
             let buffer = self.input_buf.pending();
-            let display = format!("{}{}", self.live.text, buffer);
+            let display = format!("{}{}", live, buffer);
             let caret = display.chars().count();
             (display, caret)
         } else {
@@ -46,24 +58,21 @@ impl InputMethodEngine {
         preedit
     }
 
-    /// The live conversion result as displayed: `live.text` plus the settled
+    /// The live conversion result as displayed: the live text plus the settled
     /// pending romaji tail (早稲田 + d → 早稲田d). Committing or preserving
-    /// `live.text` alone would drop the tail, since the live suggestion only
+    /// the live text alone would drop the tail, since the live suggestion only
     /// covers the settled reading. Empty when live conversion has no result
     /// or the cursor is away from the end — there the display already fell
     /// back to kana (see `build_composing_preedit`) and the pending run sits
     /// mid-buffer, so the concatenation would not match what is shown.
     /// Must be called before `settle_romaji` (which empties the pending run).
     pub(super) fn live_text_with_pending(&self) -> String {
-        if self.live.text.is_empty() || self.input_buf.cursor() != self.input_buf.char_count() {
+        let live = self.live_text();
+        if live.is_empty() || self.input_buf.cursor() != self.input_buf.char_count() {
             return String::new();
         }
         let pending = self.input_buf.pending();
-        format!(
-            "{}{}",
-            self.live.text,
-            self.converters.romaji.convert_flush(&pending)
-        )
+        format!("{}{}", live, self.converters.romaji.convert_flush(&pending))
     }
 
     /// Format an `lctx: … rctx: …` line from explicit left/right context

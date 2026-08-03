@@ -267,20 +267,24 @@ pub(in crate::core) struct ComposingChunk {
     pub converted: String,
 }
 
-/// Live conversion state: enabled flag and current converted text
+/// Live conversion state. The displayed text itself is not stored: it is
+/// derived from the current chunks (`live_text`), so it can never go stale
+/// against them.
 #[derive(Debug, Clone, Default)]
 pub(in crate::core) struct LiveConversion {
     /// Whether live conversion is enabled (toggled via Ctrl+Shift+L)
     pub enabled: bool,
-    /// Converted text (non-empty when live conversion produced a result)
-    pub text: String,
+    /// Whether the live suggestion is currently shown in the preedit.
+    /// Cleared by gestures that fall back to the kana display (cursor moves,
+    /// first Escape, mode switches) without discarding the chunks.
+    pub shown: bool,
 }
 
 impl LiveConversion {
     pub fn new(enabled: bool) -> Self {
         Self {
             enabled,
-            text: String::new(),
+            shown: false,
         }
     }
 }

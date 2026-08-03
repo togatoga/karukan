@@ -267,7 +267,7 @@ fn test_delete_all_chars_clears_chunks() {
     assert!(matches!(engine.state(), InputState::Empty));
     assert_eq!(engine.input_buf.reading(), "");
     assert!(engine.chunks.is_empty(), "chunk cache must be cleared");
-    assert!(engine.live.text.is_empty(), "live text must be cleared");
+    assert!(engine.live_text().is_empty(), "live text must be cleared");
 }
 
 /// Type `あいうえおか` (6 hiragana chars) via romaji.

@@ -233,7 +233,7 @@ impl InputMethodEngine {
         self.state = InputState::Empty;
         self.mode = ModeState::default();
         self.input_buf.clear();
-        self.live.text.clear();
+        self.live.shown = false;
         self.chunks.clear();
         self.metrics = ConversionMetrics::default();
     }
@@ -245,10 +245,9 @@ impl InputMethodEngine {
             self.state = InputState::Empty;
             self.input_buf.clear();
             // Erasing the whole buffer ends the composition: drop the live
-            // conversion text and the chunks so neither leaks into the next
-            // composing session (build_composing_preedit would otherwise
-            // render a stale live.text).
-            self.live.text.clear();
+            // display and the chunks so neither leaks into the next
+            // composing session.
+            self.live.shown = false;
             self.chunks.clear();
             // Temporary modes (Emoji, Alphabet) are per-composition:
             // erasing back to an empty buffer ends the session, so restore
@@ -268,7 +267,7 @@ impl InputMethodEngine {
     }
 
     /// Update state to Composing with the current preedit, returning it.
-    /// Automatically uses live conversion display when `live.text` is non-empty.
+    /// Automatically uses live conversion display when `live_text()` is non-empty.
     fn set_composing_state(&mut self) -> Preedit {
         let preedit = self.build_composing_preedit();
         self.state = InputState::Composing {
@@ -475,7 +474,7 @@ impl InputMethodEngine {
                 // Record live conversion result in learning cache
                 self.record_learning(&reading, &text);
                 self.input_buf.clear();
-                self.live.text.clear();
+                self.live.shown = false;
                 self.state = InputState::Empty;
                 self.surrounding_context = None;
                 text

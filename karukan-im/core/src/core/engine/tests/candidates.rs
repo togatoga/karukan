@@ -11,7 +11,7 @@ fn test_live_text_preserved_in_conversion_via_down() {
     // Simulate typing "あい" with live conversion active
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     // Press DOWN → start_conversion()
     let result = engine.process_key(&press_key(Keysym::DOWN));
@@ -34,7 +34,7 @@ fn test_live_text_not_duplicated_in_conversion() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     // live_conversion_text same as hiragana reading → should not be added
-    engine.live.text = "あい".to_string();
+    set_live_text(&mut engine, "あい");
 
     let result = engine.process_key(&press_key(Keysym::DOWN));
     assert!(result.consumed);
@@ -60,7 +60,7 @@ fn test_suggest_result_preserved_in_start_conversion() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     // Press Space → start_conversion()
     let result = engine.process_key(&press_key(Keysym::SPACE));
@@ -83,7 +83,7 @@ fn test_empty_live_text_not_added_to_candidates() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     // Force empty to test the "no live text" scenario
-    engine.live.text.clear();
+    engine.live.shown = false;
 
     // DOWN → start_conversion()
     let result = engine.process_key(&press_key(Keysym::DOWN));

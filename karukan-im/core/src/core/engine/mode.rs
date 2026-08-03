@@ -15,8 +15,8 @@ impl InputMethodEngine {
         }
 
         self.mode.set(InputMode::Katakana);
-        // Clear live conversion text so katakana mode takes priority on commit
-        self.live.text.clear();
+        // Drop the live display so katakana mode takes priority on commit
+        self.live.shown = false;
 
         if self.input_buf.is_empty() {
             return EngineResult::consumed();
@@ -52,8 +52,8 @@ impl InputMethodEngine {
                 result.actions.push(aux);
                 return result;
             }
-            if !self.live.text.is_empty() {
-                self.live.text.clear();
+            if self.live.shown {
+                self.live.shown = false;
                 let preedit = self.set_composing_state();
                 return EngineResult::consumed()
                     .with_action(EngineAction::UpdatePreedit(preedit))
