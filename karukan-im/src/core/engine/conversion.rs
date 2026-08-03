@@ -194,6 +194,11 @@ impl InputMethodEngine {
         // romaji stays live so cancelling the conversion returns to an
         // editable buffer (けいおうd → Tab → Esc → `a` → けいおうだ)
         let reading = self.input_buf.settled_reading(&self.converters.romaji);
+        // The unresolved tail keeps narrowing the predictive dictionary
+        // lookup, so a suggestion visible while typing (わせd → 早稲田)
+        // stays selectable in the conversion list
+        let base = self.input_buf.reading();
+        let pending = self.input_buf.pending();
 
         // Save auto-suggest/live conversion result before clearing state.
         // This ensures the candidate that was displayed during input is preserved
@@ -206,8 +211,13 @@ impl InputMethodEngine {
         }
 
         // Get candidates from kanji converter (use full num_candidates for explicit conversion)
-        let mut candidates =
-            self.build_conversion_candidates(&reading, self.config.num_candidates, skip_learning);
+        let mut candidates = self.build_conversion_candidates(
+            &reading,
+            &base,
+            &pending,
+            self.config.num_candidates,
+            skip_learning,
+        );
 
         // If the previous auto-suggest result is not in the new candidates, insert it at the top
         // so it doesn't disappear when the conversion strategy changes.
@@ -301,9 +311,13 @@ impl InputMethodEngine {
         let mut candidates = Vec::new();
         let mut seen = HashSet::new();
 
-        // Exact matches, user dictionary first. Candidates are sorted by
-        // score at build/load time
+        // Exact matches, user dictionary first — only when no romaji tail
+        // is pending (an exact hit on the base would ignore the typed
+        // tail). Candidates are sorted by score at build/load time
         for (dict, source) in dicts {
+            if !pending.is_empty() {
+                break;
+            }
             let Some(result) = dict.and_then(|d| d.exact_match_search(reading)) else {
                 continue;
             };
@@ -363,12 +377,18 @@ impl InputMethodEngine {
     ///
     /// Priority: Learning → User Dictionary → Model → System Dictionary → Fallback
     ///
+    /// `base`/`pending` split the reading for the dictionary lookup: while
+    /// a romaji tail is unresolved the predictive search stays narrowed to
+    /// it (base わせ + `d` → わせだ…), with no tail they equal `reading`/"".
+    ///
     /// `skip_learning` suppresses the learning-cache step (1). Used by the Tab
     /// key path so users can escape a noisy learning history without losing
     /// access to dictionary/model candidates.
     pub(super) fn build_conversion_candidates(
         &mut self,
         reading: &str,
+        base: &str,
+        pending: &str,
         num_candidates: usize,
         skip_learning: bool,
     ) -> Vec<AnnotatedCandidate> {
@@ -406,7 +426,7 @@ impl InputMethodEngine {
         }
 
         // 2. Dictionary candidates (user dict first, then system dict)
-        let dict_results = self.search_dictionaries(reading, "", usize::MAX, usize::MAX);
+        let dict_results = self.search_dictionaries(base, pending, usize::MAX, usize::MAX);
         // Insert user dictionary entries at the top (after learning)
         for ac in &dict_results {
             if ac.source == CandidateSource::UserDictionary {
@@ -782,8 +802,13 @@ impl InputMethodEngine {
         }
         debug!("deleted learning entry: {} -> {}", reading, surface);
 
-        let candidates =
-            self.build_conversion_candidates(&reading, self.config.num_candidates, false);
+        let candidates = self.build_conversion_candidates(
+            &reading,
+            &reading,
+            "",
+            self.config.num_candidates,
+            false,
+        );
         if candidates.is_empty() {
             return self.cancel_conversion();
         }
