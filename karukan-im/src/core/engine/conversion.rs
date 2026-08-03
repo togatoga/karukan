@@ -20,6 +20,16 @@ const MAX_PREDICTIVE_SUGGESTIONS: usize = 3;
 /// single key would flood the list from a large dictionary
 const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
 
+/// How the unresolved romaji tail constrains the predictive lookup.
+enum TailConstraint {
+    /// No tail: prediction is unconstrained
+    Unconstrained,
+    /// The tail can still become these kana: narrow to them (`d` → だ/で…)
+    Narrow(Vec<String>),
+    /// The tail can no longer become kana (`yk`): no reading extends it
+    Dead,
+}
+
 /// Mozc-style width/script annotation for a pure-kana candidate, or `None`
 /// if the text mixes scripts or contains kanji/punctuation. Used to label
 /// `あ` / `ア` / `ｱ` candidates in the conversion list.
@@ -334,22 +344,23 @@ impl InputMethodEngine {
         // Predictive: dictionary readings extending the typed prefix,
         // mirroring the learning cache's prefix lookup. The full reading
         // rides on the candidate so selecting it commits and records under
-        // the right key. An unresolved romaji tail narrows the lookup to
-        // the kana it can still become; a tail that can't become kana
-        // (`yk`) suppresses prediction entirely.
-        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS {
-            let expansions = self.converters.romaji.pending_expansions(pending);
-            let tail_is_dead = !pending.is_empty() && expansions.is_empty();
-            let mut budget = if tail_is_dead { 0 } else { predictive_limit };
+        // the right key.
+        let constraint = self.tail_constraint(pending);
+        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS
+            && !matches!(constraint, TailConstraint::Dead)
+        {
+            let mut budget = predictive_limit;
             for (dict, source) in dicts {
                 if budget == 0 {
                     break;
                 }
                 let Some(dict) = dict else { continue };
-                let matches = if expansions.is_empty() {
-                    dict.predictive_search(reading, budget)
-                } else {
-                    dict.predictive_search_expanded(reading, &expansions, budget)
+                let matches = match &constraint {
+                    TailConstraint::Unconstrained => dict.predictive_search(reading, budget),
+                    TailConstraint::Narrow(expansions) => {
+                        dict.predictive_search_expanded(reading, expansions, budget)
+                    }
+                    TailConstraint::Dead => unreachable!("checked above"),
                 };
                 for m in matches {
                     if budget == 0 || candidates.len() >= limit {
@@ -367,6 +378,19 @@ impl InputMethodEngine {
         }
 
         candidates
+    }
+
+    /// Classify the unresolved romaji tail for predictive lookup.
+    fn tail_constraint(&self, pending: &str) -> TailConstraint {
+        if pending.is_empty() {
+            return TailConstraint::Unconstrained;
+        }
+        let expansions = self.converters.romaji.pending_expansions(pending);
+        if expansions.is_empty() {
+            TailConstraint::Dead
+        } else {
+            TailConstraint::Narrow(expansions)
+        }
     }
 
     /// Build conversion candidates for a reading from multiple sources.
