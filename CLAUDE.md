@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-karukan is a Japanese Input Method system for Linux and macOS, consisting of four Rust crates and a Swift package:
+karukan is a Japanese Input Method system for Linux and macOS, consisting of four Rust crates and a Swift package. The IME core and its platform frontends are grouped under `karukan-im/`:
 
-- **karukan-engine**: Core library — romaji-to-hiragana conversion, neural kana-kanji conversion via llama.cpp, system dictionary, learning cache, candidate rewriter (width/case/symbol variants)
-- **karukan-cli**: CLI tools and server — dictionary builder, Sudachi converter, dict viewer, AJIMEE-Bench, HTTP API server
-- **karukan-im**: Shared IME engine state machine (Empty → Composing → Conversion) and `karukan-imserver` stdio JSON-RPC server (macOS binary bundled in karukan-macos)
-- **karukan-fcitx5**: fcitx5 Linux frontend — C FFI (`src/ffi/`) and C++ addon (`fcitx5-addon/`) that wrap karukan-im
-- **karukan-macos**: Swift/InputMethodKit frontend that spawns `karukan-imserver` as a bundled child process
+- **karukan-engine** (`karukan-engine/`): Core library — romaji-to-hiragana conversion, neural kana-kanji conversion via llama.cpp, system dictionary, learning cache, candidate rewriter (width/case/symbol variants)
+- **karukan-cli** (`karukan-cli/`): CLI tools and server — dictionary builder, Sudachi converter, dict viewer, AJIMEE-Bench, HTTP API server
+- **karukan-im** (`karukan-im/core/`): Shared IME engine state machine (Empty → Composing → Conversion) and `karukan-imserver` stdio JSON-RPC server (macOS binary bundled in the macOS frontend)
+- **karukan-fcitx5** (`karukan-im/fcitx5/`): fcitx5 Linux frontend — C FFI (`src/ffi/`) and C++ addon (`fcitx5-addon/`) that wrap karukan-im
+- **karukan-macos** (`karukan-im/macos/`): Swift/InputMethodKit frontend that spawns `karukan-imserver` as a bundled child process
 
 ## Build and Development Commands
 
@@ -65,7 +65,7 @@ cargo build -p karukan-fcitx5 --release
 cargo test -p karukan-fcitx5
 
 # Build and install fcitx5 addon
-cd karukan-fcitx5/fcitx5-addon
+cd karukan-im/fcitx5/fcitx5-addon
 
 # Option A: System install (sudo required, no FCITX_ADDON_DIRS needed)
 cmake -B build -DCMAKE_INSTALL_PREFIX=/usr
@@ -81,7 +81,7 @@ cmake --install build
 ### karukan-macos
 
 ```bash
-cd karukan-macos
+cd karukan-im/macos
 
 make test      # Swift tests (incl. integration tests against a real karukan-imserver)
 make install   # Build, assemble Karukan.app, install to ~/Library/Input Methods (auto-downloads dict.bin if missing and prefetches all models.toml models into the HF cache)
@@ -128,7 +128,7 @@ cargo clippy --workspace  # Lint all crates
 - `bin/ajimee_bench.rs` — AJIMEE-Bench evaluation
 - `static/` — Web UI assets for server and dict-viewer
 
-### karukan-im (`karukan-im/src/`)
+### karukan-im (`karukan-im/core/src/`)
 
 - `core/engine/` — IMEEngine state machine (Empty → Composing → Conversion)
   - `mod.rs` — Main InputMethodEngine struct and core processing logic
@@ -150,7 +150,7 @@ cargo clippy --workspace  # Lint all crates
 - `config/settings.rs` — User settings (`~/.config/karukan-im/config.toml` on Linux, `~/Library/Application Support/com.karukan.karukan-im/` on macOS)
 - `server/` — stdio JSON-RPC 2.0 server for the macOS frontend (`protocol.rs` defines the wire format; `bin/karukan-imserver.rs` is the entry point)
 
-### karukan-fcitx5 (`karukan-fcitx5/`)
+### karukan-fcitx5 (`karukan-im/fcitx5/`)
 
 Linux fcitx5 frontend. Wraps karukan-im via C FFI and exposes the engine to the C++ addon.
 
@@ -161,7 +161,7 @@ Linux fcitx5 frontend. Wraps karukan-im via C FFI and exposes the engine to the 
 - `include/karukan.h` — C header for the fcitx5 C++ addon
 - `fcitx5-addon/src/karukan.cpp` — C++ fcitx5 wrapper
 
-### karukan-macos (`karukan-macos/Sources/KarukanIME/`)
+### karukan-macos (`karukan-im/macos/Sources/KarukanIME/`)
 
 Swift/InputMethodKit frontend. All IME state lives in karukan-imserver (spawned as a bundled child process); Swift only adapts IMK events and renders UI.
 
@@ -171,7 +171,7 @@ Swift/InputMethodKit frontend. All IME state lives in karukan-imserver (spawned 
 - `resources/*.tiff` — template menu icon (か), regenerated via `swift scripts/generate_icons.swift`; `resources/{ja,en}.lproj/InfoPlist.strings` localize the input mode name shown in the input menu
 - `EngineProcess.swift` — child process lifecycle: crash restart with exponential backoff, EOF-based clean shutdown (lets the server save its learning cache)
 - `EngineClient.swift` — JSON-RPC transport (sync for process_key, async for fire-and-forget)
-- `EngineProtocol.swift` — Swift mirror of `karukan-im/src/server/protocol.rs` (keep in sync; protocol_version guards breaking changes)
+- `EngineProtocol.swift` — Swift mirror of `karukan-im/core/src/server/protocol.rs` (keep in sync; protocol_version guards breaking changes)
 - `CandidateWindowController.swift` — custom NSPanel candidate window (engine pre-paginates)
 
 ## macOS Input Mode Design

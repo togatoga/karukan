@@ -2,7 +2,7 @@
 
 Linux向け日本語IME（fcitx5アドオン）。[karukan-im](../karukan-im) エンジンをC FFI経由でラップし、fcitx5上でニューラルかな漢字変換を提供します。
 
-キーバインド・設定・辞書・学習キャッシュについては [karukan-im の README](../karukan-im/README.md) を参照してください。
+キーバインド・設定・辞書・学習キャッシュについては [karukan-im の README](../core/README.md) を参照してください。
 
 ## Install
 
@@ -29,7 +29,7 @@ sudo apt install fcitx5 fcitx5-modules-dev libfcitx5core-dev \
 `/usr` にインストールします。sudo が必要ですが、`FCITX_ADDON_DIRS` の設定は不要です。
 
 ```bash
-cd karukan-fcitx5/fcitx5-addon
+cd karukan-im/fcitx5/fcitx5-addon
 cmake -B build -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build -j
 sudo cmake --install build
@@ -41,7 +41,7 @@ fcitx5 -r
 `~/.local` にインストールします。sudo 不要ですが、`FCITX_ADDON_DIRS` の手動設定が必要です。
 
 ```bash
-cd karukan-fcitx5/fcitx5-addon
+cd karukan-im/fcitx5/fcitx5-addon
 cmake -B build -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build build -j
 cmake --install build

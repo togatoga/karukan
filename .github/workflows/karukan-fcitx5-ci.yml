@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'karukan-fcitx5/**'
-      - 'karukan-im/**'
+      - 'karukan-im/fcitx5/**'
+      - 'karukan-im/core/**'
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -13,8 +13,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'karukan-fcitx5/**'
-      - 'karukan-im/**'
+      - 'karukan-im/fcitx5/**'
+      - 'karukan-im/core/**'
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'

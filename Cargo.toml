@@ -1,5 +1,5 @@
 [workspace]
-members = ["karukan-engine", "karukan-cli", "karukan-im", "karukan-fcitx5"]
+members = ["karukan-engine", "karukan-cli", "karukan-im/core", "karukan-im/fcitx5"]
 resolver = "3"
 
 [workspace.package]
@@ -23,7 +23,7 @@ thiserror = "2"
 
 # Internal crates
 karukan-engine = { path = "karukan-engine" }
-karukan-im = { path = "karukan-im" }
+karukan-im = { path = "karukan-im/core" }
 
 # Dev dependencies shared
 tempfile = "3"

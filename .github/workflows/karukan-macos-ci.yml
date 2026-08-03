@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'karukan-macos/**'
-      - 'karukan-im/**'
+      - 'karukan-im/macos/**'
+      - 'karukan-im/core/**'
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -13,8 +13,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'karukan-macos/**'
-      - 'karukan-im/**'
+      - 'karukan-im/macos/**'
+      - 'karukan-im/core/**'
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -35,7 +35,7 @@ jobs:
         run: brew install swift-format
       - name: Swift format lint
         run: swift-format lint -r Sources/ Tests/
-        working-directory: karukan-macos
+        working-directory: karukan-im/macos
 
   test:
     name: Build & Test
@@ -58,8 +58,8 @@ jobs:
 
       - name: Swift build
         run: swift build
-        working-directory: karukan-macos
+        working-directory: karukan-im/macos
 
       - name: Swift test
         run: swift test
-        working-directory: karukan-macos
+        working-directory: karukan-im/macos

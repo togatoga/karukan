@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'karukan-im/**'
+      - 'karukan-im/core/**'
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'karukan-im/**'
+      - 'karukan-im/core/**'
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'

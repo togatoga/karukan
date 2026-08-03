@@ -18,7 +18,7 @@ Rust側(`karukan-im`)にあり、Swift側はInputMethodKitとの橋渡しに徹�
         どちらも Karukan.app バンドル内 (Contents/MacOS/)
 ```
 
-- プロトコル定義: `karukan-im/src/server/protocol.rs`(Rust側が正)と
+- プロトコル定義: `karukan-im/core/src/server/protocol.rs`(Rust側が正)と
   `Sources/KarukanIME/EngineProtocol.swift`(Swift側ミラー)
 - キーイベントはfcitx5版と同じXKB keysym表現に変換して送る
   (`Sources/KarukanIME/KeyCodeMap.swift`)
@@ -30,7 +30,7 @@ Rust側(`karukan-im`)にあり、Swift側はInputMethodKitとの橋渡しに徹�
 ### 初回インストール
 
 ```bash
-cd karukan-macos
+cd karukan-im/macos
 
 # ビルド + .appバンドル組み立て + ~/Library/Input Methods へインストール
 make install

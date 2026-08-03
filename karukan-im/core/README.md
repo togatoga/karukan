@@ -3,8 +3,8 @@
 fcitx5（Linux）および macOS Swift フロントエンドで共有される日本語IMEエンジン。ローマ字→ひらがな変換、GPT-2ベースのニューラルかな漢字変換、学習キャッシュ、システム辞書を提供します。
 
 フロントエンドのインストール手順:
-- Linux (fcitx5): [karukan-fcitx5](../karukan-fcitx5/README.md)
-- macOS: [karukan-macos](../karukan-macos/README.md)
+- Linux (fcitx5): [karukan-fcitx5](../fcitx5/README.md)
+- macOS: [karukan-macos](../macos/README.md)
 
 ## Features
 

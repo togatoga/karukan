@@ -1,8 +1,8 @@
 OUTDIR = out
 APP = $(OUTDIR)/Karukan.app
 INSTALL_DIR = $(HOME)/Library/Input Methods
-CARGO_MANIFEST = ../Cargo.toml
-CARGO_TARGET = ../target
+CARGO_MANIFEST = ../../Cargo.toml
+CARGO_TARGET = ../../target
 DATA_DIR = $(HOME)/Library/Application Support/com.karukan.karukan-im
 DICT_URL = https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
 

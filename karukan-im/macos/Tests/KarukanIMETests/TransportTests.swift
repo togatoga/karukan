@@ -12,11 +12,12 @@ import XCTest
 /// covered by the Rust-side tests instead.
 final class TransportTests: XCTestCase {
     static func serverBinaryPath() -> String? {
-        // <repo>/karukan-macos/Tests/KarukanIMETests/TransportTests.swift
+        // <repo>/karukan-im/macos/Tests/KarukanIMETests/TransportTests.swift
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // KarukanIMETests
             .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // karukan-macos
+            .deletingLastPathComponent()  // macos
+            .deletingLastPathComponent()  // karukan-im
             .deletingLastPathComponent()  // repo root
         for profile in ["release", "debug"] {
             let candidate =
