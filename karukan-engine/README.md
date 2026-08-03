@@ -32,13 +32,12 @@ cargo test -p karukan-engine -- --ignored
 ```rust
 use karukan_engine::RomajiConverter;
 
-let mut converter = RomajiConverter::new();
+let converter = RomajiConverter::new();
 // "nn" は常に「ん」なので、「こんにちは」には n が3つ必要:
 // ko→こ, nn→ん, ni→に, chi→ち, ha→は
-for ch in "konnnichiha".chars() {
-    converter.push(ch);
-}
-assert_eq!(converter.output(), "こんにちは");
+let result = converter.convert("konnnichiha");
+assert_eq!(result.text, "こんにちは");
+assert_eq!(result.pending, ""); // まだ確定していないローマ字末尾（`k` など）はこちらに残る
 ```
 
 ### Kana-Kanji Conversion
@@ -57,11 +56,11 @@ let candidates = converter.convert("かんじ", "", 3)?;
 ### Learning Cache
 
 ```rust
-use karukan_engine::LearningCache;
+use karukan_engine::{LearningCache, LearningConfig};
 use std::path::Path;
 
-// 新規作成（最大エントリ数: 10,000）
-let mut cache = LearningCache::new(10_000);
+// 新規作成（デフォルト: 最大10,000エントリ）
+let mut cache = LearningCache::new(LearningConfig::default());
 
 // 変換結果を記録
 cache.record("わせだだいがく", "早稲田大学");
@@ -77,7 +76,7 @@ let results = cache.prefix_lookup("わせだ");
 
 // TSVファイルに保存・読み込み
 cache.save(Path::new("learning.tsv"))?;
-let cache = LearningCache::load(Path::new("learning.tsv"), 10_000)?;
+let cache = LearningCache::load(Path::new("learning.tsv"), LearningConfig::default())?;
 ```
 
 ### Dictionary

@@ -93,7 +93,7 @@ cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
 killall KarukanIME  # 起動中の場合は再起動して反映
 ```
 
-辞書を自分でビルドする場合は [karukan-cli の README](../karukan-cli/README.md) を参照してください。
+辞書を自分でビルドする場合は [karukan-cli の README](../../karukan-cli/README.md) を参照してください。
 
 ## キー操作
 

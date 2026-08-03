@@ -1,6 +1,6 @@
 import Foundation
 
-// Swift-side mirror of karukan-im/src/server/protocol.rs.
+// Swift-side mirror of karukan-im/core/src/server/protocol.rs.
 // All positions (caret, attribute start/end) are in Unicode scalar values;
 // convert to UTF-16 offsets before passing to IMK APIs.
 

@@ -24,25 +24,32 @@ fcitx5（Linux）および macOS Swift フロントエンドで共有される�
 | キー | 動作 |
 |------|------|
 | 文字キー | ローマ字入力 → ひらがな変換 |
-| Space / Tab / ↓ | かな漢字変換を開始 |
+| Space / ↓ | かな漢字変換を開始 |
+| Tab | かな漢字変換を開始（学習履歴を使わない） |
 | Enter | ひらがなのまま確定 |
-| Escape | 入力をキャンセル |
+| Escape | 入力をキャンセル（ライブ変換中は1回目でライブ変換を解除してひらがなに戻り、2回目でキャンセル） |
 | Backspace | 1文字削除 |
 | Delete | カーソル位置の文字を削除 |
 | ← → | カーソル移動 |
 | Home / End | カーソルを先頭 / 末尾に移動 |
+| Ctrl+B / Ctrl+F | カーソル移動（Emacs風 ← →） |
+| Ctrl+A / Ctrl+E | カーソルを先頭 / 末尾に移動（Emacs風） |
 | Ctrl+K | カタカナモードに切り替え |
 | Ctrl+Space | 全角スペースを入力 |
+
+未入力の状態で `:` を打つと絵文字モードになり、`:smile` のようなクエリで絵文字を検索できます。Enterで先頭の絵文字候補を確定、Escapeで入力した文字列をそのまま確定します。
 
 ### 変換モード
 
 | キー | 動作 |
 |------|------|
-| Space / Tab / ↓ | 次の候補 |
-| ↑ | 前の候補 |
+| Space / Tab / ↓ / Ctrl+N | 次の候補 |
+| ↑ / Ctrl+P | 前の候補 |
+| PageDown / PageUp | 候補ページの移動 |
 | 1-9 | 候補を番号で選択・確定 |
 | Enter | 選択中の候補を確定 |
 | Escape | 変換をキャンセル（ひらがなに戻る） |
+| Ctrl+Backspace / Ctrl+Delete | 選択中の学習候補を履歴から削除 |
 | 文字キー | 選択中の候補を確定して新しい入力を開始 |
 
 ### モード切り替え
@@ -51,7 +58,7 @@ fcitx5（Linux）および macOS Swift フロントエンドで共有される�
 |------|------|
 | Shift+英字 | 英数字モードに切り替え + 大文字入力 |
 | Ctrl+K | カタカナモードに切り替え |
-| Right Super / 変換 (JIS) | 英数字/カタカナ → ひらがなモードに復帰 |
+| 右Super・右Altなど右側の修飾キー / 変換 (JIS) | 英数字/カタカナ → ひらがなモードに復帰 |
 | Ctrl+Shift+L | ライブ変換のON/OFF |
 
 ### 英数字モード
@@ -126,7 +133,7 @@ CPU高負荷時（Rustビルド中など）にかな漢字変換が遅くなる�
 
 ### Dictionary
 
-辞書の構築・管理については [karukan-cli の README](../karukan-cli/README.md) を参照してください。
+辞書の構築・管理については [karukan-cli の README](../../karukan-cli/README.md) を参照してください。
 
 #### System Dictionary
 
@@ -152,7 +159,7 @@ mkdir -p ~/Library/"Application Support"/com.karukan.karukan-im
 cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
 ```
 
-自分でビルドする場合は [karukan-cli の README](../karukan-cli/README.md) を参照してください。
+自分でビルドする場合は [karukan-cli の README](../../karukan-cli/README.md) を参照してください。
 
 #### User Dictionary
 
