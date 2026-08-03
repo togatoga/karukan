@@ -20,6 +20,16 @@ const MAX_PREDICTIVE_SUGGESTIONS: usize = 3;
 /// single key would flood the list from a large dictionary
 const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
 
+/// How the unresolved romaji tail constrains the predictive lookup.
+enum TailConstraint {
+    /// No tail: prediction is unconstrained
+    Unconstrained,
+    /// The tail can still become these kana: narrow to them (`d` → だ/で…)
+    Narrow(Vec<String>),
+    /// The tail can no longer become kana (`yk`): no reading extends it
+    Dead,
+}
+
 /// Mozc-style width/script annotation for a pure-kana candidate, or `None`
 /// if the text mixes scripts or contains kanji/punctuation. Used to label
 /// `あ` / `ア` / `ｱ` candidates in the conversion list.
@@ -190,23 +200,34 @@ impl InputMethodEngine {
     /// `skip_learning` is set by the Tab path to omit learning-cache
     /// candidates (Space/Down keep the default learning-included behavior).
     pub(super) fn start_conversion(&mut self, skip_learning: bool) -> EngineResult {
-        // Settle any remaining romaji
-        self.settle_romaji();
-
-        let reading = self.input_buf.reading();
+        // Resolve the reading without touching the composition: pending
+        // romaji stays live so cancelling the conversion returns to an
+        // editable buffer (けいおうd → Tab → Esc → `a` → けいおうだ)
+        let reading = self.input_buf.settled_reading(&self.converters.romaji);
+        // The unresolved tail keeps narrowing the predictive dictionary
+        // lookup, so a suggestion visible while typing (わせd → 早稲田)
+        // stays selectable in the conversion list
+        let base = self.input_buf.reading();
+        let pending = self.input_buf.pending();
 
         // Save auto-suggest/live conversion result before clearing state.
         // This ensures the candidate that was displayed during input is preserved
         // in the conversion candidate list even if the re-inference uses a different strategy.
-        let prev_suggest_text = std::mem::take(&mut self.live.text);
+        let prev_suggest_text = self.live_text_with_pending();
+        self.live.text.clear();
 
         if reading.is_empty() {
             return EngineResult::consumed();
         }
 
         // Get candidates from kanji converter (use full num_candidates for explicit conversion)
-        let mut candidates =
-            self.build_conversion_candidates(&reading, self.config.num_candidates, skip_learning);
+        let mut candidates = self.build_conversion_candidates(
+            &reading,
+            &base,
+            &pending,
+            self.config.num_candidates,
+            skip_learning,
+        );
 
         // If the previous auto-suggest result is not in the new candidates, insert it at the top
         // so it doesn't disappear when the conversion strategy changes.
@@ -222,17 +243,12 @@ impl InputMethodEngine {
         }
 
         if candidates.is_empty() {
-            // No candidates: stay composing with the caret where it was,
-            // so the next key keeps appending (emoji queries with no match
-            // land here)
-            let preedit = Preedit::with_text_underlined(&reading);
-            self.state = InputState::Composing {
-                preedit: preedit.clone(),
-            };
+            // No candidates: stay composing, untouched (emoji queries with
+            // no match land here)
+            let preedit = self.set_composing_state();
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        self.input_buf.set_cursor(0);
         let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
         self.enter_conversion_state(&reading, candidate_list)
     }
@@ -270,6 +286,7 @@ impl InputMethodEngine {
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
             candidates: candidates.clone(),
+            reading: reading.to_string(),
         };
 
         EngineResult::consumed()
@@ -304,9 +321,13 @@ impl InputMethodEngine {
         let mut candidates = Vec::new();
         let mut seen = HashSet::new();
 
-        // Exact matches, user dictionary first. Candidates are sorted by
-        // score at build/load time
+        // Exact matches, user dictionary first — only when no romaji tail
+        // is pending (an exact hit on the base would ignore the typed
+        // tail). Candidates are sorted by score at build/load time
         for (dict, source) in dicts {
+            if !pending.is_empty() {
+                break;
+            }
             let Some(result) = dict.and_then(|d| d.exact_match_search(reading)) else {
                 continue;
             };
@@ -323,22 +344,23 @@ impl InputMethodEngine {
         // Predictive: dictionary readings extending the typed prefix,
         // mirroring the learning cache's prefix lookup. The full reading
         // rides on the candidate so selecting it commits and records under
-        // the right key. An unresolved romaji tail narrows the lookup to
-        // the kana it can still become; a tail that can't become kana
-        // (`yk`) suppresses prediction entirely.
-        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS {
-            let expansions = self.converters.romaji.pending_expansions(pending);
-            let tail_is_dead = !pending.is_empty() && expansions.is_empty();
-            let mut budget = if tail_is_dead { 0 } else { predictive_limit };
+        // the right key.
+        let constraint = self.tail_constraint(pending);
+        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS
+            && !matches!(constraint, TailConstraint::Dead)
+        {
+            let mut budget = predictive_limit;
             for (dict, source) in dicts {
                 if budget == 0 {
                     break;
                 }
                 let Some(dict) = dict else { continue };
-                let matches = if expansions.is_empty() {
-                    dict.predictive_search(reading, budget)
-                } else {
-                    dict.predictive_search_expanded(reading, &expansions, budget)
+                let matches = match &constraint {
+                    TailConstraint::Unconstrained => dict.predictive_search(reading, budget),
+                    TailConstraint::Narrow(expansions) => {
+                        dict.predictive_search_expanded(reading, expansions, budget)
+                    }
+                    TailConstraint::Dead => unreachable!("checked above"),
                 };
                 for m in matches {
                     if budget == 0 || candidates.len() >= limit {
@@ -358,6 +380,19 @@ impl InputMethodEngine {
         candidates
     }
 
+    /// Classify the unresolved romaji tail for predictive lookup.
+    fn tail_constraint(&self, pending: &str) -> TailConstraint {
+        if pending.is_empty() {
+            return TailConstraint::Unconstrained;
+        }
+        let expansions = self.converters.romaji.pending_expansions(pending);
+        if expansions.is_empty() {
+            TailConstraint::Dead
+        } else {
+            TailConstraint::Narrow(expansions)
+        }
+    }
+
     /// Build conversion candidates for a reading from multiple sources.
     ///
     /// Combines learning cache, dictionaries, and model inference results
@@ -366,12 +401,18 @@ impl InputMethodEngine {
     ///
     /// Priority: Learning → User Dictionary → Model → System Dictionary → Fallback
     ///
+    /// `base`/`pending` split the reading for the dictionary lookup: while
+    /// a romaji tail is unresolved the predictive search stays narrowed to
+    /// it (base わせ + `d` → わせだ…), with no tail they equal `reading`/"".
+    ///
     /// `skip_learning` suppresses the learning-cache step (1). Used by the Tab
     /// key path so users can escape a noisy learning history without losing
     /// access to dictionary/model candidates.
     pub(super) fn build_conversion_candidates(
         &mut self,
         reading: &str,
+        base: &str,
+        pending: &str,
         num_candidates: usize,
         skip_learning: bool,
     ) -> Vec<AnnotatedCandidate> {
@@ -409,7 +450,7 @@ impl InputMethodEngine {
         }
 
         // 2. Dictionary candidates (user dict first, then system dict)
-        let dict_results = self.search_dictionaries(reading, "", usize::MAX, usize::MAX);
+        let dict_results = self.search_dictionaries(base, pending, usize::MAX, usize::MAX);
         // Insert user dictionary entries at the top (after learning)
         for ac in &dict_results {
             if ac.source == CandidateSource::UserDictionary {
@@ -772,7 +813,10 @@ impl InputMethodEngine {
         // prefix-matched candidate carries a longer reading of its own, but
         // every entry that surfaces it has the typed reading as a prefix, so
         // removing by the typed reading clears the shown row and its twins.
-        let reading = self.input_buf.reading();
+        let InputState::Conversion { reading, .. } = &self.state else {
+            return EngineResult::consumed();
+        };
+        let reading = reading.clone();
         let removed = self
             .learning
             .as_mut()
@@ -782,8 +826,13 @@ impl InputMethodEngine {
         }
         debug!("deleted learning entry: {} -> {}", reading, surface);
 
-        let candidates =
-            self.build_conversion_candidates(&reading, self.config.num_candidates, false);
+        let candidates = self.build_conversion_candidates(
+            &reading,
+            &reading,
+            "",
+            self.config.num_candidates,
+            false,
+        );
         if candidates.is_empty() {
             return self.cancel_conversion();
         }
@@ -796,21 +845,17 @@ impl InputMethodEngine {
         if !matches!(self.state, InputState::Conversion { .. }) {
             return EngineResult::not_consumed();
         }
-        let reading = self.input_buf.reading();
 
-        if reading.is_empty() {
+        if self.input_buf.is_empty() {
             self.state = InputState::Empty;
-            self.input_buf.clear();
             return EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(Preedit::new()))
                 .with_action(EngineAction::HideCandidates)
                 .with_action(EngineAction::HideAuxText);
         }
 
-        // Rebuild the composition from the reading (no pending romaji)
-        self.input_buf.clear();
-        self.input_buf.insert(&reading);
-
+        // The composition was left untouched when the conversion started:
+        // just come back to it, pending romaji still live
         let preedit = self.set_composing_state();
 
         EngineResult::consumed()

@@ -147,6 +147,103 @@ fn test_live_conversion_commit_empty_falls_back_to_hiragana() {
 }
 
 #[test]
+fn test_live_conversion_commit_keeps_pending_tail() {
+    // "wasedad" + Enter without any Space: the display was 早稲田 + pending
+    // `d`, so the commit must be 早稲田d, not 早稲田.
+    let mut engine = make_live_conversion_engine();
+    for ch in "wasedad".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.live.text = "早稲田".to_string();
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let commit_text = result
+        .actions
+        .iter()
+        .find_map(|a| {
+            if let EngineAction::Commit(text) = a {
+                Some(text.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(commit_text, "早稲田d");
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+#[test]
+fn test_engine_commit_keeps_pending_tail() {
+    // Same as above through the programmatic commit() path (focus-out).
+    let mut engine = make_live_conversion_engine();
+    for ch in "wasedad".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.live.text = "早稲田".to_string();
+
+    assert_eq!(engine.commit(), "早稲田d");
+}
+
+#[test]
+fn test_conversion_keeps_pending_tail_of_live_candidate() {
+    // "wasedad": the live suggestion converts only the settled reading
+    // (わせだ→早稲田) and the pending `d` is displayed after it. Starting a
+    // conversion must surface 早稲田d — not 早稲田 — as the preserved top
+    // candidate, and commit it whole.
+    let mut engine = make_live_conversion_engine();
+    for ch in "wasedad".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.live.text = "早稲田".to_string();
+
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "早稲田d");
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let commit_text = result
+        .actions
+        .iter()
+        .find_map(|a| {
+            if let EngineAction::Commit(text) = a {
+                Some(text.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(commit_text, "早稲田d");
+}
+
+#[test]
+fn test_commit_mid_buffer_ignores_live_text() {
+    // Typing away from the end shows the kana display (live text is not
+    // faithful there), so Enter must commit what is shown — あdい — and not
+    // splice the live text with the mid-buffer pending run (愛d).
+    let mut engine = make_live_conversion_engine();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press('d'));
+    assert_eq!(engine.preedit().unwrap().text(), "あdい");
+    engine.live.text = "愛".to_string();
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let commit_text = result
+        .actions
+        .iter()
+        .find_map(|a| {
+            if let EngineAction::Commit(text) = a {
+                Some(text.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(commit_text, "あdい");
+}
+
+#[test]
 fn test_live_conversion_cursor_move_clears() {
     // Moving cursor should clear live conversion text
     let mut engine = make_live_conversion_engine();

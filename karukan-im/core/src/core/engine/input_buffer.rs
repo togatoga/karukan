@@ -81,8 +81,8 @@ impl InputBuffer {
         self.cursor = 0;
     }
 
-    pub fn has_elements(&self) -> bool {
-        !self.elements.is_empty()
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
     }
 
     // --- Record edits -----------------------------------------------------
@@ -103,8 +103,9 @@ impl InputBuffer {
         self.cursor += 1;
     }
 
-    /// Record settled text at the caret (reconversion reading and other
-    /// programmatic strings).
+    /// Record settled text at the caret. Test setup only — production
+    /// code always goes through the typed-key paths.
+    #[cfg(test)]
     pub fn insert(&mut self, text: &str) {
         let count = text.chars().count();
         self.elements.splice(
@@ -181,6 +182,31 @@ impl InputBuffer {
         let len = evaluated.len();
         self.elements.splice(range, evaluated);
         len
+    }
+
+    /// The reading as it would settle: Romaji runs force-converted in
+    /// place, everything else as displayed. The non-destructive
+    /// counterpart of [`Self::settle_romaji`] — used when the composition
+    /// must stay editable (starting a conversion that Escape can undo).
+    pub fn settled_reading(&self, romaji: &RomajiConverter) -> String {
+        let mut reading = String::new();
+        let mut run = String::new();
+        for element in &self.elements {
+            match element {
+                Element::Romaji(ch) => run.push(*ch),
+                Element::Converted(ch) => {
+                    if !run.is_empty() {
+                        reading.push_str(&romaji.convert_flush(&run));
+                        run.clear();
+                    }
+                    reading.push(*ch);
+                }
+            }
+        }
+        if !run.is_empty() {
+            reading.push_str(&romaji.convert_flush(&run));
+        }
+        reading
     }
 
     /// Settle all Romaji keystrokes in place (`ltu` → っ; unmatched

@@ -350,6 +350,9 @@ impl InputMethodEngine {
     /// Commit the current hiragana input (or katakana if in katakana mode)
     /// In live conversion mode, commits the converted text instead of hiragana.
     pub(super) fn commit_composing(&mut self) -> EngineResult {
+        // Resolve the live text before settling: it needs the pending run
+        let live_text = self.live_text_with_pending();
+
         // Settle any pending romaji
         self.settle_romaji();
 
@@ -364,9 +367,9 @@ impl InputMethodEngine {
         } else if self.mode.current() == InputMode::Katakana {
             // Katakana mode always commits katakana, ignoring live conversion
             karukan_engine::hiragana_to_katakana(&reading)
-        } else if !self.live.text.is_empty() {
+        } else if !live_text.is_empty() {
             // Live conversion active: commit converted text
-            self.live.text.clone()
+            live_text
         } else {
             reading.clone()
         };

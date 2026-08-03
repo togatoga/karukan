@@ -235,7 +235,7 @@ impl InputMethodEngine {
     /// If the composition is empty, reset to Empty state and return the result.
     /// Returns None if elements remain (caller should continue normally).
     fn try_reset_if_empty(&mut self) -> Option<EngineResult> {
-        if !self.input_buf.has_elements() {
+        if self.input_buf.is_empty() {
             self.state = InputState::Empty;
             self.input_buf.clear();
             // Erasing the whole buffer ends the composition: drop the live
@@ -458,11 +458,12 @@ impl InputMethodEngine {
         match &self.state {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
-                // Settle pending romaji
+                // Resolve the live text before settling: it needs the pending run
+                let live_text = self.live_text_with_pending();
                 self.settle_romaji();
                 let reading = self.input_buf.reading();
-                let text = if !self.live.text.is_empty() {
-                    self.live.text.clone()
+                let text = if !live_text.is_empty() {
+                    live_text
                 } else {
                     reading.clone()
                 };

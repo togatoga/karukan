@@ -129,7 +129,7 @@ fn conversion_list_gets_all_predictive_candidates() {
     ));
 
     let conversion: Vec<String> = engine
-        .build_conversion_candidates("わせ", 1, false)
+        .build_conversion_candidates("わせ", "わせ", "", 1, false)
         .into_iter()
         .map(|c| c.text)
         .collect();
@@ -143,4 +143,39 @@ fn conversion_list_gets_all_predictive_candidates() {
 
     let suggestions = engine.lookup_dict_candidates("わせ");
     assert!(suggestions.len() <= 3);
+}
+
+/// The narrowed suggestion stays selectable: わせd + Space rebuilds the
+/// conversion list with the same narrowing, so 早稲田 is in the
+/// selectable candidates (and ワセリン is not).
+#[test]
+fn conversion_with_pending_keeps_narrowed_candidates() {
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.system = Some(dict_from_json(
+        r#"[
+            {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1000.0}]},
+            {"reading":"わせりん","candidates":[{"surface":"ワセリン","score":100.0}]}
+        ]"#,
+    ));
+
+    for ch in "wased".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let candidates = engine.candidates().expect("conversion candidates");
+    let texts: Vec<&str> = candidates
+        .candidates()
+        .iter()
+        .map(|c| c.text.as_str())
+        .collect();
+    assert!(texts.contains(&"早稲田"), "早稲田 selectable: {texts:?}");
+    assert!(!texts.contains(&"ワセリン"), "ワセリン excluded: {texts:?}");
+
+    let waseda = candidates
+        .candidates()
+        .iter()
+        .find(|c| c.text == "早稲田")
+        .unwrap();
+    assert_eq!(waseda.reading.as_deref(), Some("わせだ"));
 }
