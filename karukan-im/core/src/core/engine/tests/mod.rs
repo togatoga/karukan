@@ -77,3 +77,15 @@ fn make_live_conversion_engine() -> InputMethodEngine {
     engine.live.enabled = true;
     engine
 }
+
+/// Simulate an active live-conversion display: install `converted` as the
+/// single chunk covering the current reading and mark the display shown.
+/// The live text is derived from the chunks, so this is the test analogue
+/// of a completed `chunked_auto_suggest`.
+fn set_live_text(engine: &mut InputMethodEngine, converted: &str) {
+    engine.chunks = vec![ComposingChunk {
+        reading: engine.input_buf.reading(),
+        converted: converted.to_string(),
+    }];
+    engine.live.shown = true;
+}

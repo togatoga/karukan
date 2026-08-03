@@ -244,7 +244,7 @@ impl InputMethodEngine {
         // This ensures the candidate that was displayed during input is preserved
         // in the conversion candidate list even if the re-inference uses a different strategy.
         let prev_suggest_text = self.live_text_with_pending();
-        self.live.text.clear();
+        self.live.shown = false;
 
         if reading.is_empty() {
             return EngineResult::consumed();

@@ -25,7 +25,7 @@ fn test_live_conversion_off_unchanged() {
     engine.process_key(&press('i'));
     assert_eq!(engine.preedit().unwrap().text(), "あい");
     // live_conversion_text should be empty
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
 }
 
 #[test]
@@ -38,12 +38,12 @@ fn test_live_conversion_escape_shows_hiragana() {
     engine.process_key(&press('i'));
 
     // Simulate live conversion being active
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     // Press Escape -> should clear live_conversion_text and show hiragana
     let result = engine.process_key(&press_key(Keysym::ESCAPE));
     assert!(result.consumed);
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
     assert!(matches!(engine.state(), InputState::Composing { .. }));
     assert_eq!(engine.preedit().unwrap().text(), "あい");
 }
@@ -57,12 +57,12 @@ fn test_live_conversion_escape_twice_cancels() {
     engine.process_key(&press('i'));
 
     // Set live conversion text
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     // First Escape: clears live conversion, shows hiragana
     engine.process_key(&press_key(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
 
     // Second Escape: cancels input entirely
     engine.process_key(&press_key(Keysym::ESCAPE));
@@ -78,7 +78,7 @@ fn test_live_conversion_commit_with_converted_text() {
     engine.process_key(&press('i'));
 
     // Simulate live conversion
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     // Press Enter -> should commit "愛", not "あい"
     let result = engine.process_key(&press_key(Keysym::RETURN));
@@ -97,7 +97,7 @@ fn test_live_conversion_commit_with_converted_text() {
         .unwrap();
     assert_eq!(commit_text, "愛");
     assert!(matches!(engine.state(), InputState::Empty));
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn test_commit_composing_hides_candidate_window() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert!(result.consumed);
@@ -129,7 +129,7 @@ fn test_live_conversion_commit_empty_falls_back_to_hiragana() {
     let mut engine = make_live_conversion_engine();
 
     engine.process_key(&press('a'));
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
 
     let result = engine.process_key(&press_key(Keysym::RETURN));
     let commit_text = result
@@ -154,7 +154,7 @@ fn test_live_conversion_commit_keeps_pending_tail() {
     for ch in "wasedad".chars() {
         engine.process_key(&press(ch));
     }
-    engine.live.text = "早稲田".to_string();
+    set_live_text(&mut engine, "早稲田");
 
     let result = engine.process_key(&press_key(Keysym::RETURN));
     let commit_text = result
@@ -179,7 +179,7 @@ fn test_engine_commit_keeps_pending_tail() {
     for ch in "wasedad".chars() {
         engine.process_key(&press(ch));
     }
-    engine.live.text = "早稲田".to_string();
+    set_live_text(&mut engine, "早稲田");
 
     assert_eq!(engine.commit(), "早稲田d");
 }
@@ -194,7 +194,7 @@ fn test_conversion_keeps_pending_tail_of_live_candidate() {
     for ch in "wasedad".chars() {
         engine.process_key(&press(ch));
     }
-    engine.live.text = "早稲田".to_string();
+    set_live_text(&mut engine, "早稲田");
 
     engine.process_key(&press_key(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
@@ -226,7 +226,7 @@ fn test_commit_mid_buffer_ignores_live_text() {
     engine.process_key(&press_key(Keysym::LEFT));
     engine.process_key(&press('d'));
     assert_eq!(engine.preedit().unwrap().text(), "あdい");
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     let result = engine.process_key(&press_key(Keysym::RETURN));
     let commit_text = result
@@ -250,11 +250,11 @@ fn test_live_conversion_cursor_move_clears() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     // Left arrow clears live conversion
     engine.process_key(&press_key(Keysym::LEFT));
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn test_live_conversion_build_preedit() {
     // Test build_composing_preedit constructs correct display for live conversion
     let mut engine = make_live_conversion_engine();
 
-    engine.live.text = "漢字".to_string();
+    set_live_text(&mut engine, "漢字");
 
     let preedit = engine.build_composing_preedit();
     assert_eq!(preedit.text(), "漢字");
@@ -284,7 +284,7 @@ fn test_alphabet_mode_with_kana_keeps_converting() {
     assert!(karukan_engine::contains_kana(&engine.input_buf.reading()));
 
     // Simulate a previous live conversion result lingering on screen.
-    engine.live.text = "亜A".to_string();
+    set_live_text(&mut engine, "亜A");
 
     // Typing another latin char re-runs refresh_input_state. Because the buffer
     // still has kana, the "preserve display" early-return is bypassed and
@@ -292,7 +292,7 @@ fn test_alphabet_mode_with_kana_keeps_converting() {
     // reading itself, so live.text is cleared rather than frozen.
     engine.process_key(&press('b'));
     assert!(
-        engine.live.text.is_empty(),
+        engine.live_text().is_empty(),
         "mixed kana buffer must reconvert in alphabet mode, not preserve stale live.text"
     );
 }
@@ -310,11 +310,11 @@ fn test_alphabet_mode_pure_latin_preserves_live_text() {
     assert!(engine.mode.current() == InputMode::Alphabet);
     assert!(!karukan_engine::contains_kana(&engine.input_buf.reading()));
 
-    engine.live.text = "AB".to_string();
+    set_live_text(&mut engine, "AB");
 
     // Another latin char keeps the preserved live.text (no reconversion).
     engine.process_key(&press('c'));
-    assert_eq!(engine.live.text, "AB");
+    assert_eq!(engine.live_text(), "AB");
 }
 
 // --- Ctrl+Space full-width space tests ---
@@ -431,12 +431,12 @@ fn test_toggle_off_during_composing_clears_live_text() {
     let mut engine = make_live_conversion_engine();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.live.text = "愛".to_string();
+    set_live_text(&mut engine, "愛");
 
     let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
     assert!(result.consumed);
     assert!(!engine.live.enabled);
-    assert!(engine.live.text.is_empty());
+    assert!(engine.live_text().is_empty());
 
     let preedit_text = result.actions.iter().find_map(|a| {
         if let EngineAction::UpdatePreedit(p) = a {
