@@ -34,7 +34,10 @@ pub(in crate::core) struct ConversionCache {
 }
 
 impl ConversionCache {
-    const DEFAULT_CAPACITY: usize = 256;
+    /// Roughly one entry is inserted per keystroke (the growing tail chunk),
+    /// so this covers a long editing session. Entries are a few hundred bytes
+    /// (reading + lctx + candidates), so the cache stays in the low MBs.
+    const DEFAULT_CAPACITY: usize = 4096;
 
     pub fn new(capacity: usize) -> Self {
         Self {
@@ -56,7 +59,8 @@ impl ConversionCache {
     pub fn insert(&mut self, key: ConversionCacheKey, candidates: Vec<String>) {
         self.clock += 1;
         if self.entries.len() >= self.capacity && !self.entries.contains_key(&key) {
-            // Capacity is small (hundreds), so a linear scan is fine.
+            // A linear scan over a few thousand entries is microseconds —
+            // negligible next to a model call.
             if let Some(oldest) = self
                 .entries
                 .iter()
