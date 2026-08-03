@@ -196,4 +196,4 @@ The engine-internal `InputMode::Alphabet` (entered via Shift+letter on Linux/fci
 
 ## Training (karukan-jinen)
 
-Model training is handled by the separate `karukan-jinen` Python project (not in this repository). It trains GPT-2 based models for kana-kanji conversion using the jinen format, and outputs GGUF files for use with karukan-engine.
+Model training is handled by the separate `karukan-jinen` Python project (not in this repository). It trains small language models (GPT-2 and Qwen3 based) for kana-kanji conversion using the jinen format, and outputs GGUF files for use with karukan-engine.
