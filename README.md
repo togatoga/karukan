@@ -42,6 +42,12 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 - **Linux (fcitx5)**: [karukan-fcitx5 の README](karukan-im/fcitx5/README.md#install) を参照
 - **macOS**: [karukan-macos の README](karukan-im/macos/README.md) を参照
 
+## ドキュメント
+
+- [キーバインド一覧](docs/key-bindings.md) — 共通キーバインドと Linux / macOS 固有キー
+- [ユーザー辞書](docs/user-dictionary.md) — 対応形式（Mozc/Google IME TSV・バイナリ）と登録方法
+- [設定・辞書・学習キャッシュ](karukan-im/core/README.md) — config.toml の設定項目、システム辞書、変換学習
+
 ## ライセンス
 
 MIT OR Apache-2.0 のデュアルライセンスで提供しています。

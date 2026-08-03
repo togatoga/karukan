@@ -19,53 +19,7 @@ fcitx5（Linux）および macOS Swift フロントエンドで共有される�
 
 ## Key Bindings
 
-### ひらがな入力モード
-
-| キー | 動作 |
-|------|------|
-| 文字キー | ローマ字入力 → ひらがな変換 |
-| Space / ↓ | かな漢字変換を開始 |
-| Tab | かな漢字変換を開始（学習履歴を使わない） |
-| Enter | ひらがなのまま確定 |
-| Escape | 入力をキャンセル（ライブ変換中は1回目でライブ変換を解除してひらがなに戻り、2回目でキャンセル） |
-| Backspace | 1文字削除 |
-| Delete | カーソル位置の文字を削除 |
-| ← → | カーソル移動 |
-| Home / End | カーソルを先頭 / 末尾に移動 |
-| Ctrl+B / Ctrl+F | カーソル移動（Emacs風 ← →） |
-| Ctrl+A / Ctrl+E | カーソルを先頭 / 末尾に移動（Emacs風） |
-| Ctrl+K | カタカナモードに切り替え |
-| Ctrl+Space | 全角スペースを入力 |
-
-未入力の状態で `:` を打つと絵文字モードになり、`:smile` のようなクエリで絵文字を検索できます。Enterで先頭の絵文字候補を確定、Escapeで入力した文字列をそのまま確定します。
-
-### 変換モード
-
-| キー | 動作 |
-|------|------|
-| Space / Tab / ↓ / Ctrl+N | 次の候補 |
-| ↑ / Ctrl+P | 前の候補 |
-| PageDown / PageUp | 候補ページの移動 |
-| 1-9 | 候補を番号で選択・確定 |
-| Enter | 選択中の候補を確定 |
-| Escape | 変換をキャンセル（ひらがなに戻る） |
-| Ctrl+Backspace / Ctrl+Delete | 選択中の学習候補を履歴から削除 |
-| 文字キー | 選択中の候補を確定して新しい入力を開始 |
-
-### モード切り替え
-
-| キー | 動作 |
-|------|------|
-| Shift+英字 | 英数字モードに切り替え + 大文字入力 |
-| Ctrl+K | カタカナモードに切り替え |
-| 右Super・右Altなど右側の修飾キー / 変換 (JIS) | 英数字/カタカナ → ひらがなモードに復帰 |
-| Ctrl+Shift+L | ライブ変換のON/OFF |
-
-### 英数字モード
-
-英数字モードでは文字がローマ字変換されず、そのまま入力されます。日本語と英語を混ぜて入力し、Spaceで変換するとひらがな部分のみ変換されます。
-
-例: `わたしはLinuxが` → 変換 → `私はLinuxが`
+[docs/key-bindings.md](../../docs/key-bindings.md) を参照してください（共通キーバインドと Linux / macOS 固有キーをまとめています）。
 
 ## Configuration
 
@@ -147,13 +101,13 @@ double-array trieベースのシステム辞書で、モデル推論に加えて
 
 ```bash
 # Linux
-wget https://github.com/togatoga/karukan/releases/download/v0.1.0/dict.tgz
+wget https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
 tar xzf dict.tgz
 mkdir -p ~/.local/share/karukan-im
 cp dict.bin ~/.local/share/karukan-im/
 
 # macOS
-curl -LO https://github.com/togatoga/karukan/releases/download/v0.1.0/dict.tgz
+curl -LO https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
 tar xzf dict.tgz
 mkdir -p ~/Library/"Application Support"/com.karukan.karukan-im
 cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
@@ -163,7 +117,7 @@ cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
 
 #### User Dictionary
 
-ユーザー辞書ディレクトリにファイルを配置すると、ユーザー辞書として読み込まれます。
+ユーザー辞書ディレクトリにファイルを配置すると、ユーザー辞書として読み込まれます。対応形式と登録方法の詳細は [docs/user-dictionary.md](../../docs/user-dictionary.md) を参照してください。
 
 - デフォルトパス: `~/.local/share/karukan-im/user_dicts/`（macOS: `~/Library/Application Support/com.karukan.karukan-im/user_dicts/`）
 - ディレクトリ内のファイルはすべて自動で読み込み（KRKNバイナリ・Mozc TSV を自動判定）

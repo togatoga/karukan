@@ -1,8 +1,8 @@
 # karukan-fcitx5
 
-Linux向け日本語IME（fcitx5アドオン）。[karukan-im](core/) エンジンをC FFI経由でラップし、fcitx5上でニューラルかな漢字変換を提供します。
+Linux向け日本語IME（fcitx5アドオン）。[karukan-im](../core/) エンジンをC FFI経由でラップし、fcitx5上でニューラルかな漢字変換を提供します。
 
-キーバインド・設定・辞書・学習キャッシュについては [karukan-im の README](../core/README.md) を参照してください。
+キーバインドは [docs/key-bindings.md](../../docs/key-bindings.md) を、設定・辞書・学習キャッシュについては [karukan-im の README](../core/README.md) を参照してください。
 
 ## Install
 
