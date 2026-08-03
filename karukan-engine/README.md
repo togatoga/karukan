@@ -108,7 +108,7 @@ let results = dict.common_prefix_search("きょうと");
 | `jinen-v1-small-q5` | GPT-2 | 90M | Q5_K_M | Yes |
 | `jinen-v1.1-beta-q5` | Qwen3 | 109M | Q5_K_M | |
 
-IMEで使うモデルは設定ファイルの `model` / `light_model` で切り替えられます（[karukan-im の Configuration](../karukan-im/core/README.md#configuration) 参照）。
+IMEで使うモデルは設定ファイルの `model` / `light_model` で切り替えられます（[docs/configuration.md](../docs/configuration.md) 参照）。
 
 ### jinen Format
 

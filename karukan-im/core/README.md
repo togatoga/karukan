@@ -15,134 +15,24 @@ fcitx5（Linux）および macOS Swift フロントエンドで共有される�
 - システム辞書・ユーザー辞書による候補補完
 
 > [!NOTE]
-> モデル推論だけでは語彙が限られるため、システム辞書の併用を強く推奨します。システム辞書はIMEに同梱されていないため、別途インストールが必要です。詳しくは [Dictionary](#dictionary) を参照してください。
+> モデル推論だけでは語彙が限られるため、システム辞書の併用を強く推奨します。システム辞書はIMEに同梱されていないため、別途インストールが必要です。詳しくは [docs/dictionary.md](../../docs/dictionary.md) を参照してください。
 
-## Key Bindings
+## Documentation
 
-[docs/key-bindings.md](../../docs/key-bindings.md) を参照してください（共通キーバインドと Linux / macOS 固有キーをまとめています）。
+ユーザー向けドキュメントは [docs/](../../docs/) にまとまっています:
 
-## Configuration
+- [キーバインド一覧](../../docs/key-bindings.md) — 共通キーバインドと Linux / macOS 固有キー
+- [設定](../../docs/configuration.md) — config.toml の設定項目、ライブ変換、変換ストラテジー、学習キャッシュ
+- [辞書](../../docs/dictionary.md) — システム辞書のインストール、ユーザー辞書、候補の優先順位
 
-設定ファイル: `~/.config/karukan-im/config.toml`（macOS: `~/Library/Application Support/com.karukan.karukan-im/config.toml`）
+設定項目の正確な既定値と説明は [`config/default.toml`](config/default.toml) を参照してください（各設定行に日本語コメント付き）。
 
-```toml
-[conversion]
-live_conversion = true          # ライブ変換を起動時に有効化（Ctrl+Shift+L で実行中も切替。既定ON）
-composing_chunk_len = 30        # ライブ変換で1回のモデル変換が扱う読みの最大文字数（= 1キーあたりレイテンシの上限）
-strategy = "adaptive"           # 変換ストラテジー（adaptive / light / main）
-num_candidates = 9              # 変換候補数（Space押下時）
-n_threads = 4                   # 推論スレッド数（0 = 全コア使用）
-model = "jinen-v1-small-q5"     # メインモデル（モデルID or GGUFパス）
-light_model = "jinen-v1-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用）
-use_context = true              # Surrounding Textを変換に使用する
-max_context_length = 10         # コンテキストの最大文字数
-short_input_threshold = 10      # ビームサーチを使うトークン数の上限
-beam_width = 3                  # ビーム幅
-max_latency_ms = 100            # メインモデルの許容レイテンシ（ms）。超過時は軽量モデルに自動切替（0 = 無効）
-dict_path = "/path/to/dict.bin" # システム辞書パス（省略時はデータディレクトリの dict.bin。[Dictionary](#dictionary) 参照）
+## Development
 
-[learning]
-enabled = true                 # 変換学習の有効/無効
-max_entries = 10000            # 学習エントリの最大数
-max_surface_chars = 50         # 学習する変換結果の最大文字数
-```
-
-`model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回利用時にHugging Faceから自動ダウンロードされます）。設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
-
-| モデルID | ベースモデル | パラメータ数 |
-|---------|-----------|-----------|
-| `jinen-v1-xsmall-q5` | GPT-2 | 26M |
-| `jinen-v1-small-q5` | GPT-2 | 90M |
-| `jinen-v1.1-beta-q5` | Qwen3 | 109M（beta） |
-
-> [!NOTE]
-> 上記は主要な設定項目の抜粋です。全項目の正確な既定値と説明は [`config/default.toml`](config/default.toml) を参照してください（各設定行に日本語コメント付き）。
-
-### Live Conversion
-
-入力と同時にかな漢字変換の結果をプリエディットへリアルタイム表示します（Spaceを押さずに変換が進む）。`Ctrl+Shift+L` でON/OFFを切り替えられ、既定では `live_conversion = true` で有効です。
-
-長文入力でも1キーあたりのレイテンシを一定に保つため、変換中のバッファを内部で最大 `composing_chunk_len` 文字（既定30）のチャンクに分割し、編集した箇所のチャンクだけを再変換します。チャンクは内部的な分割で、ユーザーには連続した1つのプリエディットとして見えます。記号・数字の連続は日本語とは別チャンクに分けてそのまま通すため、`123456` のような並びが変換で崩れることはありません。
-
-### Conversion Strategy
-
-`strategy` で変換時のモデル使い分けを制御できます。
-
-| 値 | 説明 | 読み込むモデル |
-|---|---|---|
-| `adaptive` | デフォルト。レイテンシに応じてメイン・軽量モデルを動的に切り替え | メイン + 軽量 |
-| `light` | 軽量モデルのみ使用。メモリ消費が少なく、低スペックPCにおすすめ | 軽量のみ |
-| `main` | メインモデルのみ使用（ビームサーチなし） | メインのみ |
-
-低スペックのPC（メモリが少ない、CPUが遅い等）では `strategy = "light"` を設定すると、軽量モデル1つだけで動作するためメモリ使用量が削減され、レスポンスも安定します。
-
-```toml
-[conversion]
-strategy = "light"
-```
-
-### Performance Tuning
-
-CPU高負荷時（Rustビルド中など）にかな漢字変換が遅くなる場合は、`n_threads` を小さくするとレスポンスが改善します。
-
-### Dictionary
-
-辞書の構築・管理については [karukan-cli の README](../../karukan-cli/README.md) を参照してください。
-
-#### System Dictionary
-
-double-array trieベースのシステム辞書で、モデル推論に加えて辞書からの変換候補を提供します。
-
-- デフォルトパス: `~/.local/share/karukan-im/dict.bin`（macOS: `~/Library/Application Support/com.karukan.karukan-im/dict.bin`）
-- `dict_path` で任意のパスを指定可能
-- ファイルが存在しない場合は辞書なしで動作
-
-ビルド済みの辞書を以下からダウンロードして配置できます:
+- エンジン本体: `src/core/engine/` — Empty → Composing → Conversion のステートマシン
+- macOS向けJSON-RPCサーバー: `src/server/` + `src/bin/karukan-imserver.rs`
 
 ```bash
-# Linux
-wget https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
-tar xzf dict.tgz
-mkdir -p ~/.local/share/karukan-im
-cp dict.bin ~/.local/share/karukan-im/
-
-# macOS
-curl -LO https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
-tar xzf dict.tgz
-mkdir -p ~/Library/"Application Support"/com.karukan.karukan-im
-cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
+cargo build -p karukan-im --release
+cargo test -p karukan-im
 ```
-
-自分でビルドする場合は [karukan-cli の README](../../karukan-cli/README.md) を参照してください。
-
-#### User Dictionary
-
-ユーザー辞書ディレクトリにファイルを配置すると、ユーザー辞書として読み込まれます。対応形式と登録方法の詳細は [docs/user-dictionary.md](../../docs/user-dictionary.md) を参照してください。
-
-- デフォルトパス: `~/.local/share/karukan-im/user_dicts/`（macOS: `~/Library/Application Support/com.karukan.karukan-im/user_dicts/`）
-- ディレクトリ内のファイルはすべて自動で読み込み（KRKNバイナリ・Mozc TSV を自動判定）
-- ディレクトリが存在しない場合はユーザー辞書なしで動作
-
-変換候補の優先順位:
-
-1. 📝 学習キャッシュ
-2. 👤 ユーザー辞書
-3. 🤖 モデル推論
-4. 📚 システム辞書（スコア順）
-5. ひらがな / カタカナ
-6. 🔄 Rewriter（半角カタカナ・英字全角半角・記号バリアント）
-
-### Learning Cache
-
-ユーザーが選択した変換結果を記憶し、次回以降の変換で優先表示します。
-
-- 保存先: `~/.local/share/karukan-im/learning.tsv`（macOS: `~/Library/Application Support/com.karukan.karukan-im/learning.tsv`）
-- 完全一致と前方一致（予測変換）の両方に対応
-  - 例: 「早稲田大学」を一度変換すると、次回「わせだ」と入力した時点で候補に表示
-- 学習候補は変換時・入力中（auto-suggest）の両方で最大3件表示
-- スコアはrecency（最終使用日時）重視 + 頻度補正
-- 50文字（`max_surface_chars`）を超える変換結果は学習しない
-- 変換中に学習候補（📝）を選択して `Ctrl+Backspace`（macOSでは Ctrl+delete。`Ctrl+Delete` でも可）を押すと、そのエントリを学習履歴から削除できる。学習候補の選択中はフッターに「Ctrl+Backspaceで履歴から削除」と表示される
-- IME切り替え・ウィンドウ切り替え時に自動保存（commit のたびには保存しない）
-- `[learning] enabled = false` で無効化可能
-- 学習履歴をすべて削除するには: `rm ~/.local/share/karukan-im/learning.tsv`

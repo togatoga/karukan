@@ -2,7 +2,7 @@
 
 Linux向け日本語IME（fcitx5アドオン）。[karukan-im](../core/) エンジンをC FFI経由でラップし、fcitx5上でニューラルかな漢字変換を提供します。
 
-キーバインドは [docs/key-bindings.md](../../docs/key-bindings.md) を、設定・辞書・学習キャッシュについては [karukan-im の README](../core/README.md) を参照してください。
+[キーバインド](../../docs/key-bindings.md)・[設定](../../docs/configuration.md)・[辞書](../../docs/dictionary.md)については docs/ を参照してください。
 
 ## Install
 

@@ -108,6 +108,8 @@ killall KarukanIME  # 起動中の場合は再起動して反映
 - ユーザー辞書: `~/Library/Application Support/com.karukan.karukan-im/user_dicts/`
 - 学習データ: `~/Library/Application Support/com.karukan.karukan-im/learning.tsv`
 
+設定項目は [docs/configuration.md](../../docs/configuration.md) を、辞書は [docs/dictionary.md](../../docs/dictionary.md) を参照してください。
+
 ## デバッグ
 
 - ログ: `~/Library/Logs/KarukanIME/karukan-ime.log`(Swift側NSLogとRust側tracingの両方)
