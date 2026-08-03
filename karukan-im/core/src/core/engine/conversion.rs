@@ -99,6 +99,11 @@ impl InputMethodEngine {
     /// `api_context` is the left context (lctx) fed to the model. Callers pass
     /// `truncate_context_for_api()` for a whole-buffer conversion, or — for
     /// chunked live conversion — the converted text of the preceding chunks.
+    ///
+    /// Results are cached by (katakana reading, lctx, strategy) — everything
+    /// that determines the model output, beam width included via the strategy.
+    /// A hit skips inference entirely, so live conversion re-running all
+    /// chunks each keystroke only pays for the chunks that actually changed.
     pub(super) fn run_kana_kanji_conversion(
         &mut self,
         reading: &str,
@@ -108,13 +113,27 @@ impl InputMethodEngine {
         if !karukan_engine::contains_kana(reading) {
             return vec![];
         }
-        let Some(converter) = self.converters.kanji.as_ref() else {
-            return vec![];
-        };
         let katakana = karukan_engine::hiragana_to_katakana(reading);
-        let main_model_name = converter.model_display_name().to_string();
 
         let strategy = self.determine_strategy(reading, num_candidates);
+
+        // Cache lookup comes before the converter check: a hit needs no model.
+        let key = ConversionCacheKey {
+            katakana: katakana.clone(),
+            lctx: api_context.to_string(),
+            strategy: strategy.clone(),
+        };
+        if let Some(candidates) = self.conversion_cache.get(&key) {
+            debug!(
+                "convert: cache hit reading=\"{}\" api_context=\"{}\" strategy={:?}",
+                reading, api_context, strategy
+            );
+            // conversion_ms stays 0 (no inference ran) and the adaptive flag
+            // is left untouched — a cache hit says nothing about model speed.
+            self.metrics.model_name = self.model_name_for(&strategy);
+            return candidates;
+        }
+
         debug!(
             "convert: reading=\"{}\" api_context=\"{}\" candidates={} strategy={:?}",
             reading, api_context, num_candidates, strategy
@@ -122,6 +141,9 @@ impl InputMethodEngine {
 
         let start = Instant::now();
 
+        let Some(converter) = self.converters.kanji.as_ref() else {
+            return vec![];
+        };
         let candidates = match &strategy {
             ConversionStrategy::ParallelBeam { beam_width } => {
                 let Some(light_converter) = self.converters.light_kanji.as_ref() else {
@@ -164,29 +186,37 @@ impl InputMethodEngine {
 
         self.metrics.conversion_ms = start.elapsed().as_millis() as u64;
         self.update_adaptive_model_flag(&strategy);
+        self.metrics.model_name = self.model_name_for(&strategy);
 
-        self.metrics.model_name = match &strategy {
-            ConversionStrategy::ParallelBeam { .. } => {
-                let light_name = self
-                    .converters
-                    .light_kanji
-                    .as_ref()
-                    .map(|c| c.model_display_name().to_string())
-                    .unwrap_or_default();
-                format!("{}+{}", main_model_name, light_name)
-            }
-            ConversionStrategy::LightModelOnly => self
-                .converters
-                .light_kanji
-                .as_ref()
-                .map(|c| c.model_display_name().to_string())
-                .unwrap_or(main_model_name),
-            ConversionStrategy::MainModelOnly | ConversionStrategy::MainModelBeam { .. } => {
-                main_model_name
-            }
-        };
+        // Don't cache empty results: they usually mean a conversion error,
+        // and pinning one would keep replaying the failure.
+        if !candidates.is_empty() {
+            self.conversion_cache.insert(key, candidates.clone());
+        }
 
         candidates
+    }
+
+    /// Display name of the model(s) a strategy dispatches to.
+    fn model_name_for(&self, strategy: &ConversionStrategy) -> String {
+        let main = self
+            .converters
+            .kanji
+            .as_ref()
+            .map(|c| c.model_display_name().to_string())
+            .unwrap_or_default();
+        let light = self
+            .converters
+            .light_kanji
+            .as_ref()
+            .map(|c| c.model_display_name().to_string());
+        match strategy {
+            ConversionStrategy::ParallelBeam { .. } => {
+                format!("{}+{}", main, light.unwrap_or_default())
+            }
+            ConversionStrategy::LightModelOnly => light.unwrap_or(main),
+            ConversionStrategy::MainModelOnly | ConversionStrategy::MainModelBeam { .. } => main,
+        }
     }
 
     /// Start kanji conversion for the current input buffer.

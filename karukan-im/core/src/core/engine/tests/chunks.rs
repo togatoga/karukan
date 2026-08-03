@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::core::engine::EngineConfig;
+use crate::core::engine::cache::ConversionCacheKey;
 
 /// Engine with a small chunk length so chunks form with short test input.
 fn make_chunk_engine(chunk_len: usize) -> InputMethodEngine {
@@ -15,6 +16,22 @@ fn make_chunk_engine(chunk_len: usize) -> InputMethodEngine {
         ..EngineConfig::default()
     };
     InputMethodEngine::with_config(config)
+}
+
+/// Seed the conversion cache as if the model had converted `katakana` with
+/// `lctx` to `converted`. With no model loaded the engine uses MainModelOnly,
+/// so a matching chunk conversion is served from this entry — which is how
+/// these tests observe "served from cache" vs "reconverted" (a miss falls back
+/// to the chunk's own reading).
+fn seed_cache(engine: &mut InputMethodEngine, katakana: &str, lctx: &str, converted: &str) {
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: katakana.to_string(),
+            lctx: lctx.to_string(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec![converted.to_string()],
+    );
 }
 
 /// Type `あいうえ` (4 hiragana chars) via romaji.
@@ -67,20 +84,21 @@ fn test_typed_digits_form_their_own_chunk() {
 }
 
 #[test]
-fn test_non_japanese_chunk_passes_through_and_reuses_japanese() {
-    // Appending a digit after a Japanese chunk does NOT reopen/reconvert that
-    // chunk: the digit starts its own non-Japanese chunk (passed through
-    // verbatim), so the Japanese chunk is reused with its cached conversion.
+fn test_non_japanese_chunk_passes_through_and_japanese_stays_cached() {
+    // Appending a digit after a Japanese chunk does not reconvert it: the
+    // digit starts its own non-Japanese chunk (passed through verbatim), and
+    // the Japanese chunk — same reading, same lctx — is a cache hit.
     let mut engine = make_chunk_engine(40);
+    seed_cache(&mut engine, "アイ", "", "KEEP");
     engine.process_key(&press('a'));
     engine.process_key(&press('i')); // "あい" → one Japanese chunk
     assert_eq!(engine.chunks.len(), 1);
-    engine.chunks[0].converted = "KEEP".to_string();
+    assert_eq!(engine.chunks[0].converted, "KEEP");
 
     engine.process_key(&press('1')); // "あい1"
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
     assert_eq!(readings, vec!["あい", "1"]);
-    assert_eq!(engine.chunks[0].converted, "KEEP"); // reused, not reconverted
+    assert_eq!(engine.chunks[0].converted, "KEEP"); // cache hit, not reconverted
     assert_eq!(engine.chunks[1].converted, "1"); // non-Japanese chunk verbatim
 }
 
@@ -260,14 +278,23 @@ fn type_aiueoka(engine: &mut InputMethodEngine) {
 }
 
 #[test]
-fn test_delete_first_chunk_reuses_remaining_suffix() {
-    // Deleting the first chunk leaves the rest as an unchanged common suffix,
-    // so the surviving chunk is REUSED (not reconverted) to save cost — its
-    // cached conversion is kept even though it is now the leading chunk.
+fn test_delete_first_chunk_reconverts_survivor_with_new_lctx() {
+    // Deleting the first chunk changes the survivor's left context (it is now
+    // the leading chunk), so its old conversion is a cache miss and it is
+    // reconverted with the correct, updated lctx — unlike the old prefix/suffix
+    // reuse, which kept a conversion made against a context that no longer
+    // exists.
     let mut engine = make_chunk_engine(2);
+    // Pin the first chunk's conversion so the second chunk's lctx is a
+    // deterministic "あい" regardless of whether a real model is loaded.
+    // While typing, chunk "うえ" is converted with that lctx; after the
+    // delete its lctx is empty.
+    seed_cache(&mut engine, "アイ", "", "あい");
+    seed_cache(&mut engine, "ウエ", "あい", "OLD");
+    seed_cache(&mut engine, "ウエ", "", "NEW");
     type_aiue(&mut engine); // "あいうえ" → ["あい", "うえ"]
     assert_eq!(engine.chunks.len(), 2);
-    engine.chunks[1].converted = "SENTINEL".to_string();
+    assert_eq!(engine.chunks[1].converted, "OLD");
 
     // Delete the first chunk's two chars ("あい") from the front.
     engine.process_key(&press_key(Keysym::HOME));
@@ -277,19 +304,21 @@ fn test_delete_first_chunk_reuses_remaining_suffix() {
     assert_eq!(engine.input_buf.reading(), "うえ");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
     assert_eq!(readings, vec!["うえ"]);
-    // Reused from the suffix → cached conversion survives (no reconvert).
-    assert_eq!(engine.chunks[0].converted, "SENTINEL");
+    assert_eq!(engine.chunks[0].converted, "NEW");
 }
 
 #[test]
-fn test_middle_delete_reconverts_only_touched_chunk() {
-    // Deleting a character inside the middle chunk reconverts ONLY that
-    // chunk; the leading and trailing neighbors are reused untouched.
+fn test_middle_delete_repartitions_and_keeps_leading_cache_hit() {
+    // The chunking is a pure function of the current text: after a middle
+    // delete, "あいえおか" partitions fresh as ["あい", "えお", "か"] (no
+    // path-dependent ["あい", "え", "おか"]). The leading chunk — unchanged
+    // reading and lctx — stays a cache hit; everything at and after the edit
+    // is reconverted.
     let mut engine = make_chunk_engine(2);
+    seed_cache(&mut engine, "アイ", "", "S0");
     type_aiueoka(&mut engine); // "あいうえおか" → ["あい", "うえ", "おか"]
     assert_eq!(engine.chunks.len(), 3);
-    engine.chunks[0].converted = "S0".to_string();
-    engine.chunks[2].converted = "S2".to_string();
+    assert_eq!(engine.chunks[0].converted, "S0");
 
     // Cursor after う (pos 3), backspace deletes う — inside the middle chunk.
     engine.process_key(&press_key(Keysym::HOME));
@@ -300,10 +329,9 @@ fn test_middle_delete_reconverts_only_touched_chunk() {
 
     assert_eq!(engine.input_buf.reading(), "あいえおか");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
-    assert_eq!(readings, vec!["あい", "え", "おか"]);
-    // Neighbors reused (sentinels survive); only the middle chunk reconverted.
+    assert_eq!(readings, vec!["あい", "えお", "か"]);
+    // The untouched leading chunk is still served from cache.
     assert_eq!(engine.chunks[0].converted, "S0");
-    assert_eq!(engine.chunks[2].converted, "S2");
 }
 
 #[test]
@@ -340,16 +368,16 @@ fn test_aux_text_lctx_is_current_chunk_lctx() {
 }
 
 #[test]
-fn test_append_reuses_leading_chunks() {
-    // Typing at the end reuses every existing chunk and only converts the new
-    // tail chunk.
+fn test_append_keeps_leading_chunks_cached() {
+    // Typing at the end leaves the leading chunks' readings and lctx
+    // unchanged, so they are cache hits — only the tail chunk is converted.
     let mut engine = make_chunk_engine(2);
+    seed_cache(&mut engine, "アイ", "", "KEEP0");
     type_aiue(&mut engine); // ["あい", "うえ"]
-    engine.chunks[0].converted = "KEEP0".to_string();
+    assert_eq!(engine.chunks[0].converted, "KEEP0");
 
     engine.process_key(&press('o')); // "あいうえお"
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
     assert_eq!(readings, vec!["あい", "うえ", "お"]);
-    // The leading chunk was reused, not reconverted.
     assert_eq!(engine.chunks[0].converted, "KEEP0");
 }

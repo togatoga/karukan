@@ -295,7 +295,7 @@ pub(in crate::core) struct Dictionaries {
 }
 
 /// Conversion model dispatch strategy based on input length
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(in crate::core) enum ConversionStrategy {
     /// Short input: main model greedy + light model beam search (parallel)
     ParallelBeam { beam_width: usize },
