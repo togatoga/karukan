@@ -5,7 +5,7 @@ use super::hf_download::{get_tokenizer_path, get_variant_path};
 use super::llamacpp::LlamaCppModel;
 use super::model_config::{ModelFamily, VariantConfig, registry};
 use super::{CONTEXT_TOKEN, INPUT_START_TOKEN, OUTPUT_START_TOKEN};
-use crate::kana::hiragana_to_katakana;
+use crate::kana::{hiragana_to_katakana, normalize_nfkc};
 
 type Result<T> = super::error::Result<T>;
 
@@ -22,12 +22,16 @@ impl Default for ConversionConfig {
     }
 }
 
-/// Build a prompt in jinen format
+/// Build a prompt in jinen format.
+///
+/// The prompt is NFKC-normalized: jinen models are trained on NFKC text and
+/// full-width ASCII in the context degrades accuracy. The special tokens
+/// (U+EE00–U+EE02) are unaffected by NFKC.
 pub fn build_jinen_prompt(katakana: &str, context: &str) -> String {
-    format!(
+    normalize_nfkc(&format!(
         "{}{}{}{}{}",
         CONTEXT_TOKEN, context, INPUT_START_TOKEN, katakana, OUTPUT_START_TOKEN
-    )
+    ))
 }
 
 /// Clean model output by trimming whitespace.
@@ -187,7 +191,7 @@ mod tests {
 
     fn test_default_model_conversion() {
         let backend =
-            Backend::from_variant_id("jinen-v1-small-q5").expect("Failed to load default model");
+            Backend::from_variant_id("jinen-v2-small-q5").expect("Failed to load default model");
         let converter = KanaKanjiConverter::new(backend).expect("Failed to create converter");
 
         let result = converter.convert("かんじ", "", 1);

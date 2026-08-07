@@ -9,8 +9,8 @@ composing_chunk_len = 30        # ライブ変換で1回のモデル変換が扱
 strategy = "adaptive"           # 変換ストラテジー（adaptive / light / main）
 num_candidates = 9              # 変換候補数（Space押下時）
 n_threads = 4                   # 推論スレッド数（0 = 全コア使用）
-model = "jinen-v1-small-q5"     # メインモデル（モデルID or GGUFパス）
-light_model = "jinen-v1-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用）
+model = "jinen-v2-small-q5"     # メインモデル（モデルID or GGUFパス）
+light_model = "jinen-v2-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用）
 use_context = true              # Surrounding Textを変換に使用する
 max_context_length = 10         # コンテキストの最大文字数
 short_input_threshold = 10      # ビームサーチを使うトークン数の上限
@@ -26,11 +26,13 @@ max_surface_chars = 50         # 学習する変換結果の最大文字数
 
 `model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回利用時にHugging Faceから自動ダウンロードされます）。設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
 
-| モデルID | ベースモデル | パラメータ数 |
-|---------|-----------|-----------|
-| `jinen-v1-xsmall-q5` | GPT-2 | 26M |
-| `jinen-v1-small-q5` | GPT-2 | 90M |
-| `jinen-v1.1-beta-q5` | Qwen3 | 109M（beta） |
+| モデルID | ベースモデル | パラメータ数 | Accuracy@1 (NFKC) |
+|---------|-----------|-----------|------:|
+| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf)（デフォルト） | Qwen3 | 109M | 86.0% |
+| [`jinen-v2-xsmall-q5`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | 79.0% |
+| [`jinen-v1.1-beta-q5`](https://huggingface.co/togatogah/jinen-v1.1-beta.gguf) | Qwen3 | 109M（beta） | 86.0% |
+| [`jinen-v1-small-q5`](https://huggingface.co/togatogah/jinen-v1-small.gguf) | GPT-2 | 90M | 76.5% |
+| [`jinen-v1-xsmall-q5`](https://huggingface.co/togatogah/jinen-v1-xsmall.gguf) | GPT-2 | 26M | 71.0% |
 
 > [!NOTE]
 > 上記は主要な設定項目の抜粋です。全項目の正確な既定値と説明は [`config/default.toml`](../karukan-im/core/config/default.toml) を参照してください（各設定行に日本語コメント付き）。

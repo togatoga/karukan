@@ -93,7 +93,7 @@ cargo run --release --bin sudachi-dict -- input.csv -o scored.json
 cargo run --release --bin sudachi-dict -- input.csv --model-scores -o scored.json
 
 # モデルとスレッド数を指定
-cargo run --release --bin sudachi-dict -- input.csv --model-scores --model jinen-v1-small-q5 --threads 8
+cargo run --release --bin sudachi-dict -- input.csv --model-scores --model jinen-v2-small-q5 --threads 8
 ```
 
 | オプション | デフォルト | 説明 |
@@ -101,7 +101,7 @@ cargo run --release --bin sudachi-dict -- input.csv --model-scores --model jinen
 | `csv_files` (必須) | — | 入力Sudachi CSVファイル（複数指定可） |
 | `-o, --output` | `scored.json` | 出力JSONファイル |
 | `--model-scores` | off | モデルNLLスコアリングを使用（デフォルトはSudachiコスト） |
-| `--model` | `jinen-v1-xsmall-q5` | モデルバリアントIDまたはGGUFファイルパス |
+| `--model` | `jinen-v2-xsmall-q5` | モデルバリアントIDまたはGGUFファイルパス |
 | `--tokenizer-json` | — | tokenizer.jsonパス（`--model` がGGUFパス時に必要） |
 | `--threads` | CPUコア数 / 2 | 並列スコアリングスレッド数 |
 | `--n-ctx` | `256` | モデルのコンテキストウィンドウサイズ |
@@ -150,7 +150,7 @@ cargo run --release --bin karukan-server -- --port 8080 --host 0.0.0.0 --verbose
 cargo run --release --bin ajimee-bench -- evaluation_items.json
 
 # モデルを指定して実行
-cargo run --release --bin ajimee-bench -- evaluation_items.json --model jinen-v1-small-q5
+cargo run --release --bin ajimee-bench -- evaluation_items.json --model jinen-v2-small-q5
 
 # 結果をJSONに保存（サマリーのみ表示）
 cargo run --release --bin ajimee-bench -- evaluation_items.json --output results.json --quiet
@@ -159,7 +159,7 @@ cargo run --release --bin ajimee-bench -- evaluation_items.json --output results
 | オプション | デフォルト | 説明 |
 |-----------|----------|------|
 | `bench_path` (必須) | — | evaluation_items.json のパス |
-| `--model` | `jinen-v1-xsmall-q5` | モデルバリアントID |
+| `--model` | `jinen-v2-xsmall-q5` | モデルバリアントID |
 | `--gguf` | — | GGUFファイルパス（`--model` を上書き） |
 | `--tokenizer-json` | — | tokenizer.jsonパス（`--gguf` 使用時に必要） |
 | `--output` | — | 詳細結果の出力先JSONファイル |

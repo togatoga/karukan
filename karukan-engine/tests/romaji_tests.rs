@@ -316,7 +316,7 @@ fn test_zenninn_kanji_conversion() {
     println!("Hiragana: {}", hiragana);
 
     // Now try kanji conversion
-    let backend = Backend::from_variant_id("jinen-v1-small-q5").expect("Failed to load backend");
+    let backend = Backend::from_variant_id("jinen-v2-small-q5").expect("Failed to load backend");
     let kanji_conv = KanaKanjiConverter::new(backend).expect("Failed to create converter");
     let result = kanji_conv.convert(&hiragana, "", 1);
     println!("Kanji result: {:?}", result);

@@ -94,9 +94,9 @@ I2026-02-24 22:57:54.252982 addonmanager.cpp:195] Loaded addon karukan
 >
 > ```
 > I2026-02-24 23:12:12.651828 addonmanager.cpp:195] Loaded addon karukan
-> jinen-v1-small-Q5_K_M.gguf [00:00:05] [████████████████████████] 84.39 MiB/84.39 MiB 7.89 MiB/s (0s)
+> jinen-v2-small-Q5_K_M.gguf [00:00:05] [████████████████████████] 77.36 MiB/77.36 MiB 7.89 MiB/s (0s)
 > tokenizer.json [00:00:00] [████████████████████████████████] 1.95 MiB/1.95 MiB 6.45 MiB/s (0s)
-> jinen-v1-xsmall-Q5_K_M.gguf [00:00:02] [████████████████████████] 29.73 MiB/29.73 MiB 9.15 MiB/s (0s)
+> jinen-v2-xsmall-Q5_K_M.gguf [00:00:02] [████████████████████████] 26.95 MiB/26.95 MiB 9.15 MiB/s (0s)
 > tokenizer.json [00:00:00] [████████████████████████████████] 1.95 MiB/1.95 MiB 8.45 MiB/s (0s)
 > ```
 >

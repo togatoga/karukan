@@ -17,8 +17,8 @@ struct Cli {
     /// Path to evaluation_items.json
     bench_path: PathBuf,
 
-    /// Model variant id (e.g. jinen-v1-xsmall-q5, jinen-v1-small-q5)
-    #[arg(long, default_value = "jinen-v1-xsmall-q5")]
+    /// Model variant id (e.g. jinen-v2-xsmall-q5, jinen-v2-small-q5)
+    #[arg(long, default_value = "jinen-v2-xsmall-q5")]
     model: String,
 
     /// Direct GGUF file path (overrides --model)

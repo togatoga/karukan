@@ -46,7 +46,7 @@ assert_eq!(result.pending, ""); // まだ確定していないローマ字末尾
 use karukan_engine::{Backend, KanaKanjiConverter};
 
 // モデルの読み込み（初回使用時にHuggingFaceからダウンロード）
-let backend = Backend::from_variant_id("jinen-v1-small-q5")?;
+let backend = Backend::from_variant_id("jinen-v2-small-q5")?;
 let converter = KanaKanjiConverter::new(backend)?;
 
 let candidates = converter.convert("かんじ", "", 3)?;
@@ -102,11 +102,13 @@ let results = dict.common_prefix_search("きょうと");
 
 モデルは`models.toml`で定義されています。`Backend::from_variant_id()`で指定すると自動的にダウンロードされます。
 
-| バリアントID | ベースモデル | パラメータ数 | 量子化 | デフォルト |
-|------------|-----------|-----------|--------------|---------|
-| `jinen-v1-xsmall-q5` | GPT-2 | 26M | Q5_K_M | |
-| `jinen-v1-small-q5` | GPT-2 | 90M | Q5_K_M | Yes |
-| `jinen-v1.1-beta-q5` | Qwen3 | 109M | Q5_K_M | |
+| バリアントID | ベースモデル | パラメータ数 | 量子化 | Accuracy@1 (NFKC) | デフォルト |
+|------------|-----------|-----------|--------------|------:|---------|
+| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | Yes |
+| [`jinen-v2-xsmall-q5`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | Q5_K_M | 79.0% | |
+| [`jinen-v1.1-beta-q5`](https://huggingface.co/togatogah/jinen-v1.1-beta.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | |
+| [`jinen-v1-small-q5`](https://huggingface.co/togatogah/jinen-v1-small.gguf) | GPT-2 | 90M | Q5_K_M | 76.5% | |
+| [`jinen-v1-xsmall-q5`](https://huggingface.co/togatogah/jinen-v1-xsmall.gguf) | GPT-2 | 26M | Q5_K_M | 71.0% | |
 
 IMEで使うモデルは設定ファイルの `model` / `light_model` で切り替えられます（[docs/configuration.md](../docs/configuration.md) 参照）。
 

@@ -737,13 +737,8 @@ impl<'a> NllScorer<'a> {
     ///
     /// Reuses the internal context by clearing the KV cache between calls.
     pub fn compute_nll(&mut self, reading_katakana: &str, surface: &str) -> Result<f32> {
-        use super::{CONTEXT_TOKEN, INPUT_START_TOKEN, OUTPUT_START_TOKEN};
-
-        let prompt = format!(
-            "{}{}{}{}{}",
-            CONTEXT_TOKEN, "", INPUT_START_TOKEN, reading_katakana, OUTPUT_START_TOKEN
-        );
-        let full_text = format!("{}{}", prompt, surface);
+        let prompt = super::build_jinen_prompt(reading_katakana, "");
+        let full_text = format!("{}{}", prompt, crate::kana::normalize_nfkc(surface));
 
         let prompt_tokens = self.model.tokenize(&prompt)?;
         let full_tokens = self.model.tokenize(&full_text)?;

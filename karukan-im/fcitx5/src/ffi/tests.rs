@@ -172,6 +172,7 @@ fn test_commit_composing() {
 #[test]
 fn test_backspace() {
     let e = TestEngine::new();
+    disable_live_conversion(&e);
 
     // Type "ai" -> "あい"
     e.press(XKB_KEY_A);
@@ -446,6 +447,7 @@ fn test_ffi_shift_a_produces_uppercase_a() {
 #[test]
 fn test_ffi_shift_a_after_hiragana() {
     let e = TestEngine::new();
+    disable_live_conversion(&e);
 
     // Type "あ"
     e.press(XKB_KEY_A);
