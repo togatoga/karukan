@@ -115,7 +115,8 @@ impl KarukanEngine {
     fn new() -> Self {
         let settings = Settings::load().unwrap_or_default();
         let config = EngineConfig::from_settings(&settings);
-        let engine = InputMethodEngine::with_config(config);
+        let mut engine = InputMethodEngine::with_config(config);
+        engine.watch_config_file();
         Self {
             engine,
             settings,

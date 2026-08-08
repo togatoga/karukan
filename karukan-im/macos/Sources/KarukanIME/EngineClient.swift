@@ -62,6 +62,10 @@ class EngineClient {
         sendRequest(method: "save_learning", params: [:]) { _ in }
     }
 
+    func reloadConfigAsync() {
+        sendRequest(method: "reload_config", params: [:]) { _ in }
+    }
+
     func setSurroundingTextAsync(text: String, cursorPos: Int) {
         sendRequest(
             method: "set_surrounding_text",

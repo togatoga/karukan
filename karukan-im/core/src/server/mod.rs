@@ -121,6 +121,12 @@ impl ImServer {
                 self.engine.save_learning();
                 Ok(json!({}))
             }
+            "reload_config" => {
+                // Fired by the frontend on focus (activateServer); the
+                // engine-side mtime guard makes the common no-change case a
+                // single stat.
+                Ok(json!({ "reloaded": self.engine.reload_config_if_changed() }))
+            }
             "status" => {
                 let state = match self.engine.state() {
                     InputState::Empty => "empty",
@@ -152,6 +158,7 @@ impl ImServer {
                 self.settings = Some(settings);
                 return Err(RpcError::new(RpcError::INIT_FAILED, format!("{e:#}")));
             }
+            self.engine.watch_config_file();
             self.initialized = true;
         }
         serde_json::to_value(InitResult {

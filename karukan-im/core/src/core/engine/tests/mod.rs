@@ -18,6 +18,7 @@ mod passthrough;
 mod pending_romaji;
 mod persona;
 mod predictive;
+mod reload;
 mod rewriter;
 mod strategy;
 mod surrounding;

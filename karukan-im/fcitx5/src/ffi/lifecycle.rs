@@ -27,6 +27,14 @@ pub extern "C" fn karukan_engine_init(engine: *mut KarukanEngine) -> c_int {
     }
 }
 
+/// Re-read config.toml if it changed on disk and apply the hot-reloadable
+/// settings. Returns 1 when a reload was applied, 0 otherwise.
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_reload_config(engine: *mut KarukanEngine) -> c_int {
+    let engine = ffi_mut!(engine, 0);
+    c_int::from(engine.engine.reload_config_if_changed())
+}
+
 /// Destroy a Karukan engine instance
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_free(engine: *mut KarukanEngine) {

@@ -78,7 +78,7 @@ pub struct ConversionSettings {
 }
 
 /// Learning cache settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LearningSettings {
     /// Whether learning is enabled
     pub enabled: bool,

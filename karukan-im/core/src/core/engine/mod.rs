@@ -12,6 +12,7 @@ mod init;
 mod input;
 mod input_buffer;
 mod mode;
+mod reload;
 mod strategy;
 mod types;
 
@@ -143,6 +144,9 @@ pub struct InputMethodEngine {
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
     learning: Option<LearningCache>,
+    /// Watched config.toml for hot-reload; `None` disables
+    /// [`Self::reload_config_if_changed`] (tests, custom setups)
+    config_watch: Option<reload::ConfigWatch>,
 }
 
 impl InputMethodEngine {
@@ -166,6 +170,7 @@ impl InputMethodEngine {
             conversion_cache: ConversionCache::default(),
             dicts: Dictionaries::default(),
             learning: None,
+            config_watch: None,
         }
     }
 

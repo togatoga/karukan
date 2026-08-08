@@ -266,6 +266,12 @@ KarukanEngine::KarukanEngine(Instance* instance)
     : instance_(instance),
       factory_([this](InputContext& ic) { return new KarukanState(this, &ic); }) {
     instance_->inputContextManager().registerProperty("karukanState", &factory_);
+    // `fcitx5-remote -r` reloads only the global config and never calls an
+    // addon's reloadConfig(); follow the event (like fcitx5-mozc) so
+    // config.toml is re-read on it too.
+    eventWatchers_.emplace_back(instance_->watchEvent(
+        EventType::GlobalConfigReloaded, EventWatcherPhase::Default,
+        [this](Event&) { reloadConfig(); }));
 }
 
 KarukanEngine::~KarukanEngine() = default;
@@ -297,8 +303,23 @@ void KarukanEngine::activate(const InputMethodEntry& entry, InputContextEvent& e
     // Capture surrounding text on activation for accurate context.
     // For apps without SurroundingText capability, this clears the context.
     if (state->rustEngine()) {
+        // Pick up config.toml edits at focus time; the engine-side mtime
+        // guard makes the common no-change case a single stat.
+        karukan_engine_reload_config(state->rustEngine());
         state->captureSurroundingText();
     }
+}
+
+void KarukanEngine::reloadConfig() {
+    // Each input context owns its own Rust engine; reload them all (the
+    // mtime guard keeps unchanged configs cheap).
+    instance_->inputContextManager().foreach([this](InputContext* ic) {
+        auto* state = ic->propertyFor(&factory_);
+        if (state->rustEngine()) {
+            karukan_engine_reload_config(state->rustEngine());
+        }
+        return true;
+    });
 }
 
 void KarukanEngine::deactivate(const InputMethodEntry& entry, InputContextEvent& event) {

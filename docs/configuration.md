@@ -25,7 +25,7 @@ max_entries = 10000            # 学習エントリの最大数
 max_surface_chars = 50         # 学習する変換結果の最大文字数
 ```
 
-`model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回利用時にHugging Faceから自動ダウンロードされます）。設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
+`model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回利用時にHugging Faceから自動ダウンロードされます）。モデルの変更はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。それ以外のチューニング設定は再起動なしで反映されます（[Hot Reload](#hot-reload) 参照）。
 
 | モデルID | ベースモデル | パラメータ数 | Accuracy@1 (NFKC) |
 |---------|-----------|-----------|------:|
@@ -37,6 +37,12 @@ max_surface_chars = 50         # 学習する変換結果の最大文字数
 
 > [!NOTE]
 > 上記は主要な設定項目の抜粋です。全項目の正確な既定値と説明は [`config/default.toml`](../karukan-im/core/config/default.toml) を参照してください（各設定行に日本語コメント付き）。
+
+## Hot Reload
+
+config.toml は保存後、**次のフォーカス切替**（ウィンドウを移る・IMEを入れ直す）で自動的に再読み込みされます。mtime を見て変化したときだけ再読込するので、変更が無ければ stat 1回で済みます。fcitx5 では `fcitx5-remote -r` や `busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 ReloadAddonConfig s karukan` でも即時反映できます。
+
+チューニング設定（`persona`・`composing_chunk_len`・`beam_width`・`strategy`・`max_context_length`・`live_conversion` など）は再起動なしで反映されます。**モデル（`model` / `light_model`）・辞書（`dict_path`）・スレッド数（`n_threads`）・`[learning]` の変更は再起動が必要**です（変更を検知するとログに出ます）。`live_conversion` は設定値が変わったときだけ適用されるので、`Ctrl+Shift+L` での実行中トグルが無関係な設定変更で巻き戻ることはありません。
 
 ## Live Conversion
 

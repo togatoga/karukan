@@ -63,6 +63,12 @@ int karukan_engine_process_key(
 void karukan_engine_reset(KarukanEngine* engine);
 
 /*
+ * Re-read config.toml if it changed on disk and apply the hot-reloadable
+ * settings. Returns 1 when a reload was applied, 0 otherwise.
+ */
+int karukan_engine_reload_config(KarukanEngine* engine);
+
+/*
  * Set the surrounding text context from the editor.
  * This provides the actual text around the cursor for better conversion accuracy.
  *

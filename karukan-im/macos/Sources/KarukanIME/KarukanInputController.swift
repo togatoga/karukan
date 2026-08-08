@@ -103,6 +103,13 @@ class KarukanInputController: IMKInputController {
 
     // MARK: - Lifecycle
 
+    override func activateServer(_ sender: Any!) {
+        super.activateServer(sender)
+        // Pick up config.toml edits at focus time; the engine-side mtime
+        // guard makes the common no-change case a single stat.
+        engineClient.reloadConfigAsync()
+    }
+
     override func deactivateServer(_ sender: Any!) {
         // A right-⌘ press armed before a focus switch must not fire after
         // it (e.g. right-⌘-clicking another window).

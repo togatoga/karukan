@@ -5,9 +5,14 @@
 #ifndef FCITX5_KARUKAN_KARUKAN_H
 #define FCITX5_KARUKAN_KARUKAN_H
 
+#include <memory>
+#include <vector>
+
+#include <fcitx-utils/handlertable.h>
 #include <fcitx/addonfactory.h>
 #include <fcitx/addonmanager.h>
 #include <fcitx/candidatelist.h>
+#include <fcitx/event.h>
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputmethodengine.h>
 #include <fcitx/instance.h>
@@ -73,12 +78,14 @@ public:
     void reset(const InputMethodEntry& entry, InputContextEvent& event) override;
     void activate(const InputMethodEntry& entry, InputContextEvent& event) override;
     void deactivate(const InputMethodEntry& entry, InputContextEvent& event) override;
+    void reloadConfig() override;
 
     void selectCandidate(InputContext* ic, int index);
 
 private:
     Instance* instance_;
     FactoryFor<KarukanState> factory_;
+    std::vector<std::unique_ptr<HandlerTableEntry<EventHandler>>> eventWatchers_;
 };
 
 class KarukanEngineFactory : public AddonFactory {
