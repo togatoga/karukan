@@ -4,7 +4,7 @@
 
 Karukan は Ctrl+Space を「全角スペース入力」として意図的に横取りしている。
 
-- 未入力時 (Empty): `karukan-im/src/core/engine/input.rs` の `process_key_empty` で、Ctrl+Space を全角スペース (U+3000) の Composing セッション開始として消費する。
+- 未入力時 (Empty): `karukan-im/core/src/core/engine/input.rs` の `process_key_empty` で、Ctrl+Space を全角スペース (U+3000) の Composing セッション開始として消費する。
 - 入力中 (Composing): 同ファイル `process_key_composing` で、Ctrl+Space を全角スペース挿入 (`input_fullwidth_space`) として消費する。
 
 いずれも `EngineResult::consumed()` を返すため、フロントエンド (macOS Swift / Linux fcitx5 C++) はキーイベントを飲み込み、OS へ伝播しない。その結果、ユーザーが OS 側に割り当てた Ctrl+Space ショートカット (例: macOS の「次のウインドウを操作対象にする」) が発火せず、代わりに全角スペースが入力される。
@@ -29,7 +29,7 @@ Karukan は Ctrl+Space を「全角スペース入力」として意図的に横
 
 ### 1. 設定項目
 
-`config/default.toml` に新セクション `[keys]` を追加する。
+`karukan-im/core/config/default.toml` に新セクション `[keys]` を追加する。
 
 ```toml
 [keys]
@@ -45,16 +45,16 @@ ctrl_space_fullwidth = true
 
 既存の設定と全く同じ経路を辿る。
 
-1. `karukan-im/src/config/settings.rs`
+1. `karukan-im/core/src/config/settings.rs`
    - 新しい構造体 `KeysSettings { ctrl_space_fullwidth: bool }` を追加。
    - `Settings` に `pub keys: KeysSettings` フィールドを追加。
    - `merge_toml` + `parse_with_defaults` により、ユーザーが `[keys]` を書かなくても埋め込み `default.toml` の値で埋まる (既存の仕組みをそのまま利用)。
-2. `karukan-im/src/core/engine/types.rs`
+2. `karukan-im/core/src/core/engine/types.rs`
    - `EngineConfig` に `pub ctrl_space_fullwidth: bool` を追加。
    - `EngineConfig::from_settings` (`types.rs:96`) で `settings.keys.ctrl_space_fullwidth` を反映。
    - `impl Default for EngineConfig` (`types.rs:115`) で `true` を設定 (既存挙動維持)。
 
-### 3. キー処理の分岐 (`karukan-im/src/core/engine/input.rs`)
+### 3. キー処理の分岐 (`karukan-im/core/src/core/engine/input.rs`)
 
 - **Empty 状態** (`process_key_empty`, 現 `input.rs:122-131`)
   - `self.config.ctrl_space_fullwidth == false` かつ Ctrl+Space の場合、全角スペース分岐に入らず `EngineResult::not_consumed()` を返す。
@@ -95,10 +95,10 @@ Composing (変換中) に Ctrl+Space を押すと、未確定の preedit (下線
 
 変更ファイル:
 
-- `karukan-im/config/default.toml` — `[keys]` セクション追加
-- `karukan-im/src/config/settings.rs` — `KeysSettings` 追加、`Settings` にフィールド追加、テスト追加
-- `karukan-im/src/core/engine/types.rs` — `EngineConfig` にフィールド追加、`from_settings` / `Default` 反映
-- `karukan-im/src/core/engine/input.rs` — Empty / Composing の Ctrl+Space 分岐に flag チェック追加
-- `karukan-im/src/core/engine/tests/` (または `tests.rs`) — 4 ケース追加
+- `karukan-im/core/config/default.toml` — `[keys]` セクション追加
+- `karukan-im/core/src/config/settings.rs` — `KeysSettings` 追加、`Settings` にフィールド追加、テスト追加
+- `karukan-im/core/src/core/engine/types.rs` — `EngineConfig` にフィールド追加、`from_settings` / `Default` 反映
+- `karukan-im/core/src/core/engine/input.rs` — Empty / Composing の Ctrl+Space 分岐に flag チェック追加
+- `karukan-im/core/src/core/engine/tests/` (または `tests.rs`) — 4 ケース追加
 
 変更しないもの: macOS Swift、Linux fcitx5 C++、その他フロントエンド。

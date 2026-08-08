@@ -121,7 +121,6 @@ impl InputMethodEngine {
             if !self.config.ctrl_space_fullwidth {
                 return EngineResult::not_consumed();
             }
-            self.converters.romaji.reset();
             self.input_buf.clear();
             self.input_buf.push_direct('\u{3000}');
             let preedit = self.set_composing_state();

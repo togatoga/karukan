@@ -18,11 +18,11 @@
 
 ## File Structure
 
-- `karukan-im/config/default.toml` — 埋め込みデフォルト設定。`[keys]` セクションを追加。
-- `karukan-im/src/config/settings.rs` — `KeysSettings` 構造体と `Settings.keys` フィールド、読み込みテスト。
-- `karukan-im/src/core/engine/types.rs` — `EngineConfig` に `ctrl_space_fullwidth` を追加、`from_settings` と `Default` に反映。
-- `karukan-im/src/core/engine/input.rs` — `process_key_empty` と `process_key_composing` の Ctrl+Space 分岐にフラグチェックを追加。
-- `karukan-im/src/core/engine/tests/basic.rs` — `EngineConfig` のデフォルト/マッピングと、Empty/Composing のキー挙動テスト。
+- `karukan-im/core/config/default.toml` — 埋め込みデフォルト設定。`[keys]` セクションを追加。
+- `karukan-im/core/src/config/settings.rs` — `KeysSettings` 構造体と `Settings.keys` フィールド、読み込みテスト。
+- `karukan-im/core/src/core/engine/types.rs` — `EngineConfig` に `ctrl_space_fullwidth` を追加、`from_settings` と `Default` に反映。
+- `karukan-im/core/src/core/engine/input.rs` — `process_key_empty` と `process_key_composing` の Ctrl+Space 分岐にフラグチェックを追加。
+- `karukan-im/core/src/core/engine/tests/basic.rs` — `EngineConfig` のデフォルト/マッピングと、Empty/Composing のキー挙動テスト。
 
 すべて既存ファイルへの追記・修正。新規ファイルなし。
 
@@ -31,9 +31,9 @@
 ### Task 1: `KeysSettings` を設定に追加する
 
 **Files:**
-- Modify: `karukan-im/config/default.toml`
-- Modify: `karukan-im/src/config/settings.rs`
-- Test: `karukan-im/src/config/settings.rs`（同ファイル内の `#[cfg(test)] mod tests`）
+- Modify: `karukan-im/core/config/default.toml`
+- Modify: `karukan-im/core/src/config/settings.rs`
+- Test: `karukan-im/core/src/config/settings.rs`（同ファイル内の `#[cfg(test)] mod tests`）
 
 **Interfaces:**
 - Produces: `pub struct KeysSettings { pub ctrl_space_fullwidth: bool }`、`Settings.keys: KeysSettings`。Task 2 の `EngineConfig::from_settings` が `settings.keys.ctrl_space_fullwidth` を参照する。
@@ -42,7 +42,7 @@
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`karukan-im/src/config/settings.rs` の `mod tests`（`test_partial_config` の隣、末尾付近）に追記：
+`karukan-im/core/src/config/settings.rs` の `mod tests`（`test_partial_config` の隣、末尾付近）に追記：
 
 ```rust
     #[test]
@@ -78,7 +78,7 @@ Expected: コンパイルエラー（`Settings` に `keys` フィールドが無
 
 - [ ] **Step 3: 最小実装**
 
-`karukan-im/src/config/settings.rs` の `Settings` 構造体にフィールドを追加：
+`karukan-im/core/src/config/settings.rs` の `Settings` 構造体にフィールドを追加：
 
 ```rust
 /// Configuration settings for the IME
@@ -106,7 +106,7 @@ pub struct KeysSettings {
 }
 ```
 
-`karukan-im/config/default.toml` の末尾（`[learning]` セクションの後）に追記：
+`karukan-im/core/config/default.toml` の末尾（`[learning]` セクションの後）に追記：
 
 ```toml
 
@@ -130,7 +130,7 @@ Expected: 既存の `test_default_settings` / `test_partial_config` 等を含め
 - [ ] **Step 6: コミット**
 
 ```bash
-git add karukan-im/config/default.toml karukan-im/src/config/settings.rs
+git add karukan-im/core/config/default.toml karukan-im/core/src/config/settings.rs
 git ai-commit
 ```
 
@@ -139,8 +139,8 @@ git ai-commit
 ### Task 2: `EngineConfig` にフラグを追加し設定から反映する
 
 **Files:**
-- Modify: `karukan-im/src/core/engine/types.rs`
-- Test: `karukan-im/src/core/engine/tests/basic.rs`
+- Modify: `karukan-im/core/src/core/engine/types.rs`
+- Test: `karukan-im/core/src/core/engine/tests/basic.rs`
 
 **Interfaces:**
 - Consumes: Task 1 の `Settings.keys.ctrl_space_fullwidth`。
@@ -148,7 +148,7 @@ git ai-commit
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`karukan-im/src/core/engine/tests/basic.rs` の末尾に追記：
+`karukan-im/core/src/core/engine/tests/basic.rs` の末尾に追記：
 
 ```rust
 #[test]
@@ -173,7 +173,7 @@ Expected: コンパイルエラー（`EngineConfig` に `ctrl_space_fullwidth` �
 
 - [ ] **Step 3: 最小実装**
 
-`karukan-im/src/core/engine/types.rs` の `EngineConfig` 構造体（`pub live_conversion: bool,` の後）にフィールドを追加：
+`karukan-im/core/src/core/engine/types.rs` の `EngineConfig` 構造体（`pub live_conversion: bool,` の後）にフィールドを追加：
 
 ```rust
     /// Whether Ctrl+Space inputs a full-width space (U+3000).
@@ -206,7 +206,7 @@ Expected: エラーなし（`with_config` を使う既存テストの構造体�
 - [ ] **Step 6: コミット**
 
 ```bash
-git add karukan-im/src/core/engine/types.rs karukan-im/src/core/engine/tests/basic.rs
+git add karukan-im/core/src/core/engine/types.rs karukan-im/core/src/core/engine/tests/basic.rs
 git ai-commit
 ```
 
@@ -215,8 +215,8 @@ git ai-commit
 ### Task 3: Empty 状態の Ctrl+Space をフラグで分岐する
 
 **Files:**
-- Modify: `karukan-im/src/core/engine/input.rs`（`process_key_empty`）
-- Test: `karukan-im/src/core/engine/tests/basic.rs`
+- Modify: `karukan-im/core/src/core/engine/input.rs`（`process_key_empty`）
+- Test: `karukan-im/core/src/core/engine/tests/basic.rs`
 
 **Interfaces:**
 - Consumes: Task 2 の `self.config.ctrl_space_fullwidth`。
@@ -224,7 +224,7 @@ git ai-commit
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`karukan-im/src/core/engine/tests/basic.rs` の末尾に追記。`press_ctrl` は `tests/mod.rs` で定義済み（`use super::*` で利用可能）：
+`karukan-im/core/src/core/engine/tests/basic.rs` の末尾に追記。`press_ctrl` は `tests/mod.rs` で定義済み（`use super::*` で利用可能）：
 
 ```rust
 #[test]
@@ -262,7 +262,7 @@ Expected: `ctrl_space_passes_through_in_empty_when_disabled` が FAIL（現状�
 
 - [ ] **Step 3: 最小実装**
 
-`karukan-im/src/core/engine/input.rs` の `process_key_empty` 冒頭の Ctrl+Space ブロックを次に置き換える：
+`karukan-im/core/src/core/engine/input.rs` の `process_key_empty` 冒頭の Ctrl+Space ブロックを次に置き換える：
 
 ```rust
         // Ctrl+Space: start input with full-width space.
@@ -291,7 +291,7 @@ Expected: Task 2・Task 3 の Ctrl+Space 関連テストが全て PASS。
 - [ ] **Step 5: コミット**
 
 ```bash
-git add karukan-im/src/core/engine/input.rs karukan-im/src/core/engine/tests/basic.rs
+git add karukan-im/core/src/core/engine/input.rs karukan-im/core/src/core/engine/tests/basic.rs
 git ai-commit
 ```
 
@@ -300,8 +300,8 @@ git ai-commit
 ### Task 4: Composing 状態の Ctrl+Space をフラグで分岐する
 
 **Files:**
-- Modify: `karukan-im/src/core/engine/input.rs`（`process_key_composing`）
-- Test: `karukan-im/src/core/engine/tests/basic.rs`
+- Modify: `karukan-im/core/src/core/engine/input.rs`（`process_key_composing`）
+- Test: `karukan-im/core/src/core/engine/tests/basic.rs`
 
 **Interfaces:**
 - Consumes: Task 2 の `self.config.ctrl_space_fullwidth`。
@@ -311,7 +311,7 @@ git ai-commit
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`karukan-im/src/core/engine/tests/basic.rs` の末尾に追記：
+`karukan-im/core/src/core/engine/tests/basic.rs` の末尾に追記：
 
 ```rust
 #[test]
@@ -353,7 +353,7 @@ Expected: `ctrl_space_passes_through_while_composing_when_disabled` が FAIL（�
 
 - [ ] **Step 3: 最小実装**
 
-`karukan-im/src/core/engine/input.rs` の `process_key_composing` の Ctrl 分岐内、`Keysym::SPACE` のアームを次に置き換える：
+`karukan-im/core/src/core/engine/input.rs` の `process_key_composing` の Ctrl 分岐内、`Keysym::SPACE` のアームを次に置き換える：
 
 ```rust
                 // Ctrl+Space: insert full-width space (U+3000), unless
@@ -389,7 +389,7 @@ Expected: 差分なし（差分があれば `cargo fmt --all` を実行してか
 - [ ] **Step 6: コミット**
 
 ```bash
-git add karukan-im/src/core/engine/input.rs karukan-im/src/core/engine/tests/basic.rs
+git add karukan-im/core/src/core/engine/input.rs karukan-im/core/src/core/engine/tests/basic.rs
 git ai-commit
 ```
 

@@ -229,9 +229,9 @@ fn ctrl_space_inserts_fullwidth_space_while_composing_when_enabled() {
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Composing { .. }));
     assert!(
-        engine.input_buf.text.contains('\u{3000}'),
+        engine.input_buf.reading().contains('\u{3000}'),
         "buffer should contain a full-width space, got {:?}",
-        engine.input_buf.text
+        engine.input_buf.reading()
     );
 }
 
@@ -249,5 +249,5 @@ fn ctrl_space_passes_through_while_composing_when_disabled() {
     // NOT insert a full-width space.
     assert!(matches!(engine.state(), InputState::Composing { .. }));
     assert_eq!(engine.preedit().unwrap().text(), "あ");
-    assert!(!engine.input_buf.text.contains('\u{3000}'));
+    assert!(!engine.input_buf.reading().contains('\u{3000}'));
 }
