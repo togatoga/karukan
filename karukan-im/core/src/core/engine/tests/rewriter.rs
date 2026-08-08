@@ -193,11 +193,9 @@ fn looks_like_iso_date(text: &str) -> bool {
 /// Composing engine built from an explicit config (kanji model disabled).
 fn composing_engine_with_config(reading: &str, config: EngineConfig) -> InputMethodEngine {
     let mut engine = InputMethodEngine::with_config(config);
-    engine.input_buf.text = reading.to_string();
-    engine.input_buf.cursor_pos = reading.chars().count();
+    engine.input_buf.insert(reading);
     engine.state = InputState::Composing {
         preedit: Preedit::new(),
-        romaji_buffer: String::new(),
     };
     engine.converters.kanji = None;
     engine
@@ -209,7 +207,7 @@ fn date_conversion_enabled_emits_date_candidate_for_kyou() {
     // typing `きょう` yields a `YYYY-MM-DD` candidate tagged with the Date
     // source, promoted onto the first page rather than the rewriter tail.
     let mut engine = composing_engine("きょう");
-    let candidates = engine.build_conversion_candidates("きょう", 9, false);
+    let candidates = engine.build_conversion_candidates("きょう", "きょう", "", 9, false);
     let pos = candidates
         .iter()
         .position(|c| c.source == CandidateSource::Date && looks_like_iso_date(&c.text));
@@ -257,7 +255,7 @@ fn date_conversion_disabled_emits_no_date_candidate() {
         ..EngineConfig::default()
     };
     let mut engine = composing_engine_with_config("きょう", config);
-    let candidates = engine.build_conversion_candidates("きょう", 9, false);
+    let candidates = engine.build_conversion_candidates("きょう", "きょう", "", 9, false);
     assert!(
         !candidates.iter().any(|c| looks_like_iso_date(&c.text)),
         "date candidate present despite date_conversion = false"
@@ -268,7 +266,7 @@ fn date_conversion_disabled_emits_no_date_candidate() {
 fn non_date_reading_emits_no_date_candidate() {
     // A reading that is not a date word must not gain a date candidate.
     let mut engine = composing_engine("てすと");
-    let candidates = engine.build_conversion_candidates("てすと", 9, false);
+    let candidates = engine.build_conversion_candidates("てすと", "てすと", "", 9, false);
     assert!(!candidates.iter().any(|c| looks_like_iso_date(&c.text)));
 }
 
