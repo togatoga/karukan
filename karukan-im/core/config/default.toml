@@ -38,3 +38,9 @@ enabled = true
 max_entries = 10000
 # 学習する変換結果の最大文字数
 max_surface_chars = 50
+
+[keys]
+# Ctrl+Space を全角スペース入力に使う。
+# false にすると Karukan は Ctrl+Space を横取りせず OS に渡す
+# （macOS/Linux のウインドウ切替などのショートカットが効くようになる）。
+ctrl_space_fullwidth = true

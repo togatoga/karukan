@@ -113,8 +113,14 @@ impl InputMethodEngine {
 
     /// Process key in empty state
     pub(super) fn process_key_empty(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
-        // Ctrl+Space: start input with full-width space
+        // Ctrl+Space: start input with full-width space.
+        // Gated on config: when `ctrl_space_fullwidth` is false, do not
+        // intercept — return not_consumed so the key passes through to the
+        // OS (e.g. window-switching shortcuts).
         if key.modifiers.control_key && key.keysym == Keysym::SPACE {
+            if !self.config.ctrl_space_fullwidth {
+                return EngineResult::not_consumed();
+            }
             self.input_buf.clear();
             self.input_buf.push_direct('\u{3000}');
             let preedit = self.set_composing_state();
@@ -231,8 +237,18 @@ impl InputMethodEngine {
         // Handle Ctrl+key shortcuts
         if key.modifiers.control_key {
             match key.keysym {
-                // Ctrl+Space: insert full-width space (U+3000)
-                Keysym::SPACE => return self.input_fullwidth_space(),
+                // Ctrl+Space: insert full-width space (U+3000), unless
+                // disabled in config — then pass through to the OS. Must
+                // return explicitly here: falling through would let the
+                // bare-Space arm below treat Ctrl+Space as the conversion
+                // trigger.
+                Keysym::SPACE => {
+                    return if self.config.ctrl_space_fullwidth {
+                        self.input_fullwidth_space()
+                    } else {
+                        EngineResult::not_consumed()
+                    };
+                }
                 // Ctrl+K: enter katakana mode
                 Keysym::KEY_K | Keysym::KEY_K_UPPER => return self.enter_katakana_mode(),
                 // Ctrl+A: move to beginning (Emacs-style Home)
