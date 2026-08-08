@@ -78,9 +78,9 @@ mod llamacpp_tests {
         let model = load_model().expect("Failed to load");
         let cases = [
             "斉木楠雄のΨ難", // Ψ: 2-byte fallback
-            "€100",           // €: 3-byte fallback
-            "🍣を食べる",     // 🍣: 4-byte fallback
-            "ΨとΩと🍣",       // multiple fallback runs in one string
+            "€100",          // €: 3-byte fallback
+            "🍣を食べる",    // 🍣: 4-byte fallback
+            "ΨとΩと🍣",      // multiple fallback runs in one string
         ];
         for text in cases {
             let tokens = model.tokenize(text).expect("Tokenize failed");
