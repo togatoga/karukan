@@ -72,6 +72,9 @@ pub struct EngineConfig {
     pub display_context_len: usize,
     /// Maximum context length for API calls (to avoid overflow)
     pub max_api_context_len: usize,
+    /// User persona text prepended to every model lctx (empty = disabled);
+    /// see `persona_lctx`
+    pub persona: String,
     /// Maximum reading length (chars) converted by the model in a single call.
     /// The composing buffer is split into chunks of at most this many chars so
     /// live-conversion latency stays bounded for long input. See
@@ -102,6 +105,7 @@ impl EngineConfig {
             } else {
                 0
             },
+            persona: settings.conversion.persona.clone(),
             composing_chunk_len: settings.conversion.composing_chunk_len,
             short_input_threshold: settings.conversion.short_input_threshold,
             beam_width: settings.conversion.beam_width,
@@ -118,6 +122,7 @@ impl Default for EngineConfig {
             num_candidates: 3, // Space conversion: beam search with 3 candidates
             display_context_len: 10,
             max_api_context_len: 10,
+            persona: String::new(),
             composing_chunk_len: 30,
             short_input_threshold: 10,
             beam_width: 3,

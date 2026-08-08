@@ -20,6 +20,9 @@ const MAX_PREDICTIVE_SUGGESTIONS: usize = 3;
 /// single key would flood the list from a large dictionary
 const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
 
+/// Max persona chars kept (tail) when prepended to the lctx
+const MAX_PERSONA_CHARS: usize = 25;
+
 /// How the unresolved romaji tail constrains the predictive lookup.
 enum TailConstraint {
     /// No tail: prediction is unconstrained
@@ -99,11 +102,14 @@ impl InputMethodEngine {
     /// `api_context` is the left context (lctx) fed to the model. Callers pass
     /// `truncate_context_for_api()` for a whole-buffer conversion, or — for
     /// chunked live conversion — the converted text of the preceding chunks.
+    /// The configured conversion persona is prepended here (`persona_lctx`),
+    /// so every conversion path carries it.
     ///
     /// Results are cached by (katakana reading, lctx, strategy) — everything
-    /// that determines the model output, beam width included via the strategy.
-    /// A hit skips inference entirely, so live conversion re-running all
-    /// chunks each keystroke only pays for the chunks that actually changed.
+    /// that determines the model output, beam width included via the strategy
+    /// and the persona via the lctx. A hit skips inference entirely, so live
+    /// conversion re-running all chunks each keystroke only pays for the
+    /// chunks that actually changed.
     pub(super) fn run_kana_kanji_conversion(
         &mut self,
         reading: &str,
@@ -120,13 +126,13 @@ impl InputMethodEngine {
         // Cache lookup comes before the converter check: a hit needs no model.
         let key = ConversionCacheKey {
             katakana: katakana.clone(),
-            lctx: api_context.to_string(),
+            lctx: self.persona_lctx(api_context),
             strategy: strategy.clone(),
         };
         if let Some(candidates) = self.conversion_cache.get(&key) {
             debug!(
-                "convert: cache hit reading=\"{}\" api_context=\"{}\" strategy={:?}",
-                reading, api_context, strategy
+                "convert: cache hit reading=\"{}\" lctx=\"{}\" strategy={:?}",
+                reading, key.lctx, strategy
             );
             // conversion_ms stays 0 (no inference ran) and the adaptive flag
             // is left untouched — a cache hit says nothing about model speed.
@@ -135,8 +141,8 @@ impl InputMethodEngine {
         }
 
         debug!(
-            "convert: reading=\"{}\" api_context=\"{}\" candidates={} strategy={:?}",
-            reading, api_context, num_candidates, strategy
+            "convert: reading=\"{}\" lctx=\"{}\" candidates={} strategy={:?}",
+            reading, key.lctx, num_candidates, strategy
         );
 
         let start = Instant::now();
@@ -153,12 +159,12 @@ impl InputMethodEngine {
                 let (default_top1, light_candidates) = std::thread::scope(|s| {
                     let h_default = s.spawn(|| {
                         converter
-                            .convert(&katakana, api_context, 1)
+                            .convert(&katakana, &key.lctx, 1)
                             .unwrap_or_default()
                     });
                     let h_beam = s.spawn(|| {
                         light_converter
-                            .convert(&katakana, api_context, bw)
+                            .convert(&katakana, &key.lctx, bw)
                             .unwrap_or_default()
                     });
                     (
@@ -173,14 +179,14 @@ impl InputMethodEngine {
                     return vec![];
                 };
                 light_converter
-                    .convert(&katakana, api_context, 1)
+                    .convert(&katakana, &key.lctx, 1)
                     .unwrap_or_default()
             }
             ConversionStrategy::MainModelOnly => converter
-                .convert(&katakana, api_context, 1)
+                .convert(&katakana, &key.lctx, 1)
                 .unwrap_or_default(),
             ConversionStrategy::MainModelBeam { beam_width } => converter
-                .convert(&katakana, api_context, *beam_width)
+                .convert(&katakana, &key.lctx, *beam_width)
                 .unwrap_or_default(),
         };
 
@@ -195,6 +201,30 @@ impl InputMethodEngine {
         }
 
         candidates
+    }
+
+    /// Prepend the persona keywords to `ctx` — bare concatenation, so they
+    /// read as preceding text. Applied at the single model entry point
+    /// (`run_kana_kanji_conversion`), so live chunks and Space conversion
+    /// both carry it and it lands in the conversion cache key.
+    fn persona_lctx(&self, ctx: &str) -> String {
+        let persona = self.effective_persona();
+        if persona.is_empty() {
+            return ctx.to_string();
+        }
+        format!("{}{}", persona, ctx)
+    }
+
+    /// The persona text as the model receives it: trimmed, last
+    /// [`MAX_PERSONA_CHARS`] chars; empty when unset. Also what the aux
+    /// mode indicator displays, so screen and model always agree.
+    pub(super) fn effective_persona(&self) -> String {
+        let persona = self.config.persona.trim();
+        if persona.is_empty() {
+            String::new()
+        } else {
+            keep_last_chars(persona, MAX_PERSONA_CHARS)
+        }
     }
 
     /// Display name of the model(s) a strategy dispatches to.

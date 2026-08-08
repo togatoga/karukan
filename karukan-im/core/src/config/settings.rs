@@ -47,6 +47,11 @@ pub struct ConversionSettings {
     pub use_context: bool,
     /// Maximum number of surrounding text characters passed to the conversion API
     pub max_context_length: usize,
+    /// Conversion persona: free text about the user or their topics (e.g. 「プログラミング」)
+    /// prepended to the model's left context on every conversion so results
+    /// lean toward it. Last 25 chars are used; empty disables. (Named
+    /// `persona` — `profile` is reserved for per-user profile switching.)
+    pub persona: String,
     /// Maximum reading length (in characters) converted by the model in a single
     /// call during live conversion. The composing buffer is split into chunks
     /// of at most this many characters so per-keystroke latency stays bounded

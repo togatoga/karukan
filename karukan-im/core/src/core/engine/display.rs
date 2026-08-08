@@ -146,10 +146,14 @@ impl InputMethodEngine {
             // user sees they're not in plain alphabet input.
             InputMode::Emoji => "[☺]",
         };
-        if self.live.enabled {
-            format!("⚡{}", base)
+        // The effective persona is shown verbatim (e.g. ⚡[あ]P:プログラミング)
+        // so what the model receives is visible at a glance.
+        let live = if self.live.enabled { "⚡" } else { "" };
+        let persona = self.effective_persona();
+        if persona.is_empty() {
+            format!("{}{}", live, base)
         } else {
-            base.to_string()
+            format!("{}{}P:{}", live, base, persona)
         }
     }
 

@@ -16,6 +16,7 @@ mod live_conversion;
 mod mode_toggle;
 mod passthrough;
 mod pending_romaji;
+mod persona;
 mod predictive;
 mod rewriter;
 mod strategy;
