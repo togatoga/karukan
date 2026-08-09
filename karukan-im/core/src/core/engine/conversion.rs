@@ -721,7 +721,11 @@ impl InputMethodEngine {
     }
 
     /// Process key in conversion state
-    pub(super) fn process_key_conversion(&mut self, key: &KeyEvent) -> EngineResult {
+    pub(super) fn process_key_conversion(
+        &mut self,
+        key: &KeyEvent,
+        shift_active: bool,
+    ) -> EngineResult {
         match key.keysym {
             Keysym::RETURN => self.commit_conversion(),
             Keysym::ESCAPE => self.cancel_conversion(),
@@ -746,6 +750,33 @@ impl InputMethodEngine {
                 } else {
                     EngineResult::consumed()
                 }
+            }
+            // Inside a narrowed view Backspace shrinks the reading and
+            // stays in the view — the mirror of typing-refine, so the list
+            // re-expands as the query shrinks. Without a filter it returns
+            // to the composition as before.
+            Keysym::BACKSPACE
+                if !key.modifiers.control_key
+                    && matches!(
+                        &self.state,
+                        InputState::Conversion {
+                            filter: Some(_),
+                            ..
+                        }
+                    ) =>
+            {
+                let filter = match &self.state {
+                    InputState::Conversion { filter, .. } => *filter,
+                    _ => None,
+                };
+                self.set_composing_state();
+                let result = self.process_key_composing(key, shift_active);
+                if let Some(source) = filter
+                    && matches!(self.state, InputState::Composing { .. })
+                {
+                    return self.start_conversion_with_filter(source);
+                }
+                result
             }
             Keysym::BACKSPACE => self.backspace_conversion(),
             _ => {
@@ -776,12 +807,27 @@ impl InputMethodEngine {
                     return self.select_candidate_by_digit(digit);
                 }
 
-                // Any printable character: commit current conversion and start new input
-                if let Some(ch) = key.to_char()
-                    && !key.modifiers.control_key
-                    && !key.modifiers.alt_key
-                {
-                    return self.commit_conversion_and_continue(ch);
+                // Any printable character refines the conversion instead
+                // of committing it (a deliberate deviation from mozc): drop
+                // back to the untouched composition and feed the keystroke,
+                // so the reading grows and the suggestion rewrites in place
+                // — incremental-search feel. Inside a narrowed view the
+                // filter survives: the conversion re-enters with the same
+                // source, so its list narrows as the reading grows. Digits
+                // (candidate selection) were already handled above.
+                if key.to_char().is_some() && !key.modifiers.control_key && !key.modifiers.alt_key {
+                    let filter = match &self.state {
+                        InputState::Conversion { filter, .. } => *filter,
+                        _ => None,
+                    };
+                    self.set_composing_state();
+                    let result = self.process_key_composing(key, shift_active);
+                    if let Some(source) = filter
+                        && matches!(self.state, InputState::Composing { .. })
+                    {
+                        return self.start_conversion_with_filter(source);
+                    }
+                    return result;
                 }
 
                 // Everything else — stray chords, function keys, Home/End —
@@ -856,25 +902,6 @@ impl InputMethodEngine {
             .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::HideAuxText)
             .with_action(EngineAction::Commit(text))
-    }
-
-    /// Commit current conversion and then process a new character as fresh input
-    fn commit_conversion_and_continue(&mut self, ch: char) -> EngineResult {
-        let Some((text, reading)) = self.selected_conversion_info() else {
-            return EngineResult::not_consumed();
-        };
-
-        self.finish_conversion(&text, &reading);
-
-        // Start new input with the character
-        let new_input_result = self.start_input(ch);
-
-        // Combine: commit first, then new input actions
-        let mut result = EngineResult::consumed()
-            .with_action(EngineAction::Commit(text))
-            .with_action(EngineAction::HideCandidates);
-        result.actions.extend(new_input_result.actions);
-        result
     }
 
     /// Whether the selected candidate can be removed from the learning
@@ -988,11 +1015,32 @@ impl InputMethodEngine {
     /// Ctrl+R while composing: enter the Conversion state and immediately
     /// narrow it one step, so the filtered view opens without Space.
     pub(super) fn start_filtered_conversion(&mut self, forward: bool) -> EngineResult {
-        let result = self.start_conversion(false);
-        if !matches!(self.state, InputState::Conversion { .. }) {
-            return result;
+        if !self.enter_conversion_for_filter() {
+            return EngineResult::consumed();
         }
         self.cycle_candidate_filter(forward)
+    }
+
+    /// Enter the Conversion state already narrowed to `source` — used when
+    /// typing refines a narrowed view, so the view survives the keystroke.
+    fn start_conversion_with_filter(&mut self, source: CandidateSource) -> EngineResult {
+        if !self.enter_conversion_for_filter() {
+            return EngineResult::consumed();
+        }
+        self.apply_candidate_filter(source)
+    }
+
+    /// Enter the Conversion state as a shell for a filtered view. Unlike
+    /// Space, no mixed candidate list is built — the view re-queries its
+    /// source anyway — so no model inference runs here. Returns false when
+    /// there is nothing to convert.
+    fn enter_conversion_for_filter(&mut self) -> bool {
+        let reading = self.input_buf.settled_reading(&self.converters.romaji);
+        if reading.is_empty() {
+            return false;
+        }
+        self.enter_conversion_state(&reading, CandidateList::new(Vec::new()));
+        matches!(self.state, InputState::Conversion { .. })
     }
 
     /// Set `filter` and rebuild the window from it. With no candidates the
@@ -1038,14 +1086,20 @@ impl InputMethodEngine {
     /// would hide them from every lower source's view (a learned word
     /// disappearing from the user-dictionary view, the model's copy of a
     /// dictionary word missing from the AI view, and so on).
-    fn source_view(&mut self, source: CandidateSource, reading: &str) -> Vec<Candidate> {
+    fn source_view(&mut self, source: CandidateSource, _reading: &str) -> Vec<Candidate> {
+        // Queries run against the live buffer — the settled reading plus
+        // the unresolved romaji tail — so mid-word typing narrows
+        // predictively (わせ + `d` keeps わせだ…) instead of querying a
+        // reading with a stray consonant in it.
+        let reading = &self.input_buf.reading();
+        let pending = self.input_buf.pending();
         match source {
             CandidateSource::Learning => self.lookup_learning_history(reading),
             // A dedicated, paged dictionary browser wants everything:
             // predictive matches kick in from the first char here, unlike
             // the mixed list's MIN_PREDICTIVE_PREFIX_CHARS flood guard.
             source @ (CandidateSource::UserDictionary | CandidateSource::Dictionary) => self
-                .search_dictionaries(reading, "", usize::MAX, usize::MAX, 1)
+                .search_dictionaries(reading, &pending, usize::MAX, usize::MAX, 1)
                 .into_iter()
                 .filter(|ac| ac.source == source)
                 .map(|ac| Candidate {

@@ -457,7 +457,7 @@ impl InputMethodEngine {
         let result = match &self.state {
             InputState::Empty => self.process_key_empty(key, shift_active),
             InputState::Composing { .. } => self.process_key_composing(key, shift_active),
-            InputState::Conversion { .. } => self.process_key_conversion(key),
+            InputState::Conversion { .. } => self.process_key_conversion(key, shift_active),
         };
 
         self.metrics.process_key_ms = start.elapsed().as_millis() as u64;

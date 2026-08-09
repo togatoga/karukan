@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn test_conversion_char_commits_and_continues() {
+fn test_conversion_char_refines_reading() {
     let mut engine = InputMethodEngine::new();
 
     // Type "あい" and enter conversion
@@ -10,38 +10,32 @@ fn test_conversion_char_commits_and_continues() {
     engine.process_key(&press_key(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
-    // Type 'k' during conversion → should commit candidate and start new input
+    // Typing during conversion must NOT commit — it drops back to the
+    // composition and extends the reading (incremental-search feel).
     let result = engine.process_key(&press('k'));
     assert!(result.consumed);
-
-    // Should have committed the conversion
-    let has_commit = result
-        .actions
-        .iter()
-        .any(|a| matches!(a, EngineAction::Commit(_)));
-    assert!(has_commit, "Should have a commit action");
-
-    // Should now be in Composing with 'k' in preedit
+    assert!(
+        !result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(_))),
+        "typing must refine, not commit"
+    );
     assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.preedit().unwrap().text(), "k");
-}
 
-#[test]
-fn test_conversion_char_commits_and_continues_romaji() {
-    let mut engine = InputMethodEngine::new();
-
-    // Type "あ" and enter conversion
     engine.process_key(&press('a'));
+    assert_eq!(engine.input_buf.reading(), "あいか");
+
+    // The refined reading converts and commits as one unit.
     engine.process_key(&press_key(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
-
-    // Type 'k', 'a' → commits conversion, then starts "か"
-    engine.process_key(&press('k'));
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.preedit().unwrap().text(), "k");
-
-    engine.process_key(&press('a'));
-    assert_eq!(engine.preedit().unwrap().text(), "か");
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(_)))
+    );
 }
 
 #[test]

@@ -272,6 +272,106 @@ fn test_dictionary_view_prefix_matches_from_one_char() {
 }
 
 #[test]
+fn test_typing_narrows_within_the_filtered_view() {
+    // fzf-style: typing while a source view is active keeps the view and
+    // narrows it with the grown reading.
+    use std::io::Write;
+    let mut engine = InputMethodEngine::new();
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    let json = r#"[
+        {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
+        {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
+    ]"#;
+    tmp.write_all(json.as_bytes()).unwrap();
+    tmp.flush().unwrap();
+    engine.dicts.user = Some(Dictionary::build_from_json(tmp.path()).unwrap());
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // 👤
+    assert!(
+        last_aux_text(&result)
+            .expect("aux")
+            .starts_with("[変換:👤]")
+    );
+    let texts: Vec<String> = engine
+        .candidates()
+        .unwrap()
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert_eq!(texts, vec!["亜", "藍"]);
+
+    // Typing narrows the SAME view: reading grows to あい, only 藍 stays.
+    let result = engine.process_key(&press('i'));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    let texts: Vec<String> = engine
+        .candidates()
+        .unwrap()
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert_eq!(texts, vec!["藍"]);
+
+    // A pending consonant keeps the view too (tail-aware narrowing).
+    let result = engine.process_key(&press('k'));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+}
+
+#[test]
+fn test_backspace_widens_within_the_filtered_view() {
+    // The mirror of typing-refine: Backspace shrinks the reading and the
+    // view re-expands; emptying the buffer exits cleanly.
+    use std::io::Write;
+    let mut engine = InputMethodEngine::new();
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    let json = r#"[
+        {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
+        {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
+    ]"#;
+    tmp.write_all(json.as_bytes()).unwrap();
+    tmp.flush().unwrap();
+    engine.dicts.user = Some(Dictionary::build_from_json(tmp.path()).unwrap());
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
+    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 👤: [藍]
+    let texts: Vec<String> = engine
+        .candidates()
+        .unwrap()
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert_eq!(texts, vec!["藍"]);
+
+    let result = engine.process_key(&press_key(Keysym::BACKSPACE));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    let texts: Vec<String> = engine
+        .candidates()
+        .unwrap()
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert_eq!(texts, vec!["亜", "藍"]);
+
+    // Emptying the buffer leaves the conversion entirely.
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+#[test]
 fn test_learning_filter_shows_full_history() {
     // The mixed list caps learning entries at 3; the narrowed learning view
     // is a history browser and shows them all.
@@ -343,9 +443,9 @@ fn test_learning_delete_keeps_the_filter() {
 }
 
 #[test]
-fn test_typing_on_empty_view_commits_reading_and_continues() {
-    // A printable key on the empty view commits the displayed reading and
-    // starts the new input — the composition is never silently dropped.
+fn test_typing_on_empty_view_keeps_view_and_refines() {
+    // A printable key on the empty view extends the reading and stays in
+    // the narrowed view — nothing is committed or lost.
     let mut engine = engine_with_learned("あい", "愛");
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -354,13 +454,16 @@ fn test_typing_on_empty_view_commits_reading_and_continues() {
     engine.process_key(&press_ctrl(Keysym::DELETE)); // empty learning view
 
     let result = engine.process_key(&press('k'));
-    let committed = result.actions.iter().find_map(|a| match a {
-        EngineAction::Commit(text) => Some(text.clone()),
-        _ => None,
-    });
-    assert_eq!(committed.as_deref(), Some("あい"));
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.preedit().unwrap().text(), "k");
+    assert!(
+        !result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(_)))
+    );
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
+    assert_eq!(engine.input_buf.display(), "あいk");
 }
 
 #[test]
