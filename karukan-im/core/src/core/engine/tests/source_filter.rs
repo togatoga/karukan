@@ -725,6 +725,39 @@ fn test_model_view_beams_a_tail_window_on_long_readings() {
 }
 
 #[test]
+fn test_space_conversion_beams_the_tail_window() {
+    use crate::config::settings::StrategyMode;
+    // Space shares the tail-window conversion: a reading longer than the
+    // window cap still gets beam-width model rows in the mixed list
+    // (prefix top-1 + window beam) instead of one greedy candidate.
+    let mut engine = InputMethodEngine::new();
+    engine.config.composing_chunk_len = 2;
+    engine.config.strategy = StrategyMode::Main;
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: "アイ".to_string(),
+            lctx: String::new(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec!["合い".to_string()],
+    );
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: "ウエ".to_string(),
+            lctx: "合い".to_string(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec!["上".to_string(), "植え".to_string()],
+    );
+    for ch in ['a', 'i', 'u', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+    let texts = shown_texts(&engine);
+    assert_eq!(&texts[..2], ["合い上", "合い植え"], "texts were: {texts:?}");
+}
+
+#[test]
 fn test_system_view_keeps_surfaces_shared_with_user_dict() {
     // Each dictionary view dedups within its own dictionary: a surface
     // present in both stays visible in the 📚 view instead of being

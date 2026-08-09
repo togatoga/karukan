@@ -452,8 +452,9 @@ impl InputMethodEngine {
     /// Build conversion candidates for a reading from multiple sources.
     ///
     /// Combines learning cache, dictionaries, and model inference results
-    /// with deduplication. Uses dynamic candidate count based on input token
-    /// count for performance.
+    /// with deduplication. Model candidates come from the tail-window
+    /// conversion ([`Self::windowed_model_candidates`]), so the beam stays
+    /// available regardless of reading length.
     ///
     /// Priority: Learning → User Dictionary → Model → System Dictionary → Fallback
     ///
@@ -482,8 +483,10 @@ impl InputMethodEngine {
             debug!("Failed to initialize kanji converter: {}", e);
         }
 
-        let api_context = self.truncate_context_for_api();
-        let candidates = self.run_kana_kanji_conversion(reading, &api_context, num_candidates);
+        // Model candidates via the shared tail-window conversion: the beam
+        // always runs (over the bounded window) instead of degrading to a
+        // single greedy candidate for long readings.
+        let candidates = self.windowed_model_candidates(reading, num_candidates);
 
         let hiragana = reading.to_string();
         let katakana = karukan_engine::hiragana_to_katakana(reading);
@@ -1182,26 +1185,46 @@ impl InputMethodEngine {
         }
     }
 
-    /// Model candidates for the narrowed AI view.
+    /// Model candidates for the narrowed AI view: the shared tail-window
+    /// conversion ([`Self::windowed_model_candidates`]), so the view
+    /// always matches the mixed list's model rows and is a cache hit
+    /// right after Space.
+    fn model_source_view(&mut self, reading: &str) -> Vec<Candidate> {
+        self.windowed_model_candidates(reading, self.config.num_candidates)
+            .into_iter()
+            .map(|text| Candidate {
+                text,
+                reading: Some(reading.to_string()),
+                source: Some(CandidateSource::Model),
+                description: None,
+            })
+            .collect()
+    }
+
+    /// Tail-window model conversion, shared by Space's mixed list and the
+    /// AI view.
     ///
     /// The `num_candidates` beam runs over a tail window: the final
     /// Japanese run, taken from the end and capped at the beam gate
     /// (`short_input_threshold` chars — the same char unit the strategy
-    /// compares against, so the window's beam request always passes the
-    /// gate instead of degrading to the long-input single-candidate
-    /// path; `composing_chunk_len` still applies when configured
-    /// smaller). A clear boundary — punctuation, digits, any
-    /// non-Japanese chunk — is never crossed. Everything before the
-    /// window converts top-1 on the live-conversion chunk grid, served
-    /// from the conversion cache while the user types. So no matter how
-    /// long the reading grows, a keystroke pays one bounded beam call
-    /// (plus at most one bounded top-1 call for the window's overflow)
-    /// and the view keeps offering beam-width alternatives.
+    /// compares against, so the beam request always passes the gate
+    /// instead of degrading to the long-input single-candidate path;
+    /// `composing_chunk_len` still applies when configured smaller). An
+    /// explicit chunk boundary — punctuation, digits, any non-Japanese
+    /// run — is never crossed, and non-Japanese runs keep their verbatim
+    /// passthrough (never fed to the model). Everything before the window
+    /// converts top-1 on the live-conversion chunk grid, served from the
+    /// conversion cache while the user types. So no matter how long the
+    /// reading grows, a conversion pays one bounded beam call (plus at
+    /// most one bounded top-1 call for the window's overflow) and keeps
+    /// offering beam-width alternatives.
     ///
     /// A boundary-free reading within the window cap — the common case —
-    /// makes the window the whole reading: the exact call Space runs,
-    /// same cache key, matching the mixed list's model rows.
-    fn model_source_view(&mut self, reading: &str) -> Vec<Candidate> {
+    /// makes the window the whole reading: a single whole-reading beam.
+    /// Candidates equal to the raw reading are dropped (that is what an
+    /// unavailable model degenerates to), so an empty result means "no
+    /// model suggestion" to the callers.
+    fn windowed_model_candidates(&mut self, reading: &str, num_candidates: usize) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
         }
@@ -1233,7 +1256,7 @@ impl InputMethodEngine {
             vec![String::new()]
         } else {
             let lctx = self.lctx_for(&base_ctx, &prefix);
-            let beam = self.run_kana_kanji_conversion(&window, &lctx, self.config.num_candidates);
+            let beam = self.run_kana_kanji_conversion(&window, &lctx, num_candidates);
             if beam.is_empty() { vec![window] } else { beam }
         };
 
@@ -1241,16 +1264,7 @@ impl InputMethodEngine {
         tails
             .into_iter()
             .map(|tail| format!("{prefix}{tail}"))
-            // A candidate equal to the raw reading adds nothing (it is what
-            // an unavailable model degenerates to); the kana pair lives in
-            // the rewriter view.
             .filter(|text| text != reading && seen.insert(text.clone()))
-            .map(|text| Candidate {
-                text,
-                reading: Some(reading.to_string()),
-                source: Some(CandidateSource::Model),
-                description: None,
-            })
             .collect()
     }
 
