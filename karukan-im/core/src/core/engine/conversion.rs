@@ -353,6 +353,11 @@ impl InputMethodEngine {
     /// keeps わせだ… and drops わせり…). `predictive_limit` caps the
     /// prefix-extending results: small for the suggestion list, unlimited
     /// for the paged conversion list.
+    ///
+    /// `only` restricts the search to one dictionary. The dedup then runs
+    /// within that dictionary alone, so a surface present in both stays
+    /// visible in the system-dictionary view instead of being hidden by
+    /// the user-dictionary copy.
     fn search_dictionaries(
         &self,
         reading: &str,
@@ -360,18 +365,22 @@ impl InputMethodEngine {
         limit: usize,
         predictive_limit: usize,
         min_prefix_chars: usize,
+        only: Option<CandidateSource>,
     ) -> Vec<AnnotatedCandidate> {
         let dicts = [
             (self.dicts.user.as_ref(), CandidateSource::UserDictionary),
             (self.dicts.system.as_ref(), CandidateSource::Dictionary),
-        ];
+        ]
+        .into_iter()
+        .filter(|(_, source)| only.is_none_or(|o| o == *source))
+        .collect::<Vec<_>>();
         let mut candidates = Vec::new();
         let mut seen = HashSet::new();
 
         // Exact matches, user dictionary first — only when no romaji tail
         // is pending (an exact hit on the base would ignore the typed
         // tail). Candidates are sorted by score at build/load time
-        for (dict, source) in dicts {
+        for &(dict, source) in &dicts {
             if !pending.is_empty() {
                 break;
             }
@@ -397,7 +406,7 @@ impl InputMethodEngine {
             && !matches!(constraint, TailConstraint::Dead)
         {
             let mut budget = predictive_limit;
-            for (dict, source) in dicts {
+            for &(dict, source) in &dicts {
                 if budget == 0 {
                     break;
                 }
@@ -503,6 +512,7 @@ impl InputMethodEngine {
             usize::MAX,
             usize::MAX,
             MIN_PREDICTIVE_PREFIX_CHARS,
+            None,
         );
         // Insert user dictionary entries at the top (after learning)
         for ac in &dict_results {
@@ -693,6 +703,7 @@ impl InputMethodEngine {
             CandidateList::DEFAULT_PAGE_SIZE,
             MAX_PREDICTIVE_SUGGESTIONS,
             MIN_PREDICTIVE_PREFIX_CHARS,
+            None,
         )
         .into_iter()
         .map(|ac| Candidate {
@@ -1126,10 +1137,11 @@ impl InputMethodEngine {
             // A dedicated, paged dictionary browser wants everything:
             // predictive matches kick in from the first char here, unlike
             // the mixed list's MIN_PREDICTIVE_PREFIX_CHARS flood guard.
+            // Restricting the search to the view's own dictionary keeps a
+            // surface shared with the other dictionary visible here.
             source @ (CandidateSource::UserDictionary | CandidateSource::Dictionary) => self
-                .search_dictionaries(&base, &pending, usize::MAX, usize::MAX, 1)
+                .search_dictionaries(&base, &pending, usize::MAX, usize::MAX, 1, Some(source))
                 .into_iter()
-                .filter(|ac| ac.source == source)
                 .map(|ac| Candidate {
                     text: ac.text,
                     reading: ac.reading.or_else(|| Some(base.clone())),
@@ -1170,45 +1182,59 @@ impl InputMethodEngine {
         }
     }
 
-    /// Model candidates for the narrowed AI view. The reading is chunked
-    /// exactly like live conversion (`group_chunks`): every chunk but the
-    /// last is converted top-1 — a cache hit when live conversion already
-    /// converted it — and only the final chunk pays for the full
-    /// `num_candidates` beam, so refining a long reading stays bounded per
-    /// keystroke. A reading within one chunk (the common case) is a single
-    /// whole-reading conversion, the same call Space runs.
+    /// Model candidates for the narrowed AI view.
+    ///
+    /// The `num_candidates` beam runs over a tail window: the final
+    /// Japanese run, taken from the end and capped at one chunk
+    /// (`composing_chunk_len`). A clear boundary — punctuation, digits,
+    /// any non-Japanese chunk — is never crossed. Everything before the
+    /// window converts top-1 on the live-conversion chunk grid, served
+    /// from the conversion cache while the user types. So no matter how
+    /// long the reading grows, a keystroke pays one bounded beam call
+    /// (plus at most one bounded top-1 call for the window's overflow)
+    /// and the view keeps offering beam-width alternatives — the window
+    /// is always short enough that the strategy never degrades to the
+    /// long-input single-candidate path the whole-reading Space call
+    /// takes.
+    ///
+    /// A boundary-free reading within one chunk — the common case — makes
+    /// the window the whole reading: the exact call Space runs, same
+    /// cache key, matching the mixed list's model rows.
     fn model_source_view(&mut self, reading: &str) -> Vec<Candidate> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
         }
         let base_ctx = self.truncate_context_for_api();
         let chars: Vec<char> = reading.chars().collect();
+        let run_start = chars
+            .iter()
+            .rposition(|c| !is_japanese(*c))
+            .map_or(0, |i| i + 1);
+        let window_start = run_start.max(chars.len().saturating_sub(self.chunk_len()));
+
         let mut prefix = String::new();
-        let mut tails: Vec<String> = Vec::new();
-        let chunks = group_chunks(&chars, self.chunk_len());
-        for (i, chunk) in chunks.iter().enumerate() {
+        for chunk in group_chunks(&chars[..window_start], self.chunk_len()) {
             let chunk_reading: String = chunk.iter().collect();
-            let japanese = chunk_reading.chars().next().is_some_and(is_japanese);
-            if i + 1 == chunks.len() && japanese {
-                let lctx = self.lctx_for(&base_ctx, &prefix);
-                tails = self.run_kana_kanji_conversion(
-                    &chunk_reading,
-                    &lctx,
-                    self.config.num_candidates,
-                );
-                if tails.is_empty() {
-                    tails = vec![chunk_reading];
-                }
-            } else if japanese {
+            if chunk_reading.chars().next().is_some_and(is_japanese) {
                 let lctx = self.lctx_for(&base_ctx, &prefix);
                 let converted = self.run_kana_kanji_conversion(&chunk_reading, &lctx, 1);
                 prefix.push_str(converted.first().unwrap_or(&chunk_reading));
-            } else if i + 1 == chunks.len() {
-                tails = vec![chunk_reading];
             } else {
                 prefix.push_str(&chunk_reading);
             }
         }
+
+        // An empty window (the reading ends in a non-Japanese run) leaves
+        // just the converted prefix as the single candidate.
+        let window: String = chars[window_start..].iter().collect();
+        let tails = if window.is_empty() {
+            vec![String::new()]
+        } else {
+            let lctx = self.lctx_for(&base_ctx, &prefix);
+            let beam = self.run_kana_kanji_conversion(&window, &lctx, self.config.num_candidates);
+            if beam.is_empty() { vec![window] } else { beam }
+        };
+
         let mut seen = HashSet::new();
         tails
             .into_iter()

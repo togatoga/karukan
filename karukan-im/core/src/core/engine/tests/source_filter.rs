@@ -642,6 +642,30 @@ fn test_emoji_rewriter_view_has_no_literal_query() {
 }
 
 #[test]
+fn test_model_view_queries_the_settled_reading() {
+    // The AI view converts the state's settled reading — the exact text
+    // Enter commits — so a pending tail is reflected in its candidates,
+    // never silently dropped on commit. The tail `k` is its own
+    // non-Japanese chunk, passed through after the converted kana run.
+    let mut engine = InputMethodEngine::new();
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: "アイ".to_string(),
+            lctx: String::new(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec!["合い".to_string()],
+    );
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press('k'));
+    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
+    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
+    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    assert_eq!(shown_texts(&engine), vec!["合いk"]);
+}
+
+#[test]
 fn test_model_view_converts_japanese_run_and_passes_digits_through() {
     // The AI view chunks like live conversion: the Japanese run is
     // converted (via the shared conversion cache) and the trailing digit
@@ -663,4 +687,79 @@ fn test_model_view_converts_japanese_run_and_passes_digits_through() {
     cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
     cycle_expecting(&mut engine, true, CandidateSource::Model);
     assert_eq!(shown_texts(&engine), vec!["合い123"]);
+}
+
+#[test]
+fn test_model_view_beams_a_tail_window_on_long_readings() {
+    use crate::config::settings::StrategyMode;
+    // A reading longer than one chunk: the beam window picks up the last
+    // chunk_len chars from the end, and the overflow ahead of it converts
+    // top-1 into the prefix — so beam-width alternatives survive no
+    // matter how long the reading grows.
+    let mut engine = InputMethodEngine::new();
+    engine.config.composing_chunk_len = 2;
+    engine.config.strategy = StrategyMode::Main;
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: "アイ".to_string(),
+            lctx: String::new(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec!["合い".to_string()],
+    );
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: "ウエ".to_string(),
+            lctx: "合い".to_string(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec!["上".to_string(), "植え".to_string()],
+    );
+    for ch in ['a', 'i', 'u', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
+    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
+    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    assert_eq!(shown_texts(&engine), vec!["合い上", "合い植え"]);
+}
+
+#[test]
+fn test_system_view_keeps_surfaces_shared_with_user_dict() {
+    // Each dictionary view dedups within its own dictionary: a surface
+    // present in both stays visible in the 📚 view instead of being
+    // hidden by the 👤 copy.
+    use std::io::Write;
+    let mut engine = InputMethodEngine::new();
+    // Deterministic model result (a cache hit stands in for the model).
+    engine.conversion_cache.insert(
+        ConversionCacheKey {
+            katakana: "アイ".to_string(),
+            lctx: String::new(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        vec!["合い".to_string()],
+    );
+    let mut user = tempfile::NamedTempFile::new().unwrap();
+    let user_json = r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#;
+    user.write_all(user_json.as_bytes()).unwrap();
+    user.flush().unwrap();
+    engine.dicts.user = Some(Dictionary::build_from_json(user.path()).unwrap());
+    let mut system = tempfile::NamedTempFile::new().unwrap();
+    let system_json = r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0},{"surface":"愛","score":2.0}]}]"#;
+    system.write_all(system_json.as_bytes()).unwrap();
+    system.flush().unwrap();
+    engine.dicts.system = Some(Dictionary::build_from_json(system.path()).unwrap());
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
+    cycle_expecting(&mut engine, true, CandidateSource::UserDictionary);
+    assert_eq!(shown_texts(&engine), vec!["藍"]);
+    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    cycle_expecting(&mut engine, true, CandidateSource::Dictionary);
+    let texts = shown_texts(&engine);
+    assert!(texts.contains(&"藍".to_string()), "texts were: {texts:?}");
+    assert!(texts.contains(&"愛".to_string()), "texts were: {texts:?}");
 }
