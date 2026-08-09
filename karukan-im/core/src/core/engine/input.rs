@@ -35,7 +35,8 @@ impl InputMethodEngine {
         // stays alive. `chunked_auto_suggest` splits long input into
         // bounded-length chunks so per-keystroke latency stays flat; for input
         // within one chunk this is identical to a whole-buffer call.
-        let convert = !full_reading.is_empty()
+        let convert = !self.suppress_suggest
+            && !full_reading.is_empty()
             && (self.mode.current() != InputMode::Alphabet
                 || karukan_engine::contains_kana(&full_reading));
         let candidates = if convert {

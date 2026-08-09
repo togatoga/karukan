@@ -60,6 +60,17 @@ fn press_ctrl(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(keysym, KeyModifiers::new().with_control(true), true)
 }
 
+fn press_alt(keysym: Keysym) -> KeyEvent {
+    KeyEvent::new(
+        keysym,
+        KeyModifiers {
+            alt_key: true,
+            ..KeyModifiers::new()
+        },
+        true,
+    )
+}
+
 fn press_ctrl_alt(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(
         keysym,

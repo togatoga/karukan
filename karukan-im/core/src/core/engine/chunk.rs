@@ -36,7 +36,7 @@ use super::*;
 /// `ジョン` / `・` / `スミス` with the `・` passed through verbatim. A katakana
 /// word like `スーパーマーケット` has no `・` and is entirely Japanese (the `ー`
 /// stays Japanese), so it remains one chunk.
-fn is_japanese(c: char) -> bool {
+pub(super) fn is_japanese(c: char) -> bool {
     // 中黒 (・): a katakana-block separator, treated as a non-Japanese symbol.
     if c == '\u{30FB}' {
         return false;
@@ -53,7 +53,7 @@ fn is_japanese(c: char) -> bool {
 /// [`is_japanese`]). So a maximal Japanese run and a maximal non-Japanese run
 /// each become their own chunk(s), and a run longer than `max` is hard-split
 /// into `max`-char pieces.
-fn group_chunks(chars: &[char], max: usize) -> Vec<&[char]> {
+pub(super) fn group_chunks(chars: &[char], max: usize) -> Vec<&[char]> {
     let mut out = Vec::new();
     let mut start = 0;
     while start < chars.len() {
@@ -142,7 +142,7 @@ impl InputMethodEngine {
     }
 
     /// Configured maximum chunk length in chars, clamped to at least 1.
-    fn chunk_len(&self) -> usize {
+    pub(super) fn chunk_len(&self) -> usize {
         self.config.composing_chunk_len.max(1)
     }
 
@@ -151,7 +151,7 @@ impl InputMethodEngine {
     /// truncated to the API context budget. Defined once so the context the
     /// model is given at conversion time (`convert_new_chunk`) stays identical
     /// to the one displayed in the aux text (`chunk_lctx`).
-    fn lctx_for(&self, base: &str, preceding_converted: &str) -> String {
+    pub(super) fn lctx_for(&self, base: &str, preceding_converted: &str) -> String {
         self.truncate_context(&format!("{base}{preceding_converted}"))
     }
 

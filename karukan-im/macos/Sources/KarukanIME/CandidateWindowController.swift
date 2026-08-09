@@ -89,7 +89,14 @@ class CandidateWindowController {
 
     private func render(cursorRect: NSRect?) {
         clearRows()
-        guard let state = pageState, !state.candidates.isEmpty else {
+        guard let state = pageState else {
+            hide()
+            return
+        }
+        // An empty list still renders while the aux footer has text: a
+        // source-filtered view narrowed to an empty source must show its
+        // 「候補なし」 footer, not a silently vanishing panel.
+        if state.candidates.isEmpty && (auxText ?? "").isEmpty {
             hide()
             return
         }
