@@ -216,6 +216,13 @@ impl InputMethodEngine {
             .filter(|c| c.total_pages() > 1)
             .map(|c| format!(" ({}/{})", c.current_page() + 1, c.total_pages()))
             .unwrap_or_default();
+        // An empty (source-filtered) window states it outright — the
+        // candidate list disappearing alone would be ambiguous.
+        let empty_note = if candidates.is_some_and(|c| c.is_empty()) {
+            " 候補なし"
+        } else {
+            ""
+        };
         let selected = candidates.and_then(|c| c.selected());
         let source_label = selected
             .and_then(Candidate::source_label)
@@ -227,9 +234,28 @@ impl InputMethodEngine {
             .filter(|c| c.is_deletable())
             .map(|_| format!(" ({})", LEARNING_DELETE_HINT))
             .unwrap_or_default();
+        // Active Ctrl+R source filter, shown in the header so the user
+        // knows the window is narrowed (e.g. [変換:📝]).
+        let filter = match &self.state {
+            InputState::Conversion { filter, .. } => *filter,
+            _ => None,
+        };
+        let header = match filter.map(|s| s.emoji()) {
+            Some(emoji) => format!("[変換:{}]", emoji),
+            None => "[変換]".to_string(),
+        };
         format!(
-            "[変換]{} {}{} | {} {} | {}{}{}",
-            page_info, reading, ctx, timing, tokens, model, source_label, delete_hint
+            "{}{} {}{}{} | {} {} | {}{}{}",
+            header,
+            page_info,
+            reading,
+            empty_note,
+            ctx,
+            timing,
+            tokens,
+            model,
+            source_label,
+            delete_hint
         )
     }
 

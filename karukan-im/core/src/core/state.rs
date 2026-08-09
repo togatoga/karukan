@@ -2,7 +2,7 @@
 //!
 //! Defines the states of the IME and transitions between them.
 
-use super::candidate::CandidateList;
+use super::candidate::{CandidateList, CandidateSource};
 use super::preedit::Preedit;
 
 /// The current state of the IME
@@ -22,10 +22,12 @@ pub enum InputState {
     Conversion {
         /// The preedit string showing conversion result
         preedit: Preedit,
-        /// List of conversion candidates
+        /// List of conversion candidates (possibly source-filtered)
         candidates: CandidateList,
         /// The (settled) reading the conversion was built from
         reading: String,
+        /// Active Ctrl+R source filter; `None` shows the full list
+        filter: Option<CandidateSource>,
     },
 }
 

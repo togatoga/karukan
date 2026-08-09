@@ -435,9 +435,17 @@ impl InputMethodEngine {
             self.metrics.adaptive_use_light_model = false;
         }
 
+        // trace, not debug: this logs what the user types (keysyms), so it
+        // must stay out of ordinary debug logging.
         trace!(
-            "Processing key: {:?} in state: {:?}",
-            key.keysym, self.state
+            "process_key: keysym=0x{:04x} modifiers={:?} state={}",
+            key.keysym.0,
+            key.modifiers,
+            match &self.state {
+                InputState::Empty => "Empty",
+                InputState::Composing { .. } => "Composing",
+                InputState::Conversion { .. } => "Conversion",
+            }
         );
 
         let start = std::time::Instant::now();

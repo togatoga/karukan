@@ -1,5 +1,7 @@
 //! Tests for the IME engine
 
+use karukan_engine::{LearningCache, LearningConfig};
+
 use super::*;
 use crate::core::keycode::KeyModifiers;
 
@@ -18,8 +20,21 @@ mod passthrough;
 mod pending_romaji;
 mod predictive;
 mod rewriter;
+mod source_filter;
 mod strategy;
 mod surrounding;
+
+/// Engine seeded with a learning entry `reading → surface`, no kanji model.
+/// Bypasses `init.rs` (which gates learning on settings + file I/O) and
+/// injects a populated `LearningCache` directly.
+fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
+    let mut engine = InputMethodEngine::new();
+    engine.converters.kanji = None;
+    let mut cache = LearningCache::new(LearningConfig::default());
+    cache.record(reading, surface);
+    engine.learning = Some(cache);
+    engine
+}
 
 fn press(ch: char) -> KeyEvent {
     KeyEvent::press(Keysym(ch as u32))

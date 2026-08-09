@@ -20,6 +20,19 @@ const MAX_PREDICTIVE_SUGGESTIONS: usize = 3;
 /// single key would flood the list from a large dictionary
 const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
 
+/// Ctrl+R/T rotate through the source views in the mixed list's priority
+/// order — the full list is not a stop (it is what Space already shows;
+/// Esc → Space returns to it). Fallback has no slot of its own — the
+/// plain kana ride at the tail of the rewriter view, which sits last so
+/// Ctrl+T reaches it in one press from the full list.
+const FILTER_CYCLE: [CandidateSource; 5] = [
+    CandidateSource::Learning,
+    CandidateSource::UserDictionary,
+    CandidateSource::Model,
+    CandidateSource::Dictionary,
+    CandidateSource::Rewriter,
+];
+
 /// How the unresolved romaji tail constrains the predictive lookup.
 enum TailConstraint {
     /// No tail: prediction is unconstrained
@@ -317,6 +330,8 @@ impl InputMethodEngine {
             preedit: preedit.clone(),
             candidates: candidates.clone(),
             reading: reading.to_string(),
+            // A fresh conversion always starts unfiltered
+            filter: None,
         };
 
         EngineResult::consumed()
@@ -343,6 +358,7 @@ impl InputMethodEngine {
         pending: &str,
         limit: usize,
         predictive_limit: usize,
+        min_prefix_chars: usize,
     ) -> Vec<AnnotatedCandidate> {
         let dicts = [
             (self.dicts.user.as_ref(), CandidateSource::UserDictionary),
@@ -376,7 +392,7 @@ impl InputMethodEngine {
         // rides on the candidate so selecting it commits and records under
         // the right key.
         let constraint = self.tail_constraint(pending);
-        if reading.chars().count() >= MIN_PREDICTIVE_PREFIX_CHARS
+        if reading.chars().count() >= min_prefix_chars
             && !matches!(constraint, TailConstraint::Dead)
         {
             let mut budget = predictive_limit;
@@ -480,7 +496,13 @@ impl InputMethodEngine {
         }
 
         // 2. Dictionary candidates (user dict first, then system dict)
-        let dict_results = self.search_dictionaries(base, pending, usize::MAX, usize::MAX);
+        let dict_results = self.search_dictionaries(
+            base,
+            pending,
+            usize::MAX,
+            usize::MAX,
+            MIN_PREDICTIVE_PREFIX_CHARS,
+        );
         // Insert user dictionary entries at the top (after learning)
         for ac in &dict_results {
             if ac.source == CandidateSource::UserDictionary {
@@ -589,6 +611,17 @@ impl InputMethodEngine {
     ///
     /// Returns candidates from the learning cache suitable for auto-suggest display.
     pub(super) fn lookup_learning_candidates(&self, reading: &str) -> Vec<Candidate> {
+        self.lookup_learning(reading, MAX_LEARNING_CANDIDATES)
+    }
+
+    /// Full learning history for `reading` (exact + prefix, uncapped). The
+    /// narrowed learning view is a history browser, unlike the mixed list,
+    /// which keeps at most [`MAX_LEARNING_CANDIDATES`] entries.
+    fn lookup_learning_history(&self, reading: &str) -> Vec<Candidate> {
+        self.lookup_learning(reading, usize::MAX)
+    }
+
+    fn lookup_learning(&self, reading: &str, max: usize) -> Vec<Candidate> {
         let Some(cache) = &self.learning else {
             return vec![];
         };
@@ -597,7 +630,7 @@ impl InputMethodEngine {
 
         // Exact match
         for (surface, _score) in cache.lookup(reading) {
-            if candidates.len() >= MAX_LEARNING_CANDIDATES {
+            if candidates.len() >= max {
                 break;
             }
             if seen.insert(surface.clone()) {
@@ -612,7 +645,7 @@ impl InputMethodEngine {
 
         // Prefix match (predictive)
         for (full_reading, surface, _score) in cache.prefix_lookup(reading) {
-            if candidates.len() >= MAX_LEARNING_CANDIDATES {
+            if candidates.len() >= max {
                 break;
             }
             if full_reading == reading {
@@ -641,6 +674,7 @@ impl InputMethodEngine {
             &pending,
             CandidateList::DEFAULT_PAGE_SIZE,
             MAX_PREDICTIVE_SUGGESTIONS,
+            MIN_PREDICTIVE_PREFIX_CHARS,
         )
         .into_iter()
         .map(|ac| Candidate {
@@ -691,6 +725,10 @@ impl InputMethodEngine {
         match key.keysym {
             Keysym::RETURN => self.commit_conversion(),
             Keysym::ESCAPE => self.cancel_conversion(),
+            // Tab stays next-candidate and Shift+Tab (ISO_Left_Tab on
+            // X11) prev-candidate for mozc-compatible muscle memory.
+            Keysym::ISO_LEFT_TAB => self.prev_candidate(),
+            Keysym::TAB if key.modifiers.shift_key => self.prev_candidate(),
             Keysym::SPACE | Keysym::DOWN | Keysym::TAB => self.next_candidate(),
             Keysym::UP => self.prev_candidate(),
             Keysym::PAGE_DOWN => self.next_candidate_page(),
@@ -716,6 +754,19 @@ impl InputMethodEngine {
                     match key.keysym {
                         Keysym::KEY_N | Keysym::KEY_N_UPPER => return self.next_candidate(),
                         Keysym::KEY_P | Keysym::KEY_P_UPPER => return self.prev_candidate(),
+                        // Ctrl+R / Ctrl+T: cycle the source filter
+                        // forward / backward. Dedicated keys (both keysym
+                        // cases accepted) — direction never depends on the
+                        // Shift bit, which some environments fold into an
+                        // uppercase keysym. Safe even in browsers: unbound
+                        // keys below are consumed too, so the chords never
+                        // reach the app mid-conversion.
+                        Keysym::KEY_R | Keysym::KEY_R_UPPER => {
+                            return self.cycle_candidate_filter(true);
+                        }
+                        Keysym::KEY_T | Keysym::KEY_T_UPPER => {
+                            return self.cycle_candidate_filter(false);
+                        }
                         _ => {}
                     }
                 }
@@ -733,7 +784,15 @@ impl InputMethodEngine {
                     return self.commit_conversion_and_continue(ch);
                 }
 
-                EngineResult::not_consumed()
+                // Everything else — stray chords, function keys, Home/End —
+                // is consumed as a no-op, like mozc: leaking it would let
+                // the application act on it (e.g. a browser reloading the
+                // page) while the conversion is on screen. Alt chords stay
+                // pass-through so desktop shortcuts keep working.
+                if key.modifiers.alt_key {
+                    return EngineResult::not_consumed();
+                }
+                EngineResult::consumed()
             }
         }
     }
@@ -741,8 +800,15 @@ impl InputMethodEngine {
     /// Get selected text and reading from conversion state, or None if not in conversion
     pub(super) fn selected_conversion_info(&self) -> Option<(String, Option<String>)> {
         match &self.state {
-            InputState::Conversion { candidates, .. } => {
-                let text = candidates.selected_text().unwrap_or("").to_string();
+            InputState::Conversion {
+                candidates,
+                reading,
+                ..
+            } => {
+                // An empty (source-filtered) view displays the raw reading
+                // as its preedit, so that is what committing produces —
+                // never an empty commit that would eat the composition.
+                let text = candidates.selected_text().unwrap_or(reading).to_string();
                 let reading = candidates.selected().and_then(|c| c.reading.clone());
                 Some((text, reading))
             }
@@ -856,6 +922,15 @@ impl InputMethodEngine {
         }
         debug!("deleted learning entry: {} -> {}", reading, surface);
 
+        // Deleting from a narrowed window (Ctrl+R) keeps the filter, so
+        // consecutive deletes stay in the learning view; when the source
+        // has no candidates left the rebuild falls back to the full list.
+        let prev_filter = match &self.state {
+            InputState::Conversion { filter, .. } => *filter,
+            _ => None,
+        };
+        let prev_cursor = self.state.candidates().map(|c| c.cursor()).unwrap_or(0);
+
         let candidates = self.build_conversion_candidates(
             &reading,
             &reading,
@@ -867,7 +942,158 @@ impl InputMethodEngine {
             return self.cancel_conversion();
         }
         let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
-        self.enter_conversion_state(&reading, candidate_list)
+        let mut result = self.enter_conversion_state(&reading, candidate_list);
+
+        if let Some(source) = prev_filter {
+            // The filter survives the rebuild even when its source has no
+            // candidates left — the view then shows 「候補なし」.
+            result = self.apply_candidate_filter(source);
+        }
+        // Keep the cursor where the deleted row was (clamped to the new
+        // length), so consecutive deletes chew through the list instead of
+        // jumping back to the top each time.
+        if self.state.candidates().is_some_and(|c| !c.is_empty()) {
+            return self.navigate_candidate(|c| {
+                c.set_cursor(prev_cursor);
+                true
+            });
+        }
+        result
+    }
+
+    /// Ctrl+R / Ctrl+T: narrow the conversion window to the next /
+    /// previous source view in [`FILTER_CYCLE`]. From the full list the
+    /// rotation is entered at its head (forward) or tail (backward); it
+    /// never rotates back to the full list. Exactly one step per press —
+    /// an empty source is shown as an empty window with 「候補なし」, never
+    /// skipped, so the position stays predictable. The aux header shows
+    /// the active filter ([変換:📝]).
+    fn cycle_candidate_filter(&mut self, forward: bool) -> EngineResult {
+        let current = match &self.state {
+            InputState::Conversion { filter, .. } => *filter,
+            _ => return EngineResult::not_consumed(),
+        };
+        let len = FILTER_CYCLE.len();
+        let pos = match current {
+            None if forward => 0,
+            None => len - 1,
+            Some(source) => {
+                let pos = FILTER_CYCLE.iter().position(|f| *f == source).unwrap_or(0);
+                (if forward { pos + 1 } else { pos + len - 1 }) % len
+            }
+        };
+        self.apply_candidate_filter(FILTER_CYCLE[pos])
+    }
+
+    /// Ctrl+R while composing: enter the Conversion state and immediately
+    /// narrow it one step, so the filtered view opens without Space.
+    pub(super) fn start_filtered_conversion(&mut self, forward: bool) -> EngineResult {
+        let result = self.start_conversion(false);
+        if !matches!(self.state, InputState::Conversion { .. }) {
+            return result;
+        }
+        self.cycle_candidate_filter(forward)
+    }
+
+    /// Set `filter` and rebuild the window from it. With no candidates the
+    /// preedit falls back to the reading and the aux says 「候補なし」.
+    fn apply_candidate_filter(&mut self, next: CandidateSource) -> EngineResult {
+        let reading = match &self.state {
+            InputState::Conversion { reading, .. } => reading.clone(),
+            _ => return EngineResult::not_consumed(),
+        };
+        let list = CandidateList::new(self.source_view(next, &reading));
+        let selected = list.selected_text().unwrap_or(&reading).to_string();
+        let preedit = Preedit::with_text_highlighted(&selected);
+        if let InputState::Conversion {
+            filter,
+            candidates,
+            preedit: state_preedit,
+            ..
+        } = &mut self.state
+        {
+            *filter = Some(next);
+            *candidates = list.clone();
+            *state_preedit = preedit.clone();
+        }
+        debug!("candidate filter → {:?}", next);
+        // Like candidate navigation, the aux shows the selected candidate's
+        // own reading (predictive entries carry a longer one), falling back
+        // to the base reading for an empty view.
+        let aux_reading = list
+            .selected()
+            .and_then(|c| c.reading.clone())
+            .unwrap_or_else(|| reading.clone());
+        EngineResult::consumed()
+            .with_action(EngineAction::UpdatePreedit(preedit))
+            .with_action(EngineAction::ShowCandidates(list.clone()))
+            .with_action(EngineAction::UpdateAuxText(
+                self.format_aux_conversion_with_page(&aux_reading, Some(&list)),
+            ))
+    }
+
+    /// Candidates shown when the window is narrowed to `source`. Every view
+    /// queries its own source directly instead of filtering the mixed list:
+    /// the list dedups shared texts into the highest-priority source, which
+    /// would hide them from every lower source's view (a learned word
+    /// disappearing from the user-dictionary view, the model's copy of a
+    /// dictionary word missing from the AI view, and so on).
+    fn source_view(&mut self, source: CandidateSource, reading: &str) -> Vec<Candidate> {
+        match source {
+            CandidateSource::Learning => self.lookup_learning_history(reading),
+            // A dedicated, paged dictionary browser wants everything:
+            // predictive matches kick in from the first char here, unlike
+            // the mixed list's MIN_PREDICTIVE_PREFIX_CHARS flood guard.
+            source @ (CandidateSource::UserDictionary | CandidateSource::Dictionary) => self
+                .search_dictionaries(reading, "", usize::MAX, usize::MAX, 1)
+                .into_iter()
+                .filter(|ac| ac.source == source)
+                .map(|ac| Candidate {
+                    text: ac.text,
+                    reading: ac.reading.or_else(|| Some(reading.to_string())),
+                    source: Some(source),
+                    description: ac.description,
+                })
+                .collect(),
+            // Served from the conversion cache when the reading was already
+            // converted with the same context and strategy.
+            CandidateSource::Model => {
+                let ctx = self.truncate_context_for_api();
+                self.run_kana_kanji_conversion(reading, &ctx, self.config.num_candidates)
+                    .into_iter()
+                    .map(|text| Candidate {
+                        text,
+                        reading: Some(reading.to_string()),
+                        source: Some(CandidateSource::Model),
+                        description: None,
+                    })
+                    .collect()
+            }
+            // Rewriter variants regenerate from the reading; the plain kana
+            // pair rides at the tail (lowest priority).
+            CandidateSource::Rewriter => {
+                let mut view = self.lookup_rewriter_variants(reading);
+                let mut kana = vec![reading.to_string()];
+                let katakana = karukan_engine::hiragana_to_katakana(reading);
+                if katakana != kana[0] {
+                    kana.push(katakana);
+                }
+                for text in kana {
+                    if view.iter().any(|c| c.text == text) {
+                        continue;
+                    }
+                    view.push(Candidate {
+                        description: width_annotation(&text).map(str::to_string),
+                        text,
+                        reading: Some(reading.to_string()),
+                        source: Some(CandidateSource::Fallback),
+                    });
+                }
+                view
+            }
+            // Fallback has no slot in the cycle; nothing to show.
+            CandidateSource::Fallback => Vec::new(),
+        }
     }
 
     /// Cancel conversion and return to hiragana
@@ -900,6 +1126,11 @@ impl InputMethodEngine {
             let Some(candidates) = self.state.candidates_mut() else {
                 return EngineResult::not_consumed();
             };
+            // Nothing to navigate in an empty (source-filtered) view; keep
+            // the reading preedit instead of blanking it.
+            if candidates.is_empty() {
+                return EngineResult::consumed();
+            }
             op(candidates);
             let text = candidates.selected_text().unwrap_or("").to_string();
             (text, candidates.clone())

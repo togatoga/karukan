@@ -69,3 +69,29 @@ fn test_alphabet_mode_space_inserts_literal_space() {
     engine.process_key(&press('k'));
     assert_eq!(engine.preedit().unwrap().text(), "New york");
 }
+
+#[test]
+fn test_stray_keys_are_consumed_during_conversion() {
+    // Unbound chords and special keys must be consumed as no-ops while the
+    // conversion window is shown — leaking them would let the application
+    // act on them (e.g. Ctrl+R reloading a browser page) mid-conversion.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    let cursor = engine.candidates().unwrap().cursor();
+
+    for key in [
+        press_ctrl(Keysym(0x0065)), // Ctrl+e (unbound)
+        press_ctrl(Keysym(0x0077)), // Ctrl+w (unbound; closes a browser tab)
+        press_key(Keysym::HOME),
+        press_key(Keysym::END),
+        press_key(Keysym(0xffc2)), // F5
+    ] {
+        let result = engine.process_key(&key);
+        assert!(result.consumed, "key must not leak to the application");
+        assert!(matches!(engine.state(), InputState::Conversion { .. }));
+        assert_eq!(engine.candidates().unwrap().cursor(), cursor);
+    }
+}

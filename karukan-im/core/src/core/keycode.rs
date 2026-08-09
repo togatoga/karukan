@@ -10,6 +10,8 @@ impl Keysym {
     // Common key symbols (XKB keysym values)
     pub const BACKSPACE: Keysym = Keysym(0xff08);
     pub const TAB: Keysym = Keysym(0xff09);
+    /// Shift+Tab as X11 delivers it (a distinct keysym, not Tab+Shift)
+    pub const ISO_LEFT_TAB: Keysym = Keysym(0xfe20);
     pub const RETURN: Keysym = Keysym(0xff0d);
     pub const ESCAPE: Keysym = Keysym(0xff1b);
     pub const DELETE: Keysym = Keysym(0xffff);
@@ -76,6 +78,10 @@ impl Keysym {
     pub const KEY_L_UPPER: Keysym = Keysym(0x004c); // uppercase 'L'
     pub const KEY_P: Keysym = Keysym(0x0070); // lowercase 'p'
     pub const KEY_P_UPPER: Keysym = Keysym(0x0050); // uppercase 'P'
+    pub const KEY_R: Keysym = Keysym(0x0072); // lowercase 'r'
+    pub const KEY_R_UPPER: Keysym = Keysym(0x0052); // uppercase 'R'
+    pub const KEY_T: Keysym = Keysym(0x0074); // lowercase 't'
+    pub const KEY_T_UPPER: Keysym = Keysym(0x0054); // uppercase 'T'
 
     /// Check if this keysym represents a printable character
     pub fn is_printable(&self) -> bool {
