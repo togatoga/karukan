@@ -858,7 +858,9 @@ impl LlamaCppModel {
 
     /// Get top-k tokens from logits with log probabilities
     fn get_top_k_tokens(&self, logits: &[f32], k: usize) -> (Vec<LlamaToken>, Vec<f32>) {
-        // Convert logits to log probabilities using log-softmax
+        // log-softmax normalizer. Subtracting a constant never changes the
+        // ranking, so top-k selection runs on the raw logits and only the k
+        // winners are normalized.
         let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let log_sum_exp: f32 = logits
             .iter()
@@ -867,19 +869,23 @@ impl LlamaCppModel {
             .ln()
             + max_logit;
 
-        let mut token_scores: Vec<(usize, f32)> = logits
-            .iter()
-            .enumerate()
-            .map(|(i, &x)| (i, x - log_sum_exp))
-            .collect();
-        token_scores.sort_by(|a, b| b.1.total_cmp(&a.1));
-        token_scores.truncate(k);
+        // Single-pass top-k (k is the beam width, a handful): allocating and
+        // fully sorting a vocab-sized vector here ran per beam per step and
+        // dominated the beam-search loop. Ties keep the lower token id first,
+        // matching the stable full sort this replaces.
+        let k = k.min(logits.len());
+        let mut top: Vec<(usize, f32)> = Vec::with_capacity(k + 1);
+        for (i, &x) in logits.iter().enumerate() {
+            if top.len() == k && x <= top[k - 1].1 {
+                continue;
+            }
+            let pos = top.partition_point(|&(_, s)| s >= x);
+            top.insert(pos, (i, x));
+            top.truncate(k);
+        }
 
-        let tokens: Vec<LlamaToken> = token_scores
-            .iter()
-            .map(|(i, _)| LlamaToken(*i as i32))
-            .collect();
-        let log_probs: Vec<f32> = token_scores.iter().map(|(_, lp)| *lp).collect();
+        let tokens: Vec<LlamaToken> = top.iter().map(|&(i, _)| LlamaToken(i as i32)).collect();
+        let log_probs: Vec<f32> = top.iter().map(|&(_, x)| x - log_sum_exp).collect();
 
         (tokens, log_probs)
     }
