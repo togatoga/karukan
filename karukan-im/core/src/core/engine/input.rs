@@ -123,6 +123,22 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         }
 
+        // Shift+Space (opt-in via `shift_space_halfwidth`): commit a literal
+        // half-width ASCII space, regardless of mode. This overrides the
+        // bare-Space full-width behavior below so users have a dedicated
+        // gesture for a plain half-width space. Space has no shifted keysym
+        // variant, so the `shift_active` flag arrives reliably from both
+        // frontends. When the option is off, fall through to the bare-Space
+        // handling so the existing behavior is unchanged.
+        if self.config.shift_space_halfwidth
+            && shift_active
+            && key.keysym == Keysym::SPACE
+            && !key.modifiers.control_key
+            && !key.modifiers.alt_key
+        {
+            return EngineResult::consumed().with_action(EngineAction::Commit(" ".to_string()));
+        }
+
         // Bare Space from Empty state:
         //
         // * Hiragana mode → commit a full-width `　` directly, matching
@@ -254,6 +270,21 @@ impl InputMethodEngine {
                 }
                 _ => {}
             }
+        }
+
+        // Shift+Space (opt-in via `shift_space_halfwidth`): commit the current
+        // preedit (like Enter) and append a half-width space, so the gesture
+        // yields a literal ASCII space instead of triggering conversion. Must
+        // precede the bare-Space conversion trigger in the match below. When
+        // the option is off, fall through so Shift+Space keeps triggering
+        // conversion like a bare Space.
+        if self.config.shift_space_halfwidth
+            && shift_active
+            && key.keysym == Keysym::SPACE
+            && !key.modifiers.control_key
+            && !key.modifiers.alt_key
+        {
+            return self.commit_composing_with_halfwidth_space();
         }
 
         match key.keysym {
@@ -421,6 +452,26 @@ impl InputMethodEngine {
             .with_action(EngineAction::Commit(text))
             .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::HideAuxText)
+    }
+
+    /// Commit the current composing text (identical to Enter) and append a
+    /// half-width ASCII space. Backs the Shift+Space gesture: the user always
+    /// ends up with a literal space after whatever was being composed. When
+    /// the buffer is empty, emits a bare space so the gesture still works.
+    pub(super) fn commit_composing_with_halfwidth_space(&mut self) -> EngineResult {
+        let mut result = self.commit_composing();
+        let appended = result.actions.iter_mut().any(|action| match action {
+            EngineAction::Commit(text) => {
+                text.push(' ');
+                true
+            }
+            _ => false,
+        });
+        if appended {
+            result
+        } else {
+            result.with_action(EngineAction::Commit(" ".to_string()))
+        }
     }
 
     /// Cancel the current input

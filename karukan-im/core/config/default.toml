@@ -38,3 +38,10 @@ enabled = true
 max_entries = 10000
 # 学習する変換結果の最大文字数
 max_surface_chars = 50
+
+[keys]
+# Shift+Space で半角スペースを入力する。
+# true にすると、モードを問わず Shift+Space が半角スペースをコミットする
+# （Composing 中は現在のプリエディットを確定してから半角スペースを付ける）。
+# false（既定）では素の Space と同じ挙動のまま。
+shift_space_halfwidth = false
