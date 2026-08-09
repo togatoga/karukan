@@ -219,6 +219,28 @@ mod tests {
     }
 
     #[test]
+    fn test_unknown_keys_are_ignored() {
+        // A config written for an older version (e.g. the removed
+        // short_input_threshold key) must still load: unknown keys are
+        // ignored, the renamed setting falls back to its default, and
+        // the other overrides keep applying.
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[conversion]
+short_input_threshold = 10
+beam_width = 5
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(settings.conversion.beam_window_len, 20);
+        assert_eq!(settings.conversion.beam_width, 5);
+    }
+
+    #[test]
     fn test_learning_partial_config() {
         // Overriding one learning key keeps the defaults for the others.
         let mut file = NamedTempFile::new().unwrap();
