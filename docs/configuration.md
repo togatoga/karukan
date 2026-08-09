@@ -13,7 +13,7 @@ model = "jinen-v2-small-q5"     # メインモデル（モデルID or GGUFパス
 light_model = "jinen-v2-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用）
 use_context = true              # Surrounding Textを変換に使用する
 max_context_length = 10         # コンテキストの最大文字数
-short_input_threshold = 10      # ビームサーチを使うトークン数の上限
+beam_window_len = 20            # ビームサーチを当てる末尾ウィンドウの文字数
 beam_width = 3                  # ビーム幅
 max_latency_ms = 100            # メインモデルの許容レイテンシ（ms）。超過時は軽量モデルに自動切替（0 = 無効）
 dict_path = "/path/to/dict.bin" # システム辞書パス（省略時はデータディレクトリの dict.bin。[Dictionary](dictionary.md) 参照）

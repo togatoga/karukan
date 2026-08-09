@@ -66,15 +66,22 @@ fn determine_adaptive_strategy(
     } else {
         // Explicit conversion (Space key)
         if adaptive_use_light_model {
-            // Main model was too slow — use light model only
-            ConversionStrategy::LightModelOnly
-        } else if reading_chars <= config.short_input_threshold {
-            // Short input + main model is fast enough: parallel beam search
+            // Main model was too slow — beam on the light model alone
+            // (the light half of ParallelBeam), keeping the candidate
+            // count through the downgrade
+            ConversionStrategy::LightModelBeam {
+                beam_width: num_candidates.min(config.beam_width),
+            }
+        } else if reading_chars <= config.beam_window_len {
+            // Fits the beam window: parallel beam search. Explicit
+            // conversion pre-windows its reading to this length, so this
+            // is the normal path.
             ConversionStrategy::ParallelBeam {
                 beam_width: num_candidates.min(config.beam_width),
             }
         } else {
-            // Long input: proactively use light model
+            // Backstop for a beam request wider than the window (no
+            // caller does this today): light model, greedy.
             ConversionStrategy::LightModelOnly
         }
     }
@@ -84,9 +91,9 @@ impl InputMethodEngine {
     /// Determine the conversion strategy based on the reading length (in
     /// chars), adaptive latency flag, and configuration.
     ///
-    /// Char-based on purpose: the beam gate (`short_input_threshold`) then
-    /// shares its unit with the AI view's tail window, which caps itself
-    /// at the same char count so its beam request always passes the gate.
+    /// Char-based on purpose: `beam_window_len` is the same unit the
+    /// tail-window conversion caps its window at, so a windowed beam
+    /// request always qualifies for the beam here.
     pub(super) fn determine_strategy(
         &self,
         reading: &str,
@@ -121,7 +128,9 @@ impl InputMethodEngine {
                 self.metrics.adaptive_use_light_model =
                     self.metrics.conversion_ms > self.config.max_latency_ms;
             }
-            ConversionStrategy::LightModelOnly | ConversionStrategy::MainModelBeam { .. } => {
+            ConversionStrategy::LightModelOnly
+            | ConversionStrategy::LightModelBeam { .. }
+            | ConversionStrategy::MainModelBeam { .. } => {
                 // Don't update — light model latency doesn't reflect main model speed
             }
         }

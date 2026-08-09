@@ -59,11 +59,11 @@ pub struct ConversionSettings {
     pub model: Option<String>,
     /// Beam search model variant id (used on Space conversion, default model if unset)
     pub light_model: Option<String>,
-    /// Char count threshold for beam search (at or below → beam, above → greedy).
-    /// Shares its unit with the AI view's tail window, which caps itself at
-    /// this many chars so its beam request always passes the gate.
-    pub short_input_threshold: usize,
-    /// Beam width for short input
+    /// Length in chars of the tail window the beam runs over: explicit
+    /// conversion beams the last `beam_window_len` chars of the final
+    /// Japanese run and converts everything before it top-1.
+    pub beam_window_len: usize,
+    /// Beam width for the windowed beam search
     pub beam_width: usize,
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model

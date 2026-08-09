@@ -4,16 +4,16 @@ use super::*;
 // --- ConversionStrategy tests ---
 
 /// Helper to create a config with specific thresholds
-fn strategy_config(short_input_threshold: usize, beam_width: usize) -> EngineConfig {
+fn strategy_config(beam_window_len: usize, beam_width: usize) -> EngineConfig {
     EngineConfig {
-        short_input_threshold,
+        beam_window_len,
         beam_width,
         num_candidates: 9,
         ..EngineConfig::default()
     }
 }
 
-/// Default test config: short_input_threshold=10, beam_width=3, max_latency_ms=100
+/// Default test config: beam_window_len=10, beam_width=3, max_latency_ms=100
 fn default_strategy_config() -> EngineConfig {
     strategy_config(10, 3)
 }
@@ -73,12 +73,13 @@ fn strategy_auto_suggest_adaptive_true_even_short_input() {
 // --- Explicit conversion (num_candidates > 1) ---
 
 #[test]
-fn strategy_explicit_adaptive_true_returns_light_model() {
+fn strategy_explicit_adaptive_true_returns_light_beam() {
     let config = default_strategy_config();
-    // adaptive=true → LightModelOnly (main model was too slow)
+    // adaptive=true → LightModelBeam: the downgrade drops the slow main
+    // model but keeps the beam-width candidate count
     assert_eq!(
         determine_conversion_strategy(5, 9, true, true, &config),
-        ConversionStrategy::LightModelOnly,
+        ConversionStrategy::LightModelBeam { beam_width: 3 },
     );
 }
 
@@ -144,10 +145,10 @@ fn strategy_beam_width_capped_by_beam_width() {
 #[test]
 fn strategy_adaptive_flag_overrides_short_input_for_explicit() {
     let config = default_strategy_config();
-    // Short reading but adaptive=true → LightModelOnly (not ParallelBeam)
+    // Short reading but adaptive=true → LightModelBeam (not ParallelBeam)
     assert_eq!(
         determine_conversion_strategy(3, 9, true, true, &config),
-        ConversionStrategy::LightModelOnly,
+        ConversionStrategy::LightModelBeam { beam_width: 3 },
     );
 }
 

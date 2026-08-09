@@ -77,11 +77,11 @@ pub struct EngineConfig {
     /// live-conversion latency stays bounded for long input. See
     /// [`ComposingChunk`] and `chunked_auto_suggest`.
     pub composing_chunk_len: usize,
-    /// Char count threshold for beam search (at or below → beam, above → greedy).
-    /// Shares its unit with the AI view's tail window, which caps itself at
-    /// this many chars so its beam request always passes the gate.
-    pub short_input_threshold: usize,
-    /// Beam width for short input
+    /// Length in chars of the tail window the beam runs over: explicit
+    /// conversion beams the last `beam_window_len` chars of the final
+    /// Japanese run and converts everything before it top-1.
+    pub beam_window_len: usize,
+    /// Beam width for the windowed beam search
     pub beam_width: usize,
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model
@@ -105,7 +105,7 @@ impl EngineConfig {
                 0
             },
             composing_chunk_len: settings.conversion.composing_chunk_len,
-            short_input_threshold: settings.conversion.short_input_threshold,
+            beam_window_len: settings.conversion.beam_window_len,
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
@@ -121,7 +121,7 @@ impl Default for EngineConfig {
             display_context_len: 10,
             max_api_context_len: 10,
             composing_chunk_len: 30,
-            short_input_threshold: 20,
+            beam_window_len: 20,
             beam_width: 3,
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
@@ -307,6 +307,10 @@ pub(in crate::core) enum ConversionStrategy {
     ParallelBeam { beam_width: usize },
     /// Long input: light model greedy only (skip slow main model)
     LightModelOnly,
+    /// Latency-downgraded beam: the light half of [`Self::ParallelBeam`]
+    /// alone, so a slow main model costs the beam its quality but not its
+    /// candidate count
+    LightModelBeam { beam_width: usize },
     /// No light model: main model greedy only
     MainModelOnly,
     /// Main model beam search (used in Light strategy mode where light model occupies main slot)

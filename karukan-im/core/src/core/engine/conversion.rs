@@ -190,6 +190,14 @@ impl InputMethodEngine {
                     .convert(&katakana, api_context, 1)
                     .unwrap_or_default()
             }
+            ConversionStrategy::LightModelBeam { beam_width } => {
+                let Some(light_converter) = self.converters.light_kanji.as_ref() else {
+                    return vec![];
+                };
+                light_converter
+                    .convert(&katakana, api_context, *beam_width)
+                    .unwrap_or_default()
+            }
             ConversionStrategy::MainModelOnly => converter
                 .convert(&katakana, api_context, 1)
                 .unwrap_or_default(),
@@ -228,7 +236,9 @@ impl InputMethodEngine {
             ConversionStrategy::ParallelBeam { .. } => {
                 format!("{}+{}", main, light.unwrap_or_default())
             }
-            ConversionStrategy::LightModelOnly => light.unwrap_or(main),
+            ConversionStrategy::LightModelOnly | ConversionStrategy::LightModelBeam { .. } => {
+                light.unwrap_or(main)
+            }
             ConversionStrategy::MainModelOnly | ConversionStrategy::MainModelBeam { .. } => main,
         }
     }
@@ -1206,7 +1216,7 @@ impl InputMethodEngine {
     ///
     /// The `num_candidates` beam runs over a tail window: the final
     /// Japanese run, taken from the end and capped at the beam gate
-    /// (`short_input_threshold` chars — the same char unit the strategy
+    /// (`beam_window_len` chars — the same char unit the strategy
     /// compares against, so the beam request always passes the gate
     /// instead of degrading to the long-input single-candidate path;
     /// `composing_chunk_len` still applies when configured smaller). An
@@ -1234,7 +1244,7 @@ impl InputMethodEngine {
             .iter()
             .rposition(|c| !is_japanese(*c))
             .map_or(0, |i| i + 1);
-        let cap = self.config.short_input_threshold.min(self.chunk_len());
+        let cap = self.config.beam_window_len.min(self.chunk_len());
         let window_start = run_start.max(chars.len().saturating_sub(cap));
 
         let mut prefix = String::new();
