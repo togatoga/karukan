@@ -77,7 +77,9 @@ pub struct EngineConfig {
     /// live-conversion latency stays bounded for long input. See
     /// [`ComposingChunk`] and `chunked_auto_suggest`.
     pub composing_chunk_len: usize,
-    /// Token count threshold for beam search (at or below → beam, above → greedy)
+    /// Char count threshold for beam search (at or below → beam, above → greedy).
+    /// Shares its unit with the AI view's tail window, which caps itself at
+    /// this many chars so its beam request always passes the gate.
     pub short_input_threshold: usize,
     /// Beam width for short input
     pub beam_width: usize,
@@ -119,7 +121,7 @@ impl Default for EngineConfig {
             display_context_len: 10,
             max_api_context_len: 10,
             composing_chunk_len: 30,
-            short_input_threshold: 10,
+            short_input_threshold: 20,
             beam_width: 3,
             max_latency_ms: 100,
             strategy: StrategyMode::default(),

@@ -59,7 +59,9 @@ pub struct ConversionSettings {
     pub model: Option<String>,
     /// Beam search model variant id (used on Space conversion, default model if unset)
     pub light_model: Option<String>,
-    /// Token count threshold for beam search (at or below → beam, above → greedy)
+    /// Char count threshold for beam search (at or below → beam, above → greedy).
+    /// Shares its unit with the AI view's tail window, which caps itself at
+    /// this many chars so its beam request always passes the gate.
     pub short_input_threshold: usize,
     /// Beam width for short input
     pub beam_width: usize,

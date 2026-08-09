@@ -1185,21 +1185,22 @@ impl InputMethodEngine {
     /// Model candidates for the narrowed AI view.
     ///
     /// The `num_candidates` beam runs over a tail window: the final
-    /// Japanese run, taken from the end and capped at one chunk
-    /// (`composing_chunk_len`). A clear boundary — punctuation, digits,
-    /// any non-Japanese chunk — is never crossed. Everything before the
+    /// Japanese run, taken from the end and capped at the beam gate
+    /// (`short_input_threshold` chars — the same char unit the strategy
+    /// compares against, so the window's beam request always passes the
+    /// gate instead of degrading to the long-input single-candidate
+    /// path; `composing_chunk_len` still applies when configured
+    /// smaller). A clear boundary — punctuation, digits, any
+    /// non-Japanese chunk — is never crossed. Everything before the
     /// window converts top-1 on the live-conversion chunk grid, served
     /// from the conversion cache while the user types. So no matter how
     /// long the reading grows, a keystroke pays one bounded beam call
     /// (plus at most one bounded top-1 call for the window's overflow)
-    /// and the view keeps offering beam-width alternatives — the window
-    /// is always short enough that the strategy never degrades to the
-    /// long-input single-candidate path the whole-reading Space call
-    /// takes.
+    /// and the view keeps offering beam-width alternatives.
     ///
-    /// A boundary-free reading within one chunk — the common case — makes
-    /// the window the whole reading: the exact call Space runs, same
-    /// cache key, matching the mixed list's model rows.
+    /// A boundary-free reading within the window cap — the common case —
+    /// makes the window the whole reading: the exact call Space runs,
+    /// same cache key, matching the mixed list's model rows.
     fn model_source_view(&mut self, reading: &str) -> Vec<Candidate> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
@@ -1210,7 +1211,8 @@ impl InputMethodEngine {
             .iter()
             .rposition(|c| !is_japanese(*c))
             .map_or(0, |i| i + 1);
-        let window_start = run_start.max(chars.len().saturating_sub(self.chunk_len()));
+        let cap = self.config.short_input_threshold.min(self.chunk_len());
+        let window_start = run_start.max(chars.len().saturating_sub(cap));
 
         let mut prefix = String::new();
         for chunk in group_chunks(&chars[..window_start], self.chunk_len()) {

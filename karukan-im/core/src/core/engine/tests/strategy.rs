@@ -85,7 +85,7 @@ fn strategy_explicit_adaptive_true_returns_light_model() {
 #[test]
 fn strategy_explicit_short_reading_returns_parallel_beam() {
     let config = default_strategy_config();
-    // adaptive=false, reading_tokens=5 <= 10 → ParallelBeam
+    // adaptive=false, reading_chars=5 <= 10 → ParallelBeam
     assert_eq!(
         determine_conversion_strategy(5, 9, true, false, &config),
         ConversionStrategy::ParallelBeam { beam_width: 3 },
@@ -95,7 +95,7 @@ fn strategy_explicit_short_reading_returns_parallel_beam() {
 #[test]
 fn strategy_explicit_long_reading_returns_light_model() {
     let config = default_strategy_config();
-    // adaptive=false, reading_tokens=15 > 10 → LightModelOnly
+    // adaptive=false, reading_chars=15 > 10 → LightModelOnly
     assert_eq!(
         determine_conversion_strategy(15, 9, true, false, &config),
         ConversionStrategy::LightModelOnly,
@@ -105,12 +105,12 @@ fn strategy_explicit_long_reading_returns_light_model() {
 #[test]
 fn strategy_explicit_reading_boundary_at_threshold() {
     let config = default_strategy_config();
-    // reading_tokens == threshold → ParallelBeam (<=)
+    // reading_chars == threshold → ParallelBeam (<=)
     assert_eq!(
         determine_conversion_strategy(10, 9, true, false, &config),
         ConversionStrategy::ParallelBeam { beam_width: 3 },
     );
-    // reading_tokens == threshold + 1 → LightModelOnly
+    // reading_chars == threshold + 1 → LightModelOnly
     assert_eq!(
         determine_conversion_strategy(11, 9, true, false, &config),
         ConversionStrategy::LightModelOnly,
