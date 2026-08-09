@@ -1,7 +1,6 @@
 //! Tests for the Ctrl+R conversion-window source filter.
 
 use super::*;
-use crate::core::engine::cache::ConversionCacheKey;
 
 /// Conversion whose list mixes sources: learning (愛) + model (合い, via a
 /// seeded conversion-cache entry standing in for the model) + fallback +
@@ -9,14 +8,7 @@ use crate::core::engine::cache::ConversionCacheKey;
 /// empty.
 fn engine_in_conversion() -> InputMethodEngine {
     let mut engine = engine_with_learned("あい", "愛");
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "アイ".to_string(),
-            lctx: String::new(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["合い".to_string()],
-    );
+    seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -253,16 +245,13 @@ fn test_kana_survive_mixed_list_dedup_in_rewriter_view() {
 fn test_dictionary_view_prefix_matches_from_one_char() {
     // The dictionary views are full browsers: predictive matches kick in
     // from the very first char, unlike the mixed list's 2-char guard.
-    use std::io::Write;
     let mut engine = InputMethodEngine::new();
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    let json = r#"[
+    engine.dicts.user = Some(dict_from_json(
+        r#"[
         {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
         {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
-    ]"#;
-    tmp.write_all(json.as_bytes()).unwrap();
-    tmp.flush().unwrap();
-    engine.dicts.user = Some(Dictionary::build_from_json(tmp.path()).unwrap());
+    ]"#,
+    ));
 
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -286,16 +275,13 @@ fn test_dictionary_view_prefix_matches_from_one_char() {
 fn test_typing_narrows_within_the_filtered_view() {
     // fzf-style: typing while a source view is active keeps the view and
     // narrows it with the grown reading.
-    use std::io::Write;
     let mut engine = InputMethodEngine::new();
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    let json = r#"[
+    engine.dicts.user = Some(dict_from_json(
+        r#"[
         {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
         {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
-    ]"#;
-    tmp.write_all(json.as_bytes()).unwrap();
-    tmp.flush().unwrap();
-    engine.dicts.user = Some(Dictionary::build_from_json(tmp.path()).unwrap());
+    ]"#,
+    ));
 
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -339,16 +325,13 @@ fn test_typing_narrows_within_the_filtered_view() {
 fn test_backspace_widens_within_the_filtered_view() {
     // The mirror of typing-refine: Backspace shrinks the reading and the
     // view re-expands; emptying the buffer exits cleanly.
-    use std::io::Write;
     let mut engine = InputMethodEngine::new();
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    let json = r#"[
+    engine.dicts.user = Some(dict_from_json(
+        r#"[
         {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
         {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
-    ]"#;
-    tmp.write_all(json.as_bytes()).unwrap();
-    tmp.flush().unwrap();
-    engine.dicts.user = Some(Dictionary::build_from_json(tmp.path()).unwrap());
+    ]"#,
+    ));
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -648,14 +631,7 @@ fn test_model_view_queries_the_settled_reading() {
     // never silently dropped on commit. The tail `k` is its own
     // non-Japanese chunk, passed through after the converted kana run.
     let mut engine = InputMethodEngine::new();
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "アイ".to_string(),
-            lctx: String::new(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["合い".to_string()],
-    );
+    seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press('k'));
@@ -671,14 +647,7 @@ fn test_model_view_converts_japanese_run_and_passes_digits_through() {
     // converted (via the shared conversion cache) and the trailing digit
     // run is passed through verbatim, never fed to the model.
     let mut engine = InputMethodEngine::new();
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "アイ".to_string(),
-            lctx: String::new(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["合い".to_string()],
-    );
+    seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     for ch in ['a', 'i', '1', '2', '3'] {
         engine.process_key(&press(ch));
     }
@@ -699,22 +668,8 @@ fn test_model_view_beams_a_tail_window_on_long_readings() {
     let mut engine = InputMethodEngine::new();
     engine.config.composing_chunk_len = 2;
     engine.config.strategy = StrategyMode::Main;
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "アイ".to_string(),
-            lctx: String::new(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["合い".to_string()],
-    );
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "ウエ".to_string(),
-            lctx: "合い".to_string(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["上".to_string(), "植え".to_string()],
-    );
+    seed_model_cache(&mut engine, "アイ", "", &["合い"]);
+    seed_model_cache(&mut engine, "ウエ", "合い", &["上", "植え"]);
     for ch in ['a', 'i', 'u', 'e'] {
         engine.process_key(&press(ch));
     }
@@ -733,22 +688,8 @@ fn test_space_conversion_beams_the_tail_window() {
     let mut engine = InputMethodEngine::new();
     engine.config.composing_chunk_len = 2;
     engine.config.strategy = StrategyMode::Main;
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "アイ".to_string(),
-            lctx: String::new(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["合い".to_string()],
-    );
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "ウエ".to_string(),
-            lctx: "合い".to_string(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["上".to_string(), "植え".to_string()],
-    );
+    seed_model_cache(&mut engine, "アイ", "", &["合い"]);
+    seed_model_cache(&mut engine, "ウエ", "合い", &["上", "植え"]);
     for ch in ['a', 'i', 'u', 'e'] {
         engine.process_key(&press(ch));
     }
@@ -762,27 +703,15 @@ fn test_system_view_keeps_surfaces_shared_with_user_dict() {
     // Each dictionary view dedups within its own dictionary: a surface
     // present in both stays visible in the 📚 view instead of being
     // hidden by the 👤 copy.
-    use std::io::Write;
     let mut engine = InputMethodEngine::new();
     // Deterministic model result (a cache hit stands in for the model).
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: "アイ".to_string(),
-            lctx: String::new(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec!["合い".to_string()],
-    );
-    let mut user = tempfile::NamedTempFile::new().unwrap();
-    let user_json = r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#;
-    user.write_all(user_json.as_bytes()).unwrap();
-    user.flush().unwrap();
-    engine.dicts.user = Some(Dictionary::build_from_json(user.path()).unwrap());
-    let mut system = tempfile::NamedTempFile::new().unwrap();
-    let system_json = r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0},{"surface":"愛","score":2.0}]}]"#;
-    system.write_all(system_json.as_bytes()).unwrap();
-    system.flush().unwrap();
-    engine.dicts.system = Some(Dictionary::build_from_json(system.path()).unwrap());
+    seed_model_cache(&mut engine, "アイ", "", &["合い"]);
+    engine.dicts.user = Some(dict_from_json(
+        r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#,
+    ));
+    engine.dicts.system = Some(dict_from_json(
+        r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0},{"surface":"愛","score":2.0}]}]"#,
+    ));
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -795,4 +724,35 @@ fn test_system_view_keeps_surfaces_shared_with_user_dict() {
     let texts = shown_texts(&engine);
     assert!(texts.contains(&"藍".to_string()), "texts were: {texts:?}");
     assert!(texts.contains(&"愛".to_string()), "texts were: {texts:?}");
+}
+
+#[test]
+fn test_mid_caret_typing_does_not_tail_predict() {
+    // With the caret mid-composition the typed run is not a tail: あk|い
+    // settles to あkい, so the narrowed view must not offer あい + か…
+    // predictions whose commit would replace the composition with the
+    // wrong reading.
+    let mut engine = engine_with_learned("あいか", "愛香");
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝 view for あい
+    assert_eq!(shown_texts(&engine), vec!["愛香"]);
+
+    // `k` lands mid-buffer (あk|い): the prediction disappears instead of
+    // narrowing as if the reading were あい + tail k.
+    let result = engine.process_key(&press('k'));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(
+        aux.starts_with("[変換:📝]") && aux.contains("候補なし"),
+        "aux was: {aux}"
+    );
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(text) if text == "あkい"))
+    );
 }

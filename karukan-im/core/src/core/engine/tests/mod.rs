@@ -36,6 +36,30 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     engine
 }
 
+/// Seed the conversion cache so a `MainModelOnly` call for `katakana`
+/// with `lctx` returns `texts` — a deterministic stand-in for the model
+/// (with no converter loaded every strategy resolves to `MainModelOnly`,
+/// and tests that beam under a real converter pin `StrategyMode::Main`).
+fn seed_model_cache(engine: &mut InputMethodEngine, katakana: &str, lctx: &str, texts: &[&str]) {
+    engine.conversion_cache.insert(
+        crate::core::engine::cache::ConversionCacheKey {
+            katakana: katakana.to_string(),
+            lctx: lctx.to_string(),
+            strategy: ConversionStrategy::MainModelOnly,
+        },
+        texts.iter().map(|s| s.to_string()).collect(),
+    );
+}
+
+/// Build a dictionary from inline JSON, hiding the temp-file plumbing.
+fn dict_from_json(json: &str) -> Dictionary {
+    use std::io::Write;
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(json.as_bytes()).unwrap();
+    tmp.flush().unwrap();
+    Dictionary::build_from_json(tmp.path()).unwrap()
+}
+
 fn press(ch: char) -> KeyEvent {
     KeyEvent::press(Keysym(ch as u32))
 }

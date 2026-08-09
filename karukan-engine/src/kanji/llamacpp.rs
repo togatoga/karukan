@@ -519,7 +519,9 @@ impl LlamaCppModel {
         eos_token_id: Option<i32>,
         beam_size: usize,
     ) -> Result<Vec<(Vec<LlamaToken>, f32)>> {
-        if beam_size == 0 || input_tokens.is_empty() {
+        // max_new_tokens == 0 means "generate nothing": return before paying
+        // for the prompt decode instead of emitting one-token pseudo-beams.
+        if beam_size == 0 || max_new_tokens == 0 || input_tokens.is_empty() {
             return Ok(Vec::new());
         }
         // Live + scratch slots must stay within llama.cpp's LLAMA_MAX_SEQ
@@ -723,6 +725,10 @@ impl LlamaCppModel {
         eos_token_id: Option<i32>,
         beam_size: usize,
     ) -> Result<Vec<(Vec<LlamaToken>, f32)>> {
+        // Same degenerate-input contract as the fast path.
+        if beam_size == 0 || max_new_tokens == 0 || input_tokens.is_empty() {
+            return Ok(Vec::new());
+        }
         let model_eos = self.model.token_eos();
 
         let initial_logits = self.eval_sequence(input_tokens)?;
@@ -1163,8 +1169,8 @@ mod beam_search_tests {
             model
                 .generate_beam_search(&tokens, 0, eos, 3)
                 .expect("max_new_tokens=0 must not panic")
-                .len()
-                <= 3
+                .is_empty(),
+            "max_new_tokens=0 must generate nothing"
         );
         assert!(
             !model

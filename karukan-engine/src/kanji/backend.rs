@@ -174,13 +174,6 @@ impl KanaKanjiConverter {
     pub fn model_display_name(&self) -> &str {
         &self.display_name
     }
-
-    /// Count only the input (reading) tokens, excluding context and special tokens
-    pub fn count_input_tokens(&self, reading: &str) -> Result<usize> {
-        let katakana = hiragana_to_katakana(reading);
-        let tokens = self.model.tokenize(&katakana)?;
-        Ok(tokens.len())
-    }
 }
 
 #[cfg(test)]

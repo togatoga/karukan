@@ -1143,8 +1143,18 @@ impl InputMethodEngine {
         // rewriter cannot consume a tail: they use the state's settled
         // `reading` — the exact text Enter commits — so no selectable
         // candidate can ignore newly typed input.
-        let base = self.input_buf.reading();
-        let pending = self.input_buf.pending();
+        //
+        // The base/pending split is only meaningful while the active romaji
+        // run sits at the end of the composition: with a mid-buffer caret,
+        // `base + tail` predicts in the wrong order (あk|い settles to
+        // あkい, never あいか…), so those queries fall back to the settled
+        // reading with no tail prediction.
+        let at_end = self.input_buf.cursor() == self.input_buf.char_count();
+        let (base, pending) = if at_end {
+            (self.input_buf.reading(), self.input_buf.pending())
+        } else {
+            (reading.to_string(), String::new())
+        };
         match source {
             CandidateSource::Learning => self.lookup_learning_history(&base, &pending),
             // A dedicated, paged dictionary browser wants everything:
@@ -1197,8 +1207,12 @@ impl InputMethodEngine {
 
     /// Model candidates for the narrowed AI view: the shared tail-window
     /// conversion ([`Self::windowed_model_candidates`]), so the view
-    /// always matches the mixed list's model rows and is a cache hit
-    /// right after Space.
+    /// normally shows the mixed list's model rows straight from the
+    /// conversion cache right after Space. Two known divergences: the
+    /// mixed list may carry a preserved live-conversion row this view
+    /// regenerates without, and a conversion slow enough to flip the
+    /// adaptive flag makes this rebuild re-run on the light model under
+    /// its own cache key.
     fn model_source_view(&mut self, reading: &str) -> Vec<Candidate> {
         self.windowed_model_candidates(reading, self.config.num_candidates)
             .into_iter()
