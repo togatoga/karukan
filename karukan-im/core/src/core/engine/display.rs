@@ -173,14 +173,6 @@ impl InputMethodEngine {
         }
     }
 
-    /// Get token count for a reading (returns None if converter not initialized)
-    pub(super) fn get_token_count(&self, reading: &str) -> Option<usize> {
-        self.converters
-            .kanji
-            .as_ref()
-            .and_then(|c| c.count_input_tokens(reading).ok())
-    }
-
     /// Get the display name of the model used for the last conversion
     /// Falls back to the static model name if no conversion has happened yet
     fn last_used_model(&self) -> String {
@@ -208,10 +200,6 @@ impl InputMethodEngine {
             self.metrics.conversion_ms, self.metrics.process_key_ms
         );
         let model = self.last_used_model();
-        let tokens = self
-            .get_token_count(reading)
-            .map(|t| format!("{}tok", t))
-            .unwrap_or_default();
         let page_info = candidates
             .filter(|c| c.total_pages() > 1)
             .map(|c| format!(" ({}/{})", c.current_page() + 1, c.total_pages()))
@@ -245,22 +233,12 @@ impl InputMethodEngine {
             None => "[変換]".to_string(),
         };
         format!(
-            "{}{} {}{}{} | {} {} | {}{}{}",
-            header,
-            page_info,
-            reading,
-            empty_note,
-            ctx,
-            timing,
-            tokens,
-            model,
-            source_label,
-            delete_hint
+            "{}{} {}{}{} | {} | {}{}{}",
+            header, page_info, reading, empty_note, ctx, timing, model, source_label, delete_hint
         )
     }
 
     /// Format aux text for auto-suggest mode
-    /// Note: token count is not shown here to avoid performance overhead on every keystroke
     /// Timing shows inference_ms/process_key_ms (process_key_ms is from previous keystroke)
     pub(super) fn format_aux_suggest(&self, reading: &str) -> String {
         // Single context block: the lctx is the current chunk's actual left
