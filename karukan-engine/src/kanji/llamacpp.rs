@@ -197,8 +197,15 @@ impl LlamaCppModel {
 
     /// Build LlamaContextParams with configured n_threads
     fn context_params(&self) -> LlamaContextParams {
+        self.context_params_with_n_ctx(self.n_ctx)
+    }
+
+    /// Build LlamaContextParams with configured n_threads and an explicit KV
+    /// cache size. Beam search needs more cells than a greedy run: every beam
+    /// keeps its own generated tokens alongside the shared prompt.
+    fn context_params_with_n_ctx(&self, n_ctx: u32) -> LlamaContextParams {
         let params = LlamaContextParams::default().with_n_ctx(Some(
-            NonZeroU32::new(self.n_ctx).expect("n_ctx must be non-zero"),
+            NonZeroU32::new(n_ctx.max(1)).expect("n_ctx must be non-zero"),
         ));
         if self.n_threads > 0 {
             params
@@ -489,9 +496,22 @@ impl LlamaCppModel {
     ///    - Keep only the best beam_size candidates globally
     /// 3. Repeat until all beams reach EOS or max_new_tokens
     ///
-    /// True beam search implementation without KV cache sharing.
-    /// This implementation processes full sequences at each step to avoid
-    /// KV cache copy issues with GPT-2 models. It's slower but more reliable.
+    /// True beam search over a single context whose KV cache is reused.
+    ///
+    /// Each live beam owns one llama.cpp sequence slot, so a step only ever
+    /// decodes the *one* new token per beam and attends to the cached prefix.
+    /// The prompt is decoded once into slot 0 and shared with the other beams
+    /// via a cache copy.
+    ///
+    /// The previous implementation instead created a fresh [`LlamaContext`] and
+    /// re-decoded the whole prompt for every beam at every step, which made one
+    /// conversion cost `max_new_tokens * beam_size` context allocations and full
+    /// prefills — the dominant cost of pressing Space, and the reason latency
+    /// exploded under CPU contention. `generate_beam_search_full_eval` keeps
+    /// that formulation as the reference the equivalence test compares against.
+    ///
+    /// Beam bookkeeping is unchanged (same expansion factor, same scoring, same
+    /// early termination), so the candidates this returns match the reference.
     fn generate_beam_search_impl(
         &self,
         input_tokens: &[LlamaToken],
@@ -499,11 +519,53 @@ impl LlamaCppModel {
         eos_token_id: Option<i32>,
         beam_size: usize,
     ) -> Result<Vec<(Vec<LlamaToken>, f32)>> {
-        let model_eos = self.model.token_eos();
+        if beam_size == 0 || input_tokens.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Live + scratch slots must stay within llama.cpp's LLAMA_MAX_SEQ
+        // (256); exceeding it throws a C++ exception that aborts across FFI.
+        let beam_size = beam_size.min(128);
 
-        // Step 1: Get initial logits
-        let initial_logits = self.eval_sequence(input_tokens)?;
-        let (top_tokens, top_log_probs) = self.get_top_k_tokens(&initial_logits, beam_size);
+        let backend = get_backend()?;
+        let model_eos = self.model.token_eos();
+        let input_len = input_tokens.len();
+
+        // Sequence slots 0..beam_size hold the live beams. The scratch slots
+        // above them stage a permutation: several new beams can descend from
+        // one parent, and a parent slot is itself a destination, so copying
+        // straight into the live slots would clobber a prefix still needed.
+        let n_seq = beam_size * 2;
+        // Cells hold the prompt (shared by every beam) plus one row of
+        // generated tokens per beam. Doubled to cover the scratch staging, in
+        // case the backend materializes a copy rather than sharing cells.
+        let n_cells = input_len + 2 * beam_size * (max_new_tokens + 1) + 64;
+        // n_batch also caps the context's output buffer (n_outputs_max), which
+        // llama.cpp reserves for n_seq_max rows — so it must cover n_seq too.
+        let batch_cap = input_len.max(n_seq) + 8;
+
+        let ctx_params = self
+            .context_params_with_n_ctx(n_cells as u32)
+            .with_n_seq_max(n_seq.try_into().unwrap_or(u32::MAX))
+            .with_n_batch(batch_cap as u32)
+            .with_n_ubatch(batch_cap as u32);
+
+        let mut ctx = self
+            .model
+            .new_context(backend, ctx_params)
+            .map_err(|e| KanjiError::Inference(e.into()))?;
+
+        // Step 1: decode the prompt once into slot 0 and read its logits.
+        let mut batch = LlamaBatch::new(batch_cap, 1);
+        for (i, token) in input_tokens.iter().enumerate() {
+            let is_last = i == input_len - 1;
+            batch
+                .add(*token, i as i32, &[0], is_last)
+                .map_err(|e| KanjiError::Inference(e.into()))?;
+        }
+        ctx.decode(&mut batch)
+            .map_err(|e| KanjiError::Inference(e.into()))?;
+
+        let (top_tokens, top_log_probs) = self.get_top_k_tokens(ctx.get_logits(), beam_size);
 
         // Initialize beams, partitioning EOS tokens into finished
         let mut beams: Vec<BeamState> = Vec::with_capacity(beam_size);
@@ -522,11 +584,17 @@ impl LlamaCppModel {
             }
         }
 
+        // Every surviving beam starts from the same prompt prefix.
+        for slot in 1..beams.len() {
+            ctx.copy_kv_cache_seq(0, slot as i32, None, None)
+                .map_err(|e| KanjiError::Inference(e.into()))?;
+        }
+
         // Expansion factor
         let expand_k = beam_size.max(4);
 
         // Step 2: Main beam search loop
-        for _step in 0..(max_new_tokens - 1) {
+        for _step in 0..max_new_tokens.saturating_sub(1) {
             if beams.is_empty() {
                 break;
             }
@@ -546,19 +614,166 @@ impl LlamaCppModel {
                 }
             }
 
-            // Collect candidates from all beams
+            // Decode one token per beam: the token chosen last step, appended
+            // to that beam's cached prefix. Batch row `i` is beam slot `i`, so
+            // the logits row index below is the slot index.
+            batch.clear();
+            for (slot, beam) in beams.iter().enumerate() {
+                let last = *beam
+                    .tokens
+                    .last()
+                    .expect("a live beam always has at least one token");
+                let pos = (input_len + beam.tokens.len() - 1) as i32;
+                batch
+                    .add(last, pos, &[slot as i32], true)
+                    .map_err(|e| KanjiError::Inference(e.into()))?;
+            }
+            ctx.decode(&mut batch)
+                .map_err(|e| KanjiError::Inference(e.into()))?;
+
+            // Collect candidates from all beams, remembering which slot each
+            // one descends from so the cache can follow the selection.
+            let mut candidates: Vec<(usize, BeamState)> = Vec::new();
+
+            for (slot, beam) in beams.iter().enumerate() {
+                let logits = ctx.get_logits_ith(slot as i32);
+                let (top_tokens, top_log_probs) = self.get_top_k_tokens(logits, expand_k);
+
+                for (&token, &log_prob) in top_tokens.iter().zip(top_log_probs.iter()) {
+                    let mut new_tokens = beam.tokens.clone();
+                    new_tokens.push(token);
+
+                    candidates.push((
+                        slot,
+                        BeamState {
+                            tokens: new_tokens,
+                            score: beam.score + log_prob,
+                        },
+                    ));
+                }
+            }
+
+            // Sort and keep top beam_size candidates
+            candidates.sort_by(|a, b| b.1.score.total_cmp(&a.1.score));
+            candidates.truncate(beam_size);
+
+            // Partition into finished and active beams
+            let mut next: Vec<(usize, BeamState)> = Vec::new();
+            for (parent, candidate) in candidates {
+                let last_token = match candidate.tokens.last() {
+                    Some(&t) => t,
+                    None => continue,
+                };
+
+                if self.is_eos_token(last_token, eos_token_id, model_eos) {
+                    finished_beams.push(candidate);
+                } else {
+                    next.push((parent, candidate));
+                }
+            }
+
+            // Move each surviving beam's prefix into its new slot. Stage into
+            // scratch first, then clear every live slot (this also reclaims the
+            // cells of beams that just finished) and restore from scratch.
+            for (j, (parent, _)) in next.iter().enumerate() {
+                let scratch = (beam_size + j) as i32;
+                ctx.clear_kv_cache_seq(Some(scratch as u32), None, None)
+                    .map_err(|e| KanjiError::Inference(e.into()))?;
+                ctx.copy_kv_cache_seq(*parent as i32, scratch, None, None)
+                    .map_err(|e| KanjiError::Inference(e.into()))?;
+            }
+            for slot in 0..beam_size {
+                ctx.clear_kv_cache_seq(Some(slot as u32), None, None)
+                    .map_err(|e| KanjiError::Inference(e.into()))?;
+            }
+            for j in 0..next.len() {
+                let scratch = (beam_size + j) as i32;
+                ctx.copy_kv_cache_seq(scratch, j as i32, None, None)
+                    .map_err(|e| KanjiError::Inference(e.into()))?;
+                ctx.clear_kv_cache_seq(Some(scratch as u32), None, None)
+                    .map_err(|e| KanjiError::Inference(e.into()))?;
+            }
+
+            beams = next.into_iter().map(|(_, beam)| beam).collect();
+        }
+
+        // Combine all results
+        let mut all_results: Vec<(Vec<LlamaToken>, f32)> = finished_beams
+            .into_iter()
+            .chain(beams)
+            .map(|b| (b.tokens, b.score))
+            .collect();
+
+        // Sort by score and take top beam_size
+        all_results.sort_by(|a, b| b.1.total_cmp(&a.1));
+        all_results.truncate(beam_size);
+
+        Ok(all_results)
+    }
+
+    /// Reference beam search: a fresh context and a full re-prefill per beam per
+    /// step. This is what [`generate_beam_search_impl`] replaced; it is kept so
+    /// the equivalence test can assert the fast path still selects the same
+    /// candidates. Far too slow for the input path — do not call it there.
+    #[cfg(test)]
+    pub(crate) fn generate_beam_search_full_eval(
+        &self,
+        input_tokens: &[LlamaToken],
+        max_new_tokens: usize,
+        eos_token_id: Option<i32>,
+        beam_size: usize,
+    ) -> Result<Vec<(Vec<LlamaToken>, f32)>> {
+        let model_eos = self.model.token_eos();
+
+        let initial_logits = self.eval_sequence(input_tokens)?;
+        let (top_tokens, top_log_probs) = self.get_top_k_tokens(&initial_logits, beam_size);
+
+        let mut beams: Vec<BeamState> = Vec::with_capacity(beam_size);
+        let mut finished_beams: Vec<BeamState> = Vec::new();
+
+        for (&token, &log_prob) in top_tokens.iter().zip(top_log_probs.iter()) {
+            let beam = BeamState {
+                tokens: vec![token],
+                score: log_prob,
+            };
+
+            if self.is_eos_token(token, eos_token_id, model_eos) {
+                finished_beams.push(beam);
+            } else {
+                beams.push(beam);
+            }
+        }
+
+        let expand_k = beam_size.max(4);
+
+        for _step in 0..max_new_tokens.saturating_sub(1) {
+            if beams.is_empty() {
+                break;
+            }
+
+            if finished_beams.len() >= beam_size {
+                let best_finished = finished_beams
+                    .iter()
+                    .map(|b| b.score)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let best_active = beams
+                    .iter()
+                    .map(|b| b.score)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                if best_active < best_finished {
+                    break;
+                }
+            }
+
             let mut candidates: Vec<BeamState> = Vec::new();
 
             for beam in &beams {
-                // Build full sequence: input_tokens + beam.tokens
                 let mut full_seq: Vec<LlamaToken> = input_tokens.to_vec();
                 full_seq.extend(&beam.tokens);
 
-                // Get logits for this sequence
                 let logits = self.eval_sequence(&full_seq)?;
                 let (top_tokens, top_log_probs) = self.get_top_k_tokens(&logits, expand_k);
 
-                // Create candidates
                 for (&token, &log_prob) in top_tokens.iter().zip(top_log_probs.iter()) {
                     let mut new_tokens = beam.tokens.clone();
                     new_tokens.push(token);
@@ -570,11 +785,9 @@ impl LlamaCppModel {
                 }
             }
 
-            // Sort and keep top beam_size candidates
             candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
             candidates.truncate(beam_size);
 
-            // Partition into finished and active beams
             beams.clear();
             for candidate in candidates {
                 let last_token = match candidate.tokens.last() {
@@ -590,14 +803,12 @@ impl LlamaCppModel {
             }
         }
 
-        // Combine all results
         let mut all_results: Vec<(Vec<LlamaToken>, f32)> = finished_beams
             .into_iter()
             .chain(beams)
             .map(|b| (b.tokens, b.score))
             .collect();
 
-        // Sort by score and take top beam_size
         all_results.sort_by(|a, b| b.1.total_cmp(&a.1));
         all_results.truncate(beam_size);
 
@@ -618,8 +829,10 @@ impl LlamaCppModel {
 
     /// Process a token sequence and return the logits at the last position.
     ///
-    /// Creates a fresh context for each call. Used by true beam search where
-    /// each beam needs independent evaluation.
+    /// Creates a fresh context for each call, so it costs a full prefill every
+    /// time. Only the reference beam search
+    /// ([`Self::generate_beam_search_full_eval`]) still works this way.
+    #[cfg(test)]
     fn eval_sequence(&self, tokens: &[LlamaToken]) -> Result<Vec<f32>> {
         let backend = get_backend()?;
         let ctx_params = self.context_params();
@@ -688,14 +901,24 @@ impl LlamaCppModel {
         mut sampler: LlamaSampler,
     ) -> Result<Vec<LlamaToken>> {
         let backend = get_backend()?;
-        let ctx_params = self.context_params();
+        // Size the batch to the prompt instead of inheriting llama.cpp's
+        // defaults (n_batch 2048 / n_ubatch 512). The compute buffers are
+        // allocated from those numbers on every `new_context`, and a
+        // conversion only ever decodes the prompt plus one token at a time —
+        // paying for a 512-token ubatch made each conversion allocate (and
+        // zero) an order of magnitude more scratch memory than it uses.
+        let batch_cap = input_tokens.len().max(1) + 8;
+        let ctx_params = self
+            .context_params()
+            .with_n_batch(batch_cap as u32)
+            .with_n_ubatch(batch_cap as u32);
 
         let mut ctx = self
             .model
             .new_context(backend, ctx_params)
             .map_err(|e| KanjiError::Inference(e.into()))?;
 
-        let mut batch = LlamaBatch::new(512, 1);
+        let mut batch = LlamaBatch::new(batch_cap, 1);
         let mut generated = input_tokens.to_vec();
 
         // Process input tokens
@@ -862,5 +1085,106 @@ mod byte_fallback_token_tests {
         assert!(!is_byte_fallback_token("<0xGG>"));
         assert!(!is_byte_fallback_token("<0x123>"));
         assert!(!is_byte_fallback_token("0xCE"));
+    }
+}
+
+#[cfg(test)]
+mod beam_search_tests {
+    use super::*;
+    use crate::kanji::build_jinen_prompt;
+    use crate::kanji::hf_download::{get_path_by_id, get_tokenizer_path_by_id};
+    use crate::kanji::model_config::registry;
+
+    /// Load the default registry model, or `None` when it isn't available
+    /// locally (the tests are skipped rather than failing offline).
+    fn load_model() -> Option<LlamaCppModel> {
+        let reg = registry();
+        let path = get_path_by_id(&reg.default_model).ok()?;
+        let tok_path = get_tokenizer_path_by_id(&reg.default_model).ok()?;
+        LlamaCppModel::from_file(&path, &tok_path).ok()
+    }
+
+    fn tokens_for(model: &LlamaCppModel, katakana: &str) -> Vec<LlamaToken> {
+        let prompt = build_jinen_prompt(katakana, "");
+        model.tokenize(&prompt).expect("tokenize failed")
+    }
+
+    /// The KV-cache-reusing beam search must pick the same candidates as the
+    /// reference that re-prefills a fresh context for every beam at every step.
+    /// This is the guard that makes the optimization a pure speedup: if the
+    /// cache bookkeeping (slot assignment, parent permutation, positions) were
+    /// wrong, the beams would attend to the wrong prefix and diverge here.
+    #[test]
+    fn matches_full_eval_reference() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+
+        for katakana in ["ヘンカン", "カンジ", "キョウハイイテンキデスネ", "コウエン"]
+        {
+            let tokens = tokens_for(&model, katakana);
+            for beam_size in [1usize, 2, 3, 5] {
+                let fast = model
+                    .generate_beam_search(&tokens, 20, eos, beam_size)
+                    .expect("fast beam search failed");
+                let reference = model
+                    .generate_beam_search_full_eval(&tokens, 20, eos, beam_size)
+                    .expect("reference beam search failed");
+
+                let decode = |results: &[(Vec<LlamaToken>, f32)]| -> Vec<String> {
+                    results
+                        .iter()
+                        .map(|(t, _)| model.decode(t, true).unwrap_or_default())
+                        .collect()
+                };
+                assert_eq!(
+                    decode(&fast),
+                    decode(&reference),
+                    "candidates diverged for {katakana} at beam_size={beam_size}"
+                );
+            }
+        }
+    }
+
+    /// A beam wider than the surviving beam count, and a beam of 1, both used
+    /// to sit on `max_new_tokens - 1` underflow / empty-slot edges.
+    #[test]
+    fn handles_edge_case_widths() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+        let tokens = tokens_for(&model, "ヘンカン");
+
+        assert!(
+            model
+                .generate_beam_search(&tokens, 0, eos, 3)
+                .expect("max_new_tokens=0 must not panic")
+                .len()
+                <= 3
+        );
+        assert!(
+            !model
+                .generate_beam_search(&tokens, 20, eos, 9)
+                .expect("wide beam failed")
+                .is_empty()
+        );
+        assert!(
+            model
+                .generate_beam_search(&[], 20, eos, 3)
+                .expect("empty input must not panic")
+                .is_empty()
+        );
+        // beam_size is clamped to 128: 2*200 sequence slots would exceed
+        // llama.cpp's LLAMA_MAX_SEQ (256) and abort across the FFI boundary.
+        assert!(
+            !model
+                .generate_beam_search(&tokens, 3, eos, 200)
+                .expect("oversized beam must be clamped, not abort")
+                .is_empty()
+        );
     }
 }
