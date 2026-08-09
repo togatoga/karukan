@@ -512,6 +512,11 @@ impl LlamaCppModel {
     ///
     /// Beam bookkeeping is unchanged (same expansion factor, same scoring, same
     /// early termination), so the candidates this returns match the reference.
+    ///
+    /// The KV-cache-reuse formulation was contributed by
+    /// [kazuph/karukan@707eb10](https://github.com/kazuph/karukan/commit/707eb101f5de7b210f993b74723cf0ba9cc8c2af);
+    /// the port added the output-buffer-aware `batch_cap` and the `beam_size`
+    /// clamp below.
     fn generate_beam_search_impl(
         &self,
         input_tokens: &[LlamaToken],
