@@ -1315,6 +1315,19 @@ impl InputMethodEngine {
         let cap = self.config.beam_window_len.min(self.chunk_len());
         let window_start = run_start.max(chars.len().saturating_sub(cap));
 
+        // The head: the whole reading on the live-conversion chunk grid —
+        // exactly the conversion live typing displays, so Space and the AI
+        // view can never contradict the visible preedit. It must run before
+        // the window conversion below, under the adaptive flag state that
+        // produced the display: the window's beam may measure a slow main
+        // model and downgrade, and a flipped flag changes the strategy in
+        // the replay's cache keys — the head would miss the entries typing
+        // just filled and re-convert to a different text. Normally a pure
+        // cache replay; a no-seam reading stores its main greedy under the
+        // same MainModelOnly key the window's ParallelBeam half then
+        // reuses, so main greedy still runs at most once either way.
+        let live_top1 = self.convert_on_chunk_grid(&chars, &base_ctx);
+
         let prefix = self.convert_on_chunk_grid(&chars[..window_start], &base_ctx);
         let window: String = chars[window_start..].iter().collect();
 
@@ -1327,20 +1340,6 @@ impl InputMethodEngine {
             let beam = self.run_kana_kanji_conversion(&window, &lctx, num_candidates);
             if beam.is_empty() { vec![window] } else { beam }
         };
-
-        // The head: the whole reading on the live-conversion chunk grid —
-        // exactly the conversion live typing displays, so Space and the AI
-        // view can never contradict the visible preedit. Normally a pure
-        // cache replay: typing populated the grid entries, and a no-seam
-        // reading's grid IS the window conversion above, whose main greedy
-        // half was just cached under the same MainModelOnly key. It runs
-        // after that conversion (to hit its entry) and the metrics are
-        // restored so the aux keeps describing the window call.
-        let saved_ms = self.metrics.conversion_ms;
-        let saved_model = self.metrics.model_name.clone();
-        let live_top1 = self.convert_on_chunk_grid(&chars, &base_ctx);
-        self.metrics.conversion_ms = saved_ms;
-        self.metrics.model_name = saved_model;
 
         let mut seen = HashSet::new();
         std::iter::once(live_top1)
