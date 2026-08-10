@@ -158,17 +158,40 @@ impl InputMethodEngine {
         let Some(converter) = self.converters.kanji.as_ref() else {
             return vec![];
         };
+        // The adaptive gate below wants the main model's own latency, not the
+        // conversion's wall time: ParallelBeam measures its main greedy half
+        // separately so the light beam running beside it can't trip the gate.
+        // Left None when the main model didn't actually run.
+        let mut main_ms: Option<u64> = None;
         let candidates = match &strategy {
             ConversionStrategy::ParallelBeam { beam_width } => {
                 let Some(light_converter) = self.converters.light_kanji.as_ref() else {
                     return vec![];
                 };
                 let bw = *beam_width;
-                let (default_top1, light_candidates) = std::thread::scope(|s| {
-                    let h_default = s.spawn(|| {
-                        converter
-                            .convert(&katakana, api_context, 1)
-                            .unwrap_or_default()
+                // The main greedy half is an ordinary MainModelOnly
+                // conversion, so it shares that cache slot: served from it
+                // when live typing (or the whole-grid head) already
+                // converted this reading, stored into it when it runs —
+                // main greedy runs at most once per (reading, lctx) however
+                // the Space list, the AI view, and live conversion
+                // interleave.
+                let main_key = ConversionCacheKey {
+                    katakana: katakana.clone(),
+                    lctx: api_context.to_string(),
+                    strategy: ConversionStrategy::MainModelOnly,
+                };
+                let cached_main = self.conversion_cache.get(&main_key);
+                let need_main = cached_main.is_none();
+                let (computed_main, light_candidates) = std::thread::scope(|s| {
+                    let h_default = need_main.then(|| {
+                        s.spawn(|| {
+                            let main_start = Instant::now();
+                            let result = converter
+                                .convert(&katakana, api_context, 1)
+                                .unwrap_or_default();
+                            (result, main_start.elapsed().as_millis() as u64)
+                        })
                     });
                     let h_beam = s.spawn(|| {
                         light_converter
@@ -176,11 +199,22 @@ impl InputMethodEngine {
                             .unwrap_or_default()
                     });
                     (
-                        h_default.join().unwrap_or_default(),
+                        h_default.map(|h| h.join().unwrap_or_default()),
                         h_beam.join().unwrap_or_default(),
                     )
                 });
-                Self::merge_candidates_dedup(default_top1, light_candidates, bw)
+                let main_top1 = match (cached_main, computed_main) {
+                    (Some(cached), _) => cached,
+                    (None, Some((result, elapsed))) => {
+                        main_ms = Some(elapsed);
+                        if !result.is_empty() {
+                            self.conversion_cache.insert(main_key, result.clone());
+                        }
+                        result
+                    }
+                    (None, None) => Vec::new(),
+                };
+                Self::merge_candidates_dedup(main_top1, light_candidates, bw)
             }
             ConversionStrategy::LightModelOnly => {
                 let Some(light_converter) = self.converters.light_kanji.as_ref() else {
@@ -207,7 +241,17 @@ impl InputMethodEngine {
         };
 
         self.metrics.conversion_ms = start.elapsed().as_millis() as u64;
-        self.update_adaptive_model_flag(&strategy);
+        // MainModelOnly's wall time IS the main model's elapsed; ParallelBeam
+        // measured its main half above (None when it came from the cache — a
+        // hit says nothing about model speed). Light-model strategies carry
+        // no main-model measurement and leave the flag alone.
+        let main_measurement = match &strategy {
+            ConversionStrategy::MainModelOnly => Some(self.metrics.conversion_ms),
+            _ => main_ms,
+        };
+        if let Some(ms) = main_measurement {
+            self.update_adaptive_model_flag(ms);
+        }
         self.metrics.model_name = self.model_name_for(&strategy);
 
         // Don't cache empty results: they usually mean a conversion error,
@@ -1248,6 +1292,16 @@ impl InputMethodEngine {
     /// Candidates equal to the raw reading are dropped (that is what an
     /// unavailable model degenerates to), so an empty result means "no
     /// model suggestion" to the callers.
+    ///
+    /// The head of the list is always the whole-reading top-1 on the
+    /// live-conversion chunk grid — the exact text live typing displays —
+    /// so entering a conversion never degrades the visible top-1. This
+    /// matters when the window splits the reading: the split is a raw
+    /// char cut that can land mid-word and degrade both sides of the
+    /// seam, while the live grid had the word intact. It is normally a
+    /// pure cache replay (typing filled the grid, and the window's main
+    /// greedy half shares the MainModelOnly cache slot), so the head
+    /// costs no inference on the usual paths.
     fn windowed_model_candidates(&mut self, reading: &str, num_candidates: usize) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
@@ -1261,21 +1315,11 @@ impl InputMethodEngine {
         let cap = self.config.beam_window_len.min(self.chunk_len());
         let window_start = run_start.max(chars.len().saturating_sub(cap));
 
-        let mut prefix = String::new();
-        for chunk in group_chunks(&chars[..window_start], self.chunk_len()) {
-            let chunk_reading: String = chunk.iter().collect();
-            if chunk_reading.chars().next().is_some_and(is_japanese) {
-                let lctx = self.lctx_for(&base_ctx, &prefix);
-                let converted = self.run_kana_kanji_conversion(&chunk_reading, &lctx, 1);
-                prefix.push_str(converted.first().unwrap_or(&chunk_reading));
-            } else {
-                prefix.push_str(&chunk_reading);
-            }
-        }
+        let prefix = self.convert_on_chunk_grid(&chars[..window_start], &base_ctx);
+        let window: String = chars[window_start..].iter().collect();
 
         // An empty window (the reading ends in a non-Japanese run) leaves
         // just the converted prefix as the single candidate.
-        let window: String = chars[window_start..].iter().collect();
         let tails = if window.is_empty() {
             vec![String::new()]
         } else {
@@ -1284,12 +1328,44 @@ impl InputMethodEngine {
             if beam.is_empty() { vec![window] } else { beam }
         };
 
+        // The head: the whole reading on the live-conversion chunk grid —
+        // exactly the conversion live typing displays, so Space and the AI
+        // view can never contradict the visible preedit. Normally a pure
+        // cache replay: typing populated the grid entries, and a no-seam
+        // reading's grid IS the window conversion above, whose main greedy
+        // half was just cached under the same MainModelOnly key. It runs
+        // after that conversion (to hit its entry) and the metrics are
+        // restored so the aux keeps describing the window call.
+        let saved_ms = self.metrics.conversion_ms;
+        let saved_model = self.metrics.model_name.clone();
+        let live_top1 = self.convert_on_chunk_grid(&chars, &base_ctx);
+        self.metrics.conversion_ms = saved_ms;
+        self.metrics.model_name = saved_model;
+
         let mut seen = HashSet::new();
-        tails
-            .into_iter()
-            .map(|tail| format!("{prefix}{tail}"))
+        std::iter::once(live_top1)
+            .chain(tails.into_iter().map(|tail| format!("{prefix}{tail}")))
             .filter(|text| text != reading && seen.insert(text.clone()))
             .collect()
+    }
+
+    /// Top-1 conversion of `chars` on the live-conversion chunk grid:
+    /// Japanese chunks go through the model (conversion-cache hits while
+    /// the user types), non-Japanese chunks pass through verbatim, and
+    /// each chunk's lctx is `base_ctx` plus the converted text before it.
+    fn convert_on_chunk_grid(&mut self, chars: &[char], base_ctx: &str) -> String {
+        let mut text = String::new();
+        for chunk in group_chunks(chars, self.chunk_len()) {
+            let chunk_reading: String = chunk.iter().collect();
+            if chunk_reading.chars().next().is_some_and(is_japanese) {
+                let lctx = self.lctx_for(base_ctx, &text);
+                let converted = self.run_kana_kanji_conversion(&chunk_reading, &lctx, 1);
+                text.push_str(converted.first().unwrap_or(&chunk_reading));
+            } else {
+                text.push_str(&chunk_reading);
+            }
+        }
+        text
     }
 
     /// Cancel conversion and return to hiragana
