@@ -36,16 +36,17 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     engine
 }
 
-/// Seed the conversion cache so a `MainModelOnly` call for `katakana`
+/// Seed the conversion cache so a main-model greedy call for `katakana`
 /// with `lctx` returns `texts` — a deterministic stand-in for the model
-/// (with no converter loaded every strategy resolves to `MainModelOnly`,
-/// and tests that beam under a real converter pin `StrategyMode::Main`).
+/// (with no converter loaded every strategy resolves to main greedy, and
+/// tests that beam under a real converter pin `StrategyMode::Main`).
 fn seed_model_cache(engine: &mut InputMethodEngine, katakana: &str, lctx: &str, texts: &[&str]) {
     engine.conversion_cache.insert(
         crate::core::engine::cache::ConversionCacheKey {
             katakana: katakana.to_string(),
             lctx: lctx.to_string(),
-            strategy: ConversionStrategy::MainModelOnly,
+            model: crate::core::engine::cache::ModelRole::Main,
+            beam_width: 1,
         },
         texts.iter().map(|s| s.to_string()).collect(),
     );

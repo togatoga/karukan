@@ -228,3 +228,41 @@ fn test_config_default_max_latency_ms() {
     let config = EngineConfig::default();
     assert_eq!(config.max_latency_ms, 100);
 }
+
+#[test]
+fn test_light_request_reuses_the_main_models_cache_entry() {
+    // After a latency downgrade the light model asks for readings the main
+    // model already converted (typing filled those entries). Serving them
+    // from the main entry keeps backspacing through the word inference-free
+    // — and at the better model's quality.
+    let mut engine = InputMethodEngine::new();
+    seed_model_cache(&mut engine, "アイ", "", &["愛"]);
+
+    assert_eq!(
+        engine.cached_result(ModelRole::Light, 1, "アイ", ""),
+        Some(vec!["愛".to_string()]),
+    );
+    // A wider beam is a different computation: no substitution.
+    assert_eq!(engine.cached_result(ModelRole::Light, 3, "アイ", ""), None);
+}
+
+#[test]
+fn test_main_request_never_reuses_a_light_cache_entry() {
+    // The reverse substitution would silently downgrade quality.
+    let mut engine = InputMethodEngine::new();
+    engine.conversion_cache.insert(
+        crate::core::engine::cache::ConversionCacheKey {
+            katakana: "アイ".to_string(),
+            lctx: String::new(),
+            model: ModelRole::Light,
+            beam_width: 1,
+        },
+        vec!["藍".to_string()],
+    );
+
+    assert_eq!(engine.cached_result(ModelRole::Main, 1, "アイ", ""), None);
+    assert_eq!(
+        engine.cached_result(ModelRole::Light, 1, "アイ", ""),
+        Some(vec!["藍".to_string()]),
+    );
+}

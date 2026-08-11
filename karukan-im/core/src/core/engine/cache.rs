@@ -1,14 +1,21 @@
 //! LRU cache for model conversion results.
 //!
-//! Keyed by everything that determines a conversion's output: the katakana
-//! reading, the left context (lctx), and the [`ConversionStrategy`] (which
-//! carries the beam width). Live conversion re-runs every chunk on each
-//! keystroke and only cache misses reach the model, so unchanged chunks —
-//! and re-typed or backspaced-over text — come back instantly.
+//! Keyed by the computation itself — reading, left context, which model, and
+//! beam width — not by the strategy that asked for it. Strategies that share
+//! a computation therefore share its entry: `ParallelBeam`'s greedy half is
+//! the same thing `MainModelOnly` computes, and its beam half is what
+//! `LightModelBeam` computes, so switching strategies mid-word (the adaptive
+//! latency downgrade) reuses whatever already ran.
 
 use std::collections::HashMap;
 
-use super::ConversionStrategy;
+/// Which model a conversion ran on. In `Light` strategy mode the light model
+/// occupies the main slot, so this names the slot, not the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(in crate::core) enum ModelRole {
+    Main,
+    Light,
+}
 
 /// Everything that determines a model conversion's output.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -17,8 +24,10 @@ pub(in crate::core) struct ConversionCacheKey {
     pub katakana: String,
     /// Left context (lctx) fed to the model.
     pub lctx: String,
-    /// Model dispatch and beam width used for the conversion.
-    pub strategy: ConversionStrategy,
+    /// Which model ran the conversion.
+    pub model: ModelRole,
+    /// Requested candidate count (1 = greedy).
+    pub beam_width: usize,
 }
 
 struct Entry {
@@ -90,45 +99,49 @@ impl Default for ConversionCache {
 mod tests {
     use super::*;
 
-    fn key(katakana: &str, lctx: &str, strategy: ConversionStrategy) -> ConversionCacheKey {
+    fn key(katakana: &str, lctx: &str, model: ModelRole, beam_width: usize) -> ConversionCacheKey {
         ConversionCacheKey {
             katakana: katakana.to_string(),
             lctx: lctx.to_string(),
-            strategy,
+            model,
+            beam_width,
         }
+    }
+
+    fn greedy(katakana: &str, lctx: &str) -> ConversionCacheKey {
+        key(katakana, lctx, ModelRole::Main, 1)
     }
 
     #[test]
     fn hit_and_miss() {
         let mut cache = ConversionCache::new(4);
-        let k = key("キョウ", "", ConversionStrategy::MainModelOnly);
+        let k = greedy("キョウ", "");
         assert_eq!(cache.get(&k), None);
         cache.insert(k.clone(), vec!["今日".to_string()]);
         assert_eq!(cache.get(&k), Some(vec!["今日".to_string()]));
     }
 
     #[test]
-    fn distinct_lctx_and_strategy_are_distinct_keys() {
+    fn every_key_field_distinguishes_entries() {
         let mut cache = ConversionCache::new(4);
-        let k1 = key("キョウ", "", ConversionStrategy::MainModelOnly);
-        let k2 = key("キョウ", "昨日と", ConversionStrategy::MainModelOnly);
-        let k3 = key(
-            "キョウ",
-            "",
-            ConversionStrategy::MainModelBeam { beam_width: 3 },
-        );
+        let k1 = greedy("キョウ", "");
         cache.insert(k1.clone(), vec!["今日".to_string()]);
-        assert_eq!(cache.get(&k2), None);
-        assert_eq!(cache.get(&k3), None);
+        for other in [
+            greedy("キョウ", "昨日と"),
+            key("キョウ", "", ModelRole::Main, 3),
+            key("キョウ", "", ModelRole::Light, 1),
+        ] {
+            assert_eq!(cache.get(&other), None);
+        }
         assert_eq!(cache.get(&k1), Some(vec!["今日".to_string()]));
     }
 
     #[test]
     fn evicts_least_recently_used() {
         let mut cache = ConversionCache::new(2);
-        let k1 = key("ア", "", ConversionStrategy::MainModelOnly);
-        let k2 = key("イ", "", ConversionStrategy::MainModelOnly);
-        let k3 = key("ウ", "", ConversionStrategy::MainModelOnly);
+        let k1 = greedy("ア", "");
+        let k2 = greedy("イ", "");
+        let k3 = greedy("ウ", "");
         cache.insert(k1.clone(), vec!["亜".to_string()]);
         cache.insert(k2.clone(), vec!["伊".to_string()]);
         // Touch k1 so k2 becomes the eviction target.
@@ -142,8 +155,8 @@ mod tests {
     #[test]
     fn reinserting_existing_key_does_not_evict() {
         let mut cache = ConversionCache::new(2);
-        let k1 = key("ア", "", ConversionStrategy::MainModelOnly);
-        let k2 = key("イ", "", ConversionStrategy::MainModelOnly);
+        let k1 = greedy("ア", "");
+        let k2 = greedy("イ", "");
         cache.insert(k1.clone(), vec!["亜".to_string()]);
         cache.insert(k2.clone(), vec!["伊".to_string()]);
         cache.insert(k1.clone(), vec!["阿".to_string()]);

@@ -17,7 +17,7 @@ mod types;
 
 pub use types::*;
 
-use cache::{ConversionCache, ConversionCacheKey};
+use cache::{ConversionCache, ConversionCacheKey, ModelRole};
 use input_buffer::InputBuffer;
 
 #[cfg(test)]
@@ -69,6 +69,18 @@ impl AnnotatedCandidate {
     fn with_description(mut self, description: Option<String>) -> Self {
         self.description = description;
         self
+    }
+
+    /// Into the public [`Candidate`], falling back to `reading` for
+    /// candidates that don't carry one of their own (predictive results do).
+    /// The source rides along; its presentation is derived on read.
+    fn into_candidate(self, reading: &str) -> Candidate {
+        Candidate {
+            text: self.text,
+            reading: Some(self.reading.unwrap_or_else(|| reading.to_string())),
+            source: Some(self.source),
+            description: self.description,
+        }
     }
 }
 

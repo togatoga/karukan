@@ -7,7 +7,6 @@
 
 use super::*;
 use crate::core::engine::EngineConfig;
-use crate::core::engine::cache::ConversionCacheKey;
 
 /// Engine with a small chunk length so chunks form with short test input.
 fn make_chunk_engine(chunk_len: usize) -> InputMethodEngine {
@@ -19,19 +18,11 @@ fn make_chunk_engine(chunk_len: usize) -> InputMethodEngine {
 }
 
 /// Seed the conversion cache as if the model had converted `katakana` with
-/// `lctx` to `converted`. With no model loaded the engine uses MainModelOnly,
-/// so a matching chunk conversion is served from this entry — which is how
-/// these tests observe "served from cache" vs "reconverted" (a miss falls back
-/// to the chunk's own reading).
+/// `lctx` to `converted`, so a matching chunk conversion is served from this
+/// entry — which is how these tests observe "served from cache" vs
+/// "reconverted" (a miss falls back to the chunk's own reading).
 fn seed_cache(engine: &mut InputMethodEngine, katakana: &str, lctx: &str, converted: &str) {
-    engine.conversion_cache.insert(
-        ConversionCacheKey {
-            katakana: katakana.to_string(),
-            lctx: lctx.to_string(),
-            strategy: ConversionStrategy::MainModelOnly,
-        },
-        vec![converted.to_string()],
-    );
+    seed_model_cache(engine, katakana, lctx, &[converted]);
 }
 
 /// Type `あいうえ` (4 hiragana chars) via romaji.
