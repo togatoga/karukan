@@ -19,11 +19,6 @@ impl InputMethodEngine {
         }
     }
 
-    /// Get the caret position in the display text (in characters)
-    pub(super) fn display_caret_position(&self) -> usize {
-        self.input_buf.cursor()
-    }
-
     /// The current live-conversion text: the concatenated converted text of
     /// the chunks while the live display is shown, empty otherwise. Derived
     /// on demand — the string is never stored, so it cannot go stale against
@@ -51,7 +46,7 @@ impl InputMethodEngine {
             let caret = display.chars().count();
             (display, caret)
         } else {
-            (self.build_input_display(), self.display_caret_position())
+            (self.build_input_display(), self.input_buf.cursor())
         };
         let mut preedit = Preedit::with_text_underlined(&display);
         preedit.set_caret(caret);
