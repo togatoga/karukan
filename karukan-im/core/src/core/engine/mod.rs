@@ -287,6 +287,49 @@ impl InputMethodEngine {
         self.mode.exit_temporary();
     }
 
+    /// The candidate list currently on screen: the conversion's own list, or
+    /// the suggestion list shown while composing. One accessor so keys that
+    /// act on "what the user is looking at" — digit selection — do not need
+    /// to know which state produced it.
+    fn shown_candidates_mut(&mut self) -> Option<&mut CandidateList> {
+        match &mut self.state {
+            InputState::Conversion { candidates, .. } => Some(candidates),
+            InputState::Composing { .. } => Some(&mut self.shown_suggestions),
+            InputState::Empty => None,
+        }
+    }
+
+    /// Ctrl+1..9: commit the numbered candidate from the list on screen,
+    /// whether it came from a conversion or from the composing suggestions.
+    /// Consumed even with nothing to select, so the chord never leaks to the
+    /// application.
+    pub(super) fn select_shown_candidate(&mut self, digit: usize) -> EngineResult {
+        let Some(candidates) = self.shown_candidates_mut() else {
+            return EngineResult::not_consumed();
+        };
+        if candidates.select_on_page(digit).is_none() {
+            return EngineResult::consumed();
+        }
+        let Some(selected) = candidates.selected() else {
+            return EngineResult::consumed();
+        };
+        let text = selected.text.clone();
+        let reading = selected.reading.clone();
+        if text.is_empty() {
+            return EngineResult::consumed();
+        }
+
+        // A suggestion always carries its reading; fall back to the buffer
+        // so a candidate built without one still records under a key.
+        let reading = reading.or_else(|| Some(self.input_buf.reading()));
+        self.finish_conversion(&text, &reading);
+
+        EngineResult::consumed()
+            .with_action(EngineAction::Commit(text))
+            .with_action(EngineAction::HideCandidates)
+            .with_action(EngineAction::HideAuxText)
+    }
+
     /// If the composition is empty, reset to Empty state and return the result.
     /// Returns None if elements remain (caller should continue normally).
     fn try_reset_if_empty(&mut self) -> Option<EngineResult> {

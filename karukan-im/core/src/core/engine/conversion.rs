@@ -569,7 +569,7 @@ impl InputMethodEngine {
                     // digits refine below like any printable character, so
                     // typing numbers never conflicts with selection.
                     if let Some(digit) = key.keysym.digit_value() {
-                        return self.select_candidate_by_digit(digit);
+                        return self.select_shown_candidate(digit);
                     }
                 }
 
@@ -823,33 +823,9 @@ impl InputMethodEngine {
     pub fn select_candidate_on_page(&mut self, page_index: usize) -> EngineResult {
         let start = std::time::Instant::now();
         self.metrics.conversion_ms = 0;
-        let result = self.select_candidate_by_digit(page_index + 1);
+        let result = self.select_shown_candidate(page_index + 1);
         self.metrics.process_key_ms = start.elapsed().as_millis() as u64;
         result
-    }
-
-    /// Select and commit the candidate at `digit` (1-9) on the current page.
-    fn select_candidate_by_digit(&mut self, digit: usize) -> EngineResult {
-        let (selected_text, reading) = {
-            let Some(candidates) = self.state.candidates_mut() else {
-                return EngineResult::not_consumed();
-            };
-
-            if candidates.select_on_page(digit).is_none() {
-                return EngineResult::consumed();
-            }
-
-            let text = candidates.selected_text().unwrap_or("").to_string();
-            let reading = candidates.selected().and_then(|c| c.reading.clone());
-            (text, reading)
-        };
-
-        self.finish_conversion(&selected_text, &reading);
-
-        EngineResult::consumed()
-            .with_action(EngineAction::HideCandidates)
-            .with_action(EngineAction::HideAuxText)
-            .with_action(EngineAction::Commit(selected_text))
     }
 
     /// Update preedit after candidate selection change

@@ -108,32 +108,6 @@ impl InputMethodEngine {
         EngineAction::ShowCandidates(self.shown_suggestions.clone())
     }
 
-    /// Ctrl+1..9 while composing: commit the numbered candidate straight from
-    /// the suggestion window, without a detour through the Conversion state.
-    /// Consumed even with nothing to select, so the chord never leaks to the
-    /// application.
-    fn select_suggestion_by_digit(&mut self, digit: usize) -> EngineResult {
-        let Some(candidate) = self.shown_suggestions.select_on_page(digit) else {
-            return EngineResult::consumed();
-        };
-        let text = candidate.text.clone();
-        let reading = candidate
-            .reading
-            .clone()
-            .unwrap_or_else(|| self.input_buf.reading());
-        if text.is_empty() {
-            return EngineResult::consumed();
-        }
-
-        self.record_learning(&reading, &text);
-        self.end_composition();
-
-        EngineResult::consumed()
-            .with_action(EngineAction::Commit(text))
-            .with_action(EngineAction::HideCandidates)
-            .with_action(EngineAction::HideAuxText)
-    }
-
     /// Process key in empty state
     pub(super) fn process_key_empty(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
         // Ctrl+Space: start input with full-width space
@@ -264,7 +238,7 @@ impl InputMethodEngine {
             // window. Bare digits stay plain text input, so numbers can be
             // typed mid-word without ever selecting a candidate.
             if let Some(digit) = key.keysym.digit_value() {
-                return self.select_suggestion_by_digit(digit);
+                return self.select_shown_candidate(digit);
             }
         }
 
