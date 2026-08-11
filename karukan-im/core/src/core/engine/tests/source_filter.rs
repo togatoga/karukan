@@ -40,6 +40,32 @@ fn shown_texts(engine: &InputMethodEngine) -> Vec<String> {
 
 /// Press Ctrl+R (or Ctrl+T) and assert the rewriter view: rewriter
 /// variants first, the plain kana pair at the tail, under the 🔄 header.
+/// Press Ctrl+R/T and assert the 📚 view opened: one stop covering both
+/// dictionaries, so its candidates carry either dictionary's source.
+fn cycle_expecting_dictionary_view(engine: &mut InputMethodEngine, forward: bool) {
+    let key = if forward {
+        Keysym::KEY_R
+    } else {
+        Keysym::KEY_T
+    };
+    let result = engine.process_key(&press_ctrl(key));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
+    assert!(
+        engine
+            .candidates()
+            .unwrap()
+            .candidates()
+            .iter()
+            .all(|c| matches!(
+                c.source,
+                Some(CandidateSource::UserDictionary | CandidateSource::Dictionary)
+            )),
+        "sources were: {:?}",
+        shown_sources(engine)
+    );
+}
+
 fn cycle_expecting_rewriter_view(engine: &mut InputMethodEngine, forward: bool) {
     let key = if forward {
         Keysym::KEY_R
@@ -129,7 +155,6 @@ fn test_cycle_visits_every_source_without_skipping() {
     // Every press moves exactly one step; empty sources are shown as
     // 「候補なし」, never skipped, so the position is always predictable.
     cycle_expecting(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
     cycle_expecting_empty(&mut engine, true, CandidateSource::Dictionary);
     cycle_expecting(&mut engine, true, CandidateSource::Model);
     cycle_expecting_rewriter_view(&mut engine, true);
@@ -264,9 +289,9 @@ fn test_dictionary_view_prefix_matches_from_one_char() {
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
     engine.process_key(&press_ctrl(Keysym::KEY_R)); // 学習（候補なし）
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // ユーザー辞書
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📚辞書
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
     let candidates = engine.candidates().unwrap().candidates().to_vec();
     let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
     assert!(
@@ -294,25 +319,25 @@ fn test_typing_narrows_within_the_filtered_view() {
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
     engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // 👤
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📚
     assert!(
         last_aux_text(&result)
             .expect("aux")
-            .starts_with("[変換:👤]")
+            .starts_with("[変換:📚]")
     );
     assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
 
     // Typing narrows the SAME view: reading grows to あい, only 藍 stays.
     let result = engine.process_key(&press('i'));
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(shown_texts(&engine), vec!["藍"]);
 
     // A pending consonant keeps the view too (tail-aware narrowing).
     let result = engine.process_key(&press('k'));
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
 }
 
 #[test]
@@ -331,12 +356,12 @@ fn test_backspace_widens_within_the_filtered_view() {
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
     engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 👤: [藍]
+    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📚: [藍]
     assert_eq!(shown_texts(&engine), vec!["藍"]);
 
     let result = engine.process_key(&press_key(Keysym::BACKSPACE));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
+    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
 
@@ -713,10 +738,11 @@ fn test_model_view_head_is_the_live_grid_conversion() {
 }
 
 #[test]
-fn test_system_view_keeps_surfaces_shared_with_user_dict() {
-    // Each dictionary view dedups within its own dictionary: a surface
-    // present in both stays visible in the 📚 view instead of being
-    // hidden by the 👤 copy.
+fn test_dictionary_view_merges_both_dictionaries_user_first() {
+    // One 📚 stop covers both dictionaries: usually the user just wants to
+    // look the reading up. Their own entries come first, a surface in both
+    // appears once as theirs, and each candidate still says which
+    // dictionary it came from.
     let mut engine = InputMethodEngine::new();
     // Deterministic model result (a cache hit stands in for the model).
     seed_model_cache(&mut engine, "アイ", "", &["合い"]);
@@ -731,12 +757,16 @@ fn test_system_view_keeps_surfaces_shared_with_user_dict() {
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
     cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting(&mut engine, true, CandidateSource::UserDictionary);
-    assert_eq!(shown_texts(&engine), vec!["藍"]);
-    cycle_expecting(&mut engine, true, CandidateSource::Dictionary);
-    let texts = shown_texts(&engine);
-    assert!(texts.contains(&"藍".to_string()), "texts were: {texts:?}");
-    assert!(texts.contains(&"愛".to_string()), "texts were: {texts:?}");
+    cycle_expecting_dictionary_view(&mut engine, true);
+
+    assert_eq!(shown_texts(&engine), vec!["藍", "愛"]);
+    assert_eq!(
+        shown_sources(&engine),
+        vec![
+            Some(CandidateSource::UserDictionary),
+            Some(CandidateSource::Dictionary),
+        ]
+    );
 }
 
 #[test]

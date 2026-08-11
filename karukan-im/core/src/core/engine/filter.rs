@@ -8,19 +8,18 @@ use super::conversion::width_annotation;
 use super::*;
 
 /// Ctrl+R/T rotate through the source views, grouped by what the user is
-/// looking for: what they taught the IME (learning, then their own
-/// dictionary), then what it knows (the system dictionary), then what it
-/// guesses (the model), then the mechanical rewrites. The model sits late
-/// on purpose — Ctrl+I reaches it in one press from anywhere, so the cycle
-/// does not have to keep it near the front.
+/// looking for: what they taught the IME (learning), what it has looked up
+/// (both dictionaries, as one stop), what it guessed (the model), and the
+/// mechanical rewrites. The model sits late on purpose — Ctrl+I reaches it
+/// in one press from anywhere, so the cycle does not have to keep it near
+/// the front.
 ///
 /// The full list is not a stop: it is what Space already shows, and
 /// Esc → Space returns to it. Fallback has no slot of its own — the plain
 /// kana ride at the tail of the rewriter view, which sits last so Ctrl+T
 /// reaches it in one press from the full list.
-const FILTER_CYCLE: [CandidateSource; 5] = [
+const FILTER_CYCLE: [CandidateSource; 4] = [
     CandidateSource::Learning,
-    CandidateSource::UserDictionary,
     CandidateSource::Dictionary,
     CandidateSource::Model,
     CandidateSource::Rewriter,
@@ -149,10 +148,17 @@ impl InputMethodEngine {
         let (base, pending) = self.live_query_split(reading);
         match source {
             CandidateSource::Learning => self.lookup_learning_history(&base, &pending),
+            // One dictionary view over both dictionaries: usually the user
+            // just wants to look the reading up, not to pick which book it
+            // comes from. `search_dictionaries` puts their own entries first
+            // and dedups by surface, and each candidate still carries the
+            // dictionary it came from, so 👤 and 📚 stay distinguishable in
+            // the aux without a stop of their own.
+            //
             // A paged dictionary browser wants everything: uncapped, and
             // predictive from the first char (no flood guard).
-            source @ (CandidateSource::UserDictionary | CandidateSource::Dictionary) => self
-                .search_dictionaries(&base, &pending, usize::MAX, usize::MAX, 1, Some(source))
+            CandidateSource::UserDictionary | CandidateSource::Dictionary => self
+                .search_dictionaries(&base, &pending, usize::MAX, usize::MAX, 1, None)
                 .into_iter()
                 .map(|ac| ac.into_candidate(&base))
                 .collect(),
