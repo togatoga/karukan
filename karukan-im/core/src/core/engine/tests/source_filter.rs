@@ -634,11 +634,13 @@ fn test_model_view_converts_japanese_run_and_passes_digits_through() {
 fn test_model_view_beams_a_tail_window_on_long_readings() {
     use crate::config::settings::StrategyMode;
     // A reading longer than one chunk: the beam window picks up the last
-    // chunk_len chars from the end, and the overflow ahead of it converts
+    // chunk_chars chars from the end, and the overflow ahead of it converts
     // top-1 into the prefix — so beam-width alternatives survive no
     // matter how long the reading grows.
     let mut engine = InputMethodEngine::new();
-    engine.config.composing_chunk_len = 2;
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 2;
     engine.config.strategy = StrategyMode::Main;
     seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     seed_model_cache(&mut engine, "ウエ", "合い", &["上", "植え"]);
@@ -658,7 +660,9 @@ fn test_space_conversion_beams_the_tail_window() {
     // window cap still gets beam-width model rows in the mixed list
     // (prefix top-1 + window beam) instead of one greedy candidate.
     let mut engine = InputMethodEngine::new();
-    engine.config.composing_chunk_len = 2;
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 2;
     engine.config.strategy = StrategyMode::Main;
     seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     seed_model_cache(&mut engine, "ウエ", "合い", &["上", "植え"]);
@@ -671,15 +675,14 @@ fn test_space_conversion_beams_the_tail_window() {
 }
 
 #[test]
-fn test_space_top1_is_the_live_grid_conversion_when_the_window_splits() {
-    // The tail window cuts at a raw char offset, so the seam can degrade
-    // both sides — while live conversion, chunking on its own grid, had
-    // the reading intact. The whole-reading top-1 on the live grid (a
-    // cache hit for what the user was just shown) must ride first, ahead
-    // of the seam-split window results.
+fn test_space_head_is_the_live_grid_conversion() {
+    // The window is the last chunk, so the text before it is exactly the
+    // chunks live conversion already converted: every candidate carries
+    // that same prefix, and the grid's own top-1 rides first.
     let mut engine = InputMethodEngine::new();
-    engine.config.beam_window_len = 2;
-    seed_model_cache(&mut engine, "アイウエ", "", &["愛飢え"]);
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 2;
     seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     seed_model_cache(&mut engine, "ウエ", "合い", &["上", "植え"]);
     for ch in ['a', 'i', 'u', 'e'] {
@@ -687,20 +690,17 @@ fn test_space_top1_is_the_live_grid_conversion_when_the_window_splits() {
     }
     engine.process_key(&press_key(Keysym::SPACE));
     let texts = shown_texts(&engine);
-    assert_eq!(
-        &texts[..3],
-        ["愛飢え", "合い上", "合い植え"],
-        "texts were: {texts:?}"
-    );
+    assert_eq!(&texts[..2], ["合い上", "合い植え"], "texts were: {texts:?}");
 }
 
 #[test]
-fn test_model_view_top1_is_the_live_grid_conversion_when_the_window_splits() {
+fn test_model_view_head_is_the_live_grid_conversion() {
     // The AI view shares the injected head: live-grid top-1 first, then
-    // the windowed beam alternatives.
+    // the windowed beam alternatives, all carrying the same prefix.
     let mut engine = InputMethodEngine::new();
-    engine.config.beam_window_len = 2;
-    seed_model_cache(&mut engine, "アイウエ", "", &["愛飢え"]);
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 2;
     seed_model_cache(&mut engine, "アイ", "", &["合い"]);
     seed_model_cache(&mut engine, "ウエ", "合い", &["上", "植え"]);
     for ch in ['a', 'i', 'u', 'e'] {
@@ -709,7 +709,7 @@ fn test_model_view_top1_is_the_live_grid_conversion_when_the_window_splits() {
     cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
     cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
     cycle_expecting(&mut engine, true, CandidateSource::Model);
-    assert_eq!(shown_texts(&engine), vec!["愛飢え", "合い上", "合い植え"]);
+    assert_eq!(shown_texts(&engine), vec!["合い上", "合い植え"]);
 }
 
 #[test]
@@ -769,4 +769,269 @@ fn test_mid_caret_typing_does_not_tail_predict() {
             .iter()
             .any(|a| matches!(a, EngineAction::Commit(text) if text == "あkい"))
     );
+}
+
+#[test]
+fn test_beam_span_follows_the_chunk_grid() {
+    // The window must start where live conversion actually splits, not at
+    // the last non-Japanese char: a mark kept inside a Japanese chunk is
+    // not a boundary, so the whole clause stays in the window and the
+    // prefix is exactly the text typing already converted.
+    let engine = InputMethodEngine::new();
+    let chars: Vec<char> = "おい、おまえだよ".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 0);
+
+    // A second mark does split: it becomes its own chunk, so the window is
+    // the clause after it.
+    let chars: Vec<char> = "おい、まて、こら".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 6);
+
+    // Digits split by default and have nothing to beam, so a reading
+    // ending in them leaves the window empty.
+    let chars: Vec<char> = "へや301".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), chars.len());
+}
+
+#[test]
+fn test_ai_view_respects_a_manual_chunk_break() {
+    // A break the user inserted with Ctrl+J must hold through the explicit
+    // conversion too: the AI view converts on the same grid, so the text
+    // left of the break stays the conversion the user already saw and only
+    // the chunk after it is beamed.
+    let mut engine = InputMethodEngine::new();
+    // Distinguishable per-chunk conversions: the second one only matches if
+    // the break really split the reading (and carried its lctx along).
+    seed_model_cache(&mut engine, "アイ", "", &["愛"]);
+    seed_model_cache(&mut engine, "ウエ", "愛", &["上"]);
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press('u'));
+    engine.process_key(&press('e'));
+    assert_eq!(engine.chunk_breaks, vec![2]);
+
+    // The window starts at the manual break, so the prefix is the frozen
+    // 「愛」 and only 「うえ」 is beamed.
+    let chars: Vec<char> = "あいうえ".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 2);
+
+    engine.process_key(&press_key(Keysym::SPACE));
+    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
+    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
+    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    assert_eq!(shown_texts(&engine), vec!["愛上"]);
+}
+
+#[test]
+fn test_conversion_aux_shows_the_beamed_chunk() {
+    // The conversion aux shows the span the alternatives cover, labelled,
+    // and nothing else — the same shape the composing aux uses for the
+    // chunk being typed.
+    let mut engine = InputMethodEngine::new();
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 2;
+    for ch in ['a', 'i', 'u', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.contains("🎯 うえ 2/2"), "the beam span is shown: {aux}");
+    assert!(!aux.contains("あいうえ"), "the frozen head is not: {aux}");
+
+    let mut engine = InputMethodEngine::new();
+    engine.config.verbose = true;
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(
+        aux.contains("🎯 あい 2/30"),
+        "whole reading is the span: {aux}"
+    );
+}
+
+#[test]
+fn test_aux_is_quiet_by_default() {
+    // The debug details are opt-in: a default engine shows the state, the
+    // reading and the selected candidate's source, nothing else.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.contains("あい"), "aux was: {aux}");
+    for noise in ["ms", "/30", "🎯", "jinen"] {
+        assert!(!aux.contains(noise), "`{noise}` must be opt-in: {aux}");
+    }
+}
+
+#[test]
+fn test_ctrl_j_narrows_the_window_without_leaving_the_conversion() {
+    // Ctrl+J splits at the caret while the conversion is on screen: the
+    // window shrinks to the text after the break and the source filter
+    // survives the rebuild.
+    let mut engine = InputMethodEngine::new();
+    for ch in ['a', 'i', 'u', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
+    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
+    assert!(
+        last_aux_text(&result)
+            .expect("aux")
+            .starts_with("[変換:🤖]")
+    );
+
+    // A break at the end of the reading arms the next chunk; one at the
+    // caret after moving would split. Here the caret sits at the end, so
+    // the break lands there and the conversion is rebuilt in place.
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(result.consumed);
+    assert_eq!(engine.chunk_breaks, vec![4]);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert!(
+        last_aux_text(&result)
+            .expect("aux")
+            .starts_with("[変換:🤖]"),
+        "the filter must survive the rebuild"
+    );
+}
+
+#[test]
+fn test_model_kana_top1_survives() {
+    // Words that stay in kana (きゃりーぱみゅぱみゅ) make the model's top-1
+    // equal the reading. That is a real answer, not a missing one, so it
+    // must reach the AI view instead of leaving it empty.
+    let mut engine = InputMethodEngine::new();
+    seed_model_cache(&mut engine, "アイ", "", &["あい"]);
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
+    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.starts_with("[変換:🤖]"), "aux was: {aux}");
+    assert_eq!(shown_texts(&engine), vec!["あい"]);
+}
+
+#[test]
+fn test_ctrl_j_in_conversion_shows_the_armed_chunk() {
+    // Breaking at the end of the reading arms an empty chunk: the counter
+    // restarts so the cut is visible, exactly as it does while composing.
+    let mut engine = InputMethodEngine::new();
+    engine.config.verbose = true;
+    for ch in ['a', 'i'] {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.contains("0/30"), "aux was: {aux}");
+}
+
+#[test]
+fn test_beam_span_grows_up_to_the_budget() {
+    // The span snaps to chunk boundaries: it grows backwards over Japanese
+    // chunks while `beam_chars` allows, and never less than one chunk.
+    let mut engine = InputMethodEngine::new();
+    engine.config.chunk_chars = 2;
+    let chars: Vec<char> = "あいうえおか".chars().collect();
+
+    engine.config.beam_chars = 2;
+    assert_eq!(engine.beam_span_start(&chars), 4, "one chunk");
+    engine.config.beam_chars = 4;
+    assert_eq!(engine.beam_span_start(&chars), 2, "two chunks");
+    engine.config.beam_chars = 30;
+    assert_eq!(engine.beam_span_start(&chars), 0, "all of it");
+}
+
+#[test]
+fn test_beam_span_stops_at_a_manual_break_and_at_digits() {
+    // Both walls hold however large the budget is: crossing a manual break
+    // would undo the freeze the user asked for, and crossing a digit chunk
+    // would hand the digits to the model.
+    let mut engine = InputMethodEngine::new();
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 30;
+
+    let chars: Vec<char> = "あいうえ".chars().collect();
+    engine.chunk_breaks = vec![2];
+    assert_eq!(engine.beam_span_start(&chars), 2, "manual break is a wall");
+
+    engine.chunk_breaks.clear();
+    let chars: Vec<char> = "あ12うえ".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 3, "digits are a wall");
+}
+
+#[test]
+fn test_beam_span_follows_the_symbol_and_digit_settings() {
+    // The span is built from `group_chunks`' own output, so the thresholds
+    // that shape chunks shape the span too: a mark inside the budget keeps
+    // the clause together, one past it walls the span off, and digits obey
+    // `chunk_digits` the same way.
+    let mut engine = InputMethodEngine::new();
+    engine.config.beam_chars = 30;
+
+    // chunk_symbols = 1: 「おい、まて」 is one chunk, the second mark walls.
+    let chars: Vec<char> = "おい、まて".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 0);
+    let chars: Vec<char> = "あ、い。う".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 4, "second mark walls");
+
+    // Raising it lets both marks ride along, so the whole reading is beamed.
+    engine.config.chunk_symbols = 2;
+    assert_eq!(engine.beam_span_start(&chars), 0);
+
+    // chunk_digits = 0: digits are their own chunk and wall the span.
+    engine.config.chunk_symbols = 1;
+    let chars: Vec<char> = "あ12うえ".chars().collect();
+    assert_eq!(engine.beam_span_start(&chars), 3);
+
+    // Raising it folds them into the Japanese chunk, so nothing walls.
+    engine.config.chunk_digits = 2;
+    assert_eq!(engine.beam_span_start(&chars), 0);
+}
+
+#[test]
+fn test_conversion_aux_counter_uses_the_beam_budget() {
+    // The span is bounded by `beam_chars`, so that is what the counter
+    // counts against — using the chunk length would read like 4/2.
+    let mut engine = InputMethodEngine::new();
+    engine.config.verbose = true;
+    engine.config.chunk_chars = 2;
+    engine.config.beam_chars = 8;
+    for ch in ['a', 'i', 'u', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.contains("🎯 あいうえ 4/8"), "aux was: {aux}");
+}
+
+#[test]
+fn test_verbose_toggle_keeps_what_conversion_needs() {
+    // Ctrl+Shift+V only adds or removes the debug details. What the user
+    // needs to convert — the state, the reading, the candidate's source —
+    // stays either way.
+    let mut engine = engine_with_learned("あい", "愛");
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    let quiet = last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux");
+    assert!(quiet.starts_with("[変換]"), "state: {quiet}");
+    assert!(quiet.contains("あい"), "reading: {quiet}");
+    assert!(quiet.contains("📝"), "candidate source: {quiet}");
+    assert!(!quiet.contains("推論"), "timing is a detail: {quiet}");
+
+    // The toggle re-renders the line being looked at, so the details show
+    // now rather than on the next keystroke.
+    let loud = last_aux_text(&engine.process_key(&press_ctrl_shift(Keysym::KEY_V))).expect("aux");
+    assert!(loud.starts_with("[変換]"), "state: {loud}");
+    assert!(loud.contains("あい"), "reading: {loud}");
+    assert!(loud.contains("📝"), "candidate source: {loud}");
+    assert!(loud.contains("推論"), "timing now shown: {loud}");
 }

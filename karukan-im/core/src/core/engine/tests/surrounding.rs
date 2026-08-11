@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn test_surrounding_text_sets_context() {
     let mut engine = InputMethodEngine::new();
-    engine.config.max_api_context_len = 50;
+    engine.config.context_chars = 50;
 
     engine.set_surrounding_context("エディタの文章", "");
     assert_eq!(
@@ -17,7 +17,7 @@ fn test_surrounding_text_sets_context() {
 #[test]
 fn test_surrounding_text_overwrites_context() {
     let mut engine = InputMethodEngine::new();
-    engine.config.max_api_context_len = 50;
+    engine.config.context_chars = 50;
 
     // First, set some internal context (without surrounding text)
     engine.surrounding_context = Some(SurroundingContext {
@@ -75,9 +75,9 @@ fn test_surrounding_text_multiple_updates() {
 #[test]
 fn test_surrounding_text_respects_max_length() {
     let mut engine = InputMethodEngine::new();
-    engine.config.max_api_context_len = 10;
+    engine.config.context_chars = 10;
 
-    // Use a string longer than max_api_context_len
+    // Use a string longer than context_chars
     let long_text = "あ".repeat(20);
     engine.set_surrounding_context(&long_text, "");
 
@@ -223,9 +223,9 @@ fn test_set_surrounding_context_right_only() {
 #[test]
 fn test_set_surrounding_context_truncation() {
     let mut engine = InputMethodEngine::new();
-    engine.config.max_api_context_len = 5;
+    engine.config.context_chars = 5;
 
-    // Use strings longer than max_api_context_len
+    // Use strings longer than context_chars
     engine.set_surrounding_context("左側が長すぎるテキスト", "右側が長すぎるテキスト");
 
     let ctx = engine.surrounding_context.as_ref().unwrap();
@@ -244,7 +244,7 @@ fn test_set_surrounding_context_truncation() {
 #[test]
 fn test_display_context_lctx_rctx_format() {
     let mut engine = InputMethodEngine::new();
-    engine.config.display_context_len = 10;
+    engine.config.display_context_chars = 10;
 
     // Both contexts
     engine.set_surrounding_context("左側", "右側");
@@ -276,8 +276,8 @@ fn test_display_context_lctx_rctx_format() {
 #[test]
 fn test_display_context_truncation() {
     let mut engine = InputMethodEngine::new();
-    engine.config.max_api_context_len = 50;
-    engine.config.display_context_len = 5;
+    engine.config.context_chars = 50;
+    engine.config.display_context_chars = 5;
 
     engine.set_surrounding_context("とても長い左側テキスト", "とても長い右側テキスト");
 

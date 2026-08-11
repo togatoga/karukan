@@ -4,16 +4,16 @@ use super::*;
 // --- ConversionStrategy tests ---
 
 /// Helper to create a config with specific thresholds
-fn strategy_config(beam_window_len: usize, beam_width: usize) -> EngineConfig {
+fn strategy_config(chunk_chars: usize, beam_width: usize) -> EngineConfig {
     EngineConfig {
-        beam_window_len,
+        chunk_chars,
         beam_width,
         num_candidates: 9,
         ..EngineConfig::default()
     }
 }
 
-/// Default test config: beam_window_len=10, beam_width=3, max_latency_ms=100
+/// Default test config: chunk_chars=10, beam_width=3, max_latency_ms=100
 fn default_strategy_config() -> EngineConfig {
     strategy_config(10, 3)
 }

@@ -299,7 +299,7 @@ impl InputMethodEngine {
             debug!("Failed to initialize kanji converter: {}", e);
         }
 
-        let candidates = self.windowed_model_candidates(reading, num_candidates);
+        let candidates = self.model_candidates(reading, num_candidates);
 
         let hiragana = reading.to_string();
         let katakana = karukan_engine::hiragana_to_katakana(reading);
@@ -557,6 +557,11 @@ impl InputMethodEngine {
                         Keysym::KEY_T | Keysym::KEY_T_UPPER => {
                             return self.cycle_candidate_filter(FilterDirection::Backward);
                         }
+                        // Ctrl+J: split at the caret and rebuild, so the
+                        // alternatives cover only the text after the break.
+                        Keysym::KEY_J | Keysym::KEY_J_UPPER => {
+                            return self.rebreak_conversion();
+                        }
                         _ => {}
                     }
 
@@ -589,16 +594,42 @@ impl InputMethodEngine {
     /// is discarded, so its auto-suggest inference is suppressed.
     fn refine_through_composing(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
         let filter = self.state.filter();
-        self.set_composing_state();
-        self.suppress_suggest = filter.is_some();
-        let result = self.process_key_composing(key, shift_active);
-        self.suppress_suggest = false;
+        let result = self.in_composing(filter.is_some(), |engine| {
+            engine.process_key_composing(key, shift_active)
+        });
         if let Some(source) = filter
             && matches!(self.state, InputState::Composing { .. })
         {
             return self.start_conversion_with_filter(source);
         }
         result
+    }
+
+    /// Insert a chunk break at the caret without leaving the conversion.
+    /// The span is the last chunk, so breaking narrows what the beam
+    /// covers; the rebuilt list keeps the active source filter. The
+    /// intermediate composing render is discarded, so its auto-suggest
+    /// inference is suppressed.
+    fn rebreak_conversion(&mut self) -> EngineResult {
+        let filter = self.state.filter();
+        self.in_composing(true, |engine| engine.insert_chunk_break());
+        match filter {
+            Some(source) => self.start_conversion_with_filter(source),
+            None => self.start_conversion(LearningLookup::Use),
+        }
+    }
+
+    /// Drop back to the untouched composition and run `edit` there. Set
+    /// `discard_render` when the caller rebuilds the conversion afterwards:
+    /// the composing render is thrown away, so its auto-suggest inference
+    /// would be pure waste. The flag lives and dies inside this call, so no
+    /// other path can inherit it.
+    fn in_composing<R>(&mut self, discard_render: bool, edit: impl FnOnce(&mut Self) -> R) -> R {
+        self.set_composing_state();
+        self.suppress_suggest = discard_render;
+        let out = edit(self);
+        self.suppress_suggest = false;
+        out
     }
 
     /// Get selected text and reading from conversion state, or None if not in conversion

@@ -9,9 +9,11 @@ use super::*;
 use crate::core::engine::EngineConfig;
 
 /// Engine with a small chunk length so chunks form with short test input.
-fn make_chunk_engine(chunk_len: usize) -> InputMethodEngine {
+fn make_chunk_engine(chunk_chars: usize) -> InputMethodEngine {
     let config = EngineConfig {
-        composing_chunk_len: chunk_len,
+        chunk_chars,
+        // These tests assert on the aux line, which is quiet by default.
+        verbose: true,
         ..EngineConfig::default()
     };
     InputMethodEngine::with_config(config)
@@ -40,49 +42,57 @@ fn test_buffer_split_into_chunks_of_n_chars() {
 }
 
 #[test]
-fn test_typed_punctuation_splits_chunks() {
-    // Real keystroke path: "," → "、" and "." → "。" via romaji. Punctuation is
-    // non-Japanese, so each mark forms its own chunk and separates the clauses.
+fn test_typed_punctuation_is_absorbed() {
+    // Real keystroke path: "," → "、" and "." → "。" via romaji. One mark
+    // rides along with the Japanese around it, so the clause keeps
+    // reconverting as one unit instead of freezing at the mark; the second
+    // mark opens a new chunk.
     let mut engine = make_chunk_engine(40);
-    for k in ['h', 'a', ',', 'j', 'i', '.', 'm', 'e'] {
+    for k in ['h', 'a', ',', 'j', 'i'] {
         engine.process_key(&press(k));
     }
-    assert_eq!(engine.input_buf.reading(), "は、じ。め");
+    assert_eq!(engine.input_buf.reading(), "は、じ");
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
-    assert_eq!(readings, vec!["は", "、", "じ", "。", "め"]);
+    assert_eq!(readings, vec!["は、じ"]);
+
+    engine.process_key(&press('.')); // 。 — the chunk already holds one mark
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["は、じ", "。"]);
 }
 
 #[test]
-fn test_typed_digits_form_their_own_chunk() {
-    // Real keystroke path: a digit run typed amid hiragana is split into its
-    // own chunk so it is passed through verbatim, never sent to the model
-    // (which tends to drop digits mid-run).
+fn test_long_digit_run_forms_its_own_chunk() {
+    // Real keystroke path: a digit run longer than the symbol cap (2) splits
+    // off whole into its own chunk — never torn mid-run — and is passed
+    // through verbatim, never sent to the model.
     let mut engine = make_chunk_engine(40);
-    for k in ['a', '1', '2', '3', 'i'] {
+    for k in ['a', '1', '2', '3', '4', 'i'] {
         engine.process_key(&press(k));
     }
-    assert_eq!(engine.input_buf.reading(), "あ123い");
+    assert_eq!(engine.input_buf.reading(), "あ1234い");
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
-    assert_eq!(readings, vec!["あ", "123", "い"]);
+    assert_eq!(readings, vec!["あ", "1234", "い"]);
 }
 
 #[test]
 fn test_non_japanese_chunk_passes_through_and_japanese_stays_cached() {
-    // Appending a digit after a Japanese chunk does not reconvert it: the
-    // digit starts its own non-Japanese chunk (passed through verbatim), and
-    // the Japanese chunk — same reading, same lctx — is a cache hit.
+    // Digits are absorbed while the run fits the cap (2); the keystroke that
+    // a digit run too long for the budget opens its own verbatim chunk,
+    // and the Japanese chunk — unchanged reading and lctx — stays a cache
+    // hit.
     let mut engine = make_chunk_engine(40);
     seed_model_cache(&mut engine, "アイ", "", &["KEEP"]);
     engine.process_key(&press('a'));
-    engine.process_key(&press('i')); // "あい" → one Japanese chunk
-    assert_eq!(engine.chunks.len(), 1);
+    engine.process_key(&press('i'));
     assert_eq!(engine.chunks[0].converted, "KEEP");
 
-    engine.process_key(&press('1')); // "あい1"
+    for k in ['1', '2', '3'] {
+        engine.process_key(&press(k));
+    }
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
-    assert_eq!(readings, vec!["あい", "1"]);
+    assert_eq!(readings, vec!["あい", "123"]);
     assert_eq!(engine.chunks[0].converted, "KEEP"); // cache hit, not reconverted
-    assert_eq!(engine.chunks[1].converted, "1"); // non-Japanese chunk verbatim
+    assert_eq!(engine.chunks[1].converted, "123"); // non-Japanese chunk verbatim
 }
 
 #[test]
@@ -98,17 +108,17 @@ fn test_katakana_word_with_prolonged_mark_stays_one_chunk() {
 }
 
 #[test]
-fn test_chunks_break_at_punctuation() {
-    // With a large chunk length nothing is split by char count, so the only
-    // boundaries come from group changes: each punctuation mark is its own
-    // non-Japanese chunk, separating the Japanese clauses around it.
+fn test_symbols_within_budget_stay_in_one_chunk() {
+    // With a large chunk length and one symbol (within the absorb budget),
+    // the whole clause is a single chunk sent to the model — no premature
+    // boundary at the punctuation.
     let mut engine = make_chunk_engine(40);
     engine.input_buf.clear();
-    engine.input_buf.insert("あ、いう。え");
+    engine.input_buf.insert("あ、いうえ");
     engine.chunked_auto_suggest();
 
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
-    assert_eq!(readings, vec!["あ", "、", "いう", "。", "え"]);
+    assert_eq!(readings, vec!["あ、いうえ"]);
 }
 
 #[test]
@@ -149,7 +159,7 @@ fn test_chunk_lctx_is_left_chunk_value() {
     type_aiue(&mut engine);
     assert!(engine.chunks.len() >= 2);
 
-    let budget = engine.config.max_api_context_len;
+    let budget = engine.config.context_chars;
     let mut left = String::new();
     for i in 0..engine.chunks.len() {
         // lctx is derived on demand from the preceding chunks' converted text.
@@ -176,17 +186,17 @@ fn test_current_chunk_index_tracks_cursor() {
 
 #[test]
 fn test_current_chunk_index_with_variable_length_chunks() {
-    // Punctuation produces single-char non-Japanese chunks, so the index must
-    // be found by walking actual chunk lengths — not a fixed cursor / chunk_len
-    // division.
+    // A long digit run produces a variable-length chunk layout, so the index
+    // must be found by walking actual chunk lengths — not a fixed
+    // cursor / chunk_chars division.
     let mut engine = make_chunk_engine(40);
     engine.input_buf.clear();
-    engine.input_buf.insert("は、じ。め"); // chunks ["は", "、", "じ", "。", "め"]
+    engine.input_buf.insert("あ1234いう"); // chunks ["あ", "1234", "いう"]
     engine.chunked_auto_suggest();
-    assert_eq!(engine.chunks.len(), 5);
+    assert_eq!(engine.chunks.len(), 3);
 
     // cursor pos → expected chunk index
-    for (pos, expected) in [(0, 0), (1, 0), (2, 1), (3, 2), (4, 3), (5, 4)] {
+    for (pos, expected) in [(0, 0), (1, 0), (2, 1), (5, 1), (6, 2), (7, 2)] {
         engine.input_buf.set_cursor(pos);
         assert_eq!(
             engine.current_chunk_index(),
@@ -348,6 +358,150 @@ fn test_aux_text_lctx_is_current_chunk_lctx() {
         !aux.contains("chunk "),
         "aux should have a single lctx: {aux}"
     );
+}
+
+#[test]
+fn test_ctrl_j_starts_a_new_chunk() {
+    // Ctrl+J places a manual boundary at the caret: the settled text stops
+    // reconverting and the next keystroke starts a fresh chunk.
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine); // "あいうえ" → one chunk
+    assert_eq!(engine.chunks.len(), 1);
+
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert_eq!(engine.chunk_breaks, vec![4]);
+
+    engine.process_key(&press('o')); // "あいうえお"
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あいうえ", "お"]);
+}
+
+#[test]
+fn test_ctrl_j_at_end_shows_empty_new_chunk_in_aux() {
+    // A break armed at the end of the reading has no chunk text yet; the aux
+    // must switch to the new empty chunk (0/max) so the user can see the cut
+    // happened at all.
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine);
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("0/40"), "aux was: {aux}");
+    assert_eq!(engine.current_chunk_index(), engine.chunks.len());
+    // The new chunk's lctx is everything before the break.
+    assert!(aux.contains("lctx:"), "aux was: {aux}");
+
+    // The next keystroke opens the chunk for real: 1 char used.
+    let result = engine.process_key(&press('o'));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("お 1/40"), "aux was: {aux}");
+}
+
+#[test]
+fn test_caret_on_manual_break_tracks_right_chunk() {
+    // On a mid-reading manual break the next keystroke joins the right-hand
+    // chunk (the boundary stays left of the insert), so that is the chunk
+    // the aux shows.
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine);
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT)); // caret between い and う
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_J)); // ["あい", "うえ"]
+    assert_eq!(engine.current_chunk_index(), 1);
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("うえ 2/40"), "aux was: {aux}");
+}
+
+#[test]
+fn test_ctrl_j_freezes_left_chunk_conversion() {
+    // The chunk left of a manual boundary keeps its reading and lctx as
+    // typing continues, so it stays a cache hit and never flickers.
+    let mut engine = make_chunk_engine(40);
+    seed_model_cache(&mut engine, "アイウエ", "", &["KEEP"]);
+    type_aiue(&mut engine);
+    assert_eq!(engine.chunks[0].converted, "KEEP");
+
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press('o'));
+    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press('k'));
+    engine.process_key(&press('a'));
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あいうえ", "か"]);
+    assert_eq!(engine.chunks[0].converted, "KEEP");
+}
+
+#[test]
+fn test_ctrl_j_overrides_symbol_absorption() {
+    // Absorption would keep 「あいうえ、」 one chunk; a manual boundary at
+    // the mark forces the split the user asked for.
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine);
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press(',')); // 、
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["あいうえ", "、"]);
+}
+
+#[test]
+fn test_manual_break_shifts_with_edits_to_its_left() {
+    // Typing before a manual boundary moves it with the text, so it keeps
+    // pointing at the same spot in the reading.
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine);
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press('o')); // ["あいうえ", "お"]
+
+    engine.process_key(&press_key(Keysym::HOME));
+    engine.process_key(&press('k'));
+    engine.process_key(&press('a')); // "かあいうえお"
+    assert_eq!(engine.input_buf.reading(), "かあいうえお");
+    let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
+    assert_eq!(readings, vec!["かあいうえ", "お"]);
+}
+
+#[test]
+fn test_manual_break_cleared_on_commit() {
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine);
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(!engine.chunk_breaks.is_empty());
+
+    engine.process_key(&press_key(Keysym::RETURN));
+    assert!(engine.chunk_breaks.is_empty());
+}
+
+#[test]
+fn test_manual_break_dropped_when_erased_past() {
+    // Backspacing the right-hand chunk away leaves the boundary at the end
+    // of the reading (still armed); erasing further keeps it in range.
+    let mut engine = make_chunk_engine(40);
+    type_aiue(&mut engine);
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press('o')); // ["あいうえ", "お"]
+
+    for _ in 0..5 {
+        engine.process_key(&press_key(Keysym::BACKSPACE));
+    }
+    assert!(matches!(engine.state(), InputState::Empty));
+    assert!(engine.chunk_breaks.is_empty());
+}
+
+#[test]
+fn test_aux_shows_current_chunk_with_fill_counter() {
+    // The aux reading is the chunk under the caret plus a used/max counter,
+    // and it follows cursor movement across chunks.
+    let mut engine = make_chunk_engine(2);
+    engine.process_key(&press('a'));
+    let result = engine.process_key(&press('a'));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("ああ 2/2"), "aux was: {aux}");
+
+    type_aiue(&mut engine); // "ああ" + "あいうえ" → ["ああ", "あい", "うえ"]
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+    let result = engine.process_key(&press_key(Keysym::LEFT)); // caret inside "あい"
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("あい 2/2"), "aux was: {aux}");
 }
 
 #[test]

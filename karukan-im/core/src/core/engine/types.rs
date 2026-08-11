@@ -69,25 +69,31 @@ pub struct EngineConfig {
     /// Number of conversion candidates for explicit conversion (Space key)
     pub num_candidates: usize,
     /// Maximum context length to display
-    pub display_context_len: usize,
+    pub display_context_chars: usize,
     /// Maximum context length for API calls (to avoid overflow)
-    pub max_api_context_len: usize,
+    pub context_chars: usize,
     /// Maximum reading length (chars) converted by the model in a single call.
     /// The composing buffer is split into chunks of at most this many chars so
     /// live-conversion latency stays bounded for long input. See
     /// [`ComposingChunk`] and `chunked_auto_suggest`.
-    pub composing_chunk_len: usize,
-    /// Length in chars of the tail window the beam runs over: explicit
-    /// conversion beams the last `beam_window_len` chars of the final
-    /// Japanese run and converts everything before it top-1.
-    pub beam_window_len: usize,
-    /// Beam width for the windowed beam search
+    pub chunk_chars: usize,
+    /// Maximum non-Japanese chars (symbols/digits) a Japanese chunk absorbs
+    /// in total during live conversion; the absorption rules live in
+    /// `group_chunks`.
+    pub chunk_symbols: usize,
+    /// Digits a chunk containing Japanese keeps (0 = split at every run).
+    pub chunk_digits: usize,
+    /// Chars the beam covers, snapped to chunk boundaries.
+    pub beam_chars: usize,
+    /// Beam width: how many alternatives the beam returns
     pub beam_width: usize,
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model
     pub max_latency_ms: u64,
     /// Conversion strategy mode (adaptive, light, main)
     pub strategy: StrategyMode,
+    /// Show the detailed aux line (Ctrl+Shift+V toggles it).
+    pub verbose: bool,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
 }
@@ -98,17 +104,20 @@ impl EngineConfig {
     pub fn from_settings(settings: &crate::config::Settings) -> Self {
         Self {
             num_candidates: settings.conversion.num_candidates,
-            display_context_len: 10,
-            max_api_context_len: if settings.conversion.use_context {
-                settings.conversion.max_context_length
+            display_context_chars: 10,
+            context_chars: if settings.conversion.use_context {
+                settings.conversion.context_chars
             } else {
                 0
             },
-            composing_chunk_len: settings.conversion.composing_chunk_len,
-            beam_window_len: settings.conversion.beam_window_len,
+            chunk_chars: settings.conversion.chunk_chars,
+            chunk_symbols: settings.conversion.chunk_symbols,
+            chunk_digits: settings.conversion.chunk_digits,
+            beam_chars: settings.conversion.beam_chars,
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
+            verbose: settings.display.verbose,
             live_conversion: settings.conversion.live_conversion,
         }
     }
@@ -118,13 +127,16 @@ impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             num_candidates: 3, // Space conversion: beam search with 3 candidates
-            display_context_len: 10,
-            max_api_context_len: 10,
-            composing_chunk_len: 30,
-            beam_window_len: 20,
+            display_context_chars: 10,
+            context_chars: 10,
+            chunk_chars: 30,
+            chunk_symbols: 1,
+            chunk_digits: 0,
+            beam_chars: 30,
             beam_width: 3,
             max_latency_ms: 100,
             strategy: StrategyMode::default(),
+            verbose: false,
             live_conversion: false,
         }
     }

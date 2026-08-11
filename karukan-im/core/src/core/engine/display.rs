@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// Marks the part of the reading the beam produced alternatives for.
+const BEAM_SPAN_LABEL: &str = "🎯";
+
 /// Deletion hint appended to the conversion aux text while a learning-cache
 /// candidate is selected. Names Backspace rather than Delete because the Mac
 /// "delete" key is Backspace — one wording everywhere.
@@ -67,10 +70,10 @@ impl InputMethodEngine {
     }
 
     /// Format an `lctx: … rctx: …` line from explicit left/right context
-    /// strings, each truncated to `display_context_len` (left keeps its tail,
+    /// strings, each truncated to `display_context_chars` (left keeps its tail,
     /// right keeps its head). Empty when both are absent or the limit is 0.
     fn context_line(&self, left: Option<&str>, right: Option<&str>) -> String {
-        let max_len = self.config.display_context_len;
+        let max_len = self.config.display_context_chars;
         if max_len == 0 {
             return String::new();
         }
@@ -141,24 +144,89 @@ impl InputMethodEngine {
         }
     }
 
+    /// The caret's chunk reading plus the pending romaji tail ("わせだd")
+    /// with a `used/max` fill counter, so cursor movement shows which chunk
+    /// is being edited. A manual break armed at the end of the reading has
+    /// no chunk yet and restarts the counter at `0/max`, making the cut
+    /// visible.
+    fn aux_reading(&self) -> String {
+        let pending = self.input_buf.pending();
+        let Some(reading) = self.current_chunk_reading() else {
+            return format!("{}{}", self.input_buf.reading(), pending);
+        };
+        let head = format!("{}{}", reading, pending);
+        let fill = self.fill(reading, self.chunk_chars());
+        if head.is_empty() {
+            fill
+        } else {
+            format!("{} {}", head, fill)
+        }
+    }
+
+    /// Inference and whole-keystroke time, labelled so the two are not
+    /// confused: `推論:` is the model call this keystroke made (0 when it
+    /// was served from the cache), `key:` is everything the keystroke did.
+    fn aux_timing(&self) -> String {
+        format!(
+            "推論: {}ms key: {}ms",
+            self.metrics.conversion_ms, self.metrics.process_key_ms
+        )
+    }
+
+    /// `used/max` counter shared by the composing and conversion aux.
+    fn fill(&self, reading: &str, max: usize) -> String {
+        format!("{}/{}", reading.chars().count(), max)
+    }
+
+    /// The span the conversion beams for alternatives, labelled and with
+    /// its `used/max` counter, so which part got them is visible.
+    ///
+    /// Only the model-backed views (the mixed list and the AI view) beam a
+    /// span; the learning and dictionary views query the whole reading,
+    /// and a selected predictive candidate carries a reading of its own.
+    /// Both cases keep `shown` as it is.
+    fn conversion_chunk_reading(&self, shown: &str) -> Option<String> {
+        if !matches!(self.state.filter(), None | Some(CandidateSource::Model)) {
+            return None;
+        }
+        let reading = self.state.reading().filter(|r| *r == shown)?;
+        let chars: Vec<char> = reading.chars().collect();
+        // A break armed at the end of the reading opens an empty chunk, so
+        // the counter restarts like the composing aux does and the cut is
+        // visible.
+        if self.chunk_breaks.contains(&chars.len()) {
+            return Some(self.fill("", self.config.beam_chars));
+        }
+        let start = self.beam_span_start(&chars);
+        if start >= chars.len() {
+            return None;
+        }
+        let span: String = chars[start..].iter().collect();
+        let fill = self.fill(&span, self.config.beam_chars);
+        // Only the span, like the composing aux shows only the chunk being
+        // typed: the label says what it is, and the candidate window
+        // already shows the full text each candidate commits.
+        Some(format!("{BEAM_SPAN_LABEL} {span} {fill}"))
+    }
+
     /// Format aux text for composing input mode
     pub(super) fn format_aux_composing(&self) -> String {
-        let ctx = self.display_context_chunked();
-        let model = self.model_name();
         let indicator = self.mode_indicator();
-        // Show reading + unconverted pending romaji (e.g. "わせだd")
-        let romaji_buf = self.input_buf.pending();
-        let base = self.input_buf.reading();
-        let reading = if base.is_empty() && romaji_buf.is_empty() {
+        let base = self.aux_reading();
+        let reading = if base.is_empty() {
             String::new()
         } else {
-            format!(" {}{}", base, romaji_buf)
+            format!(" {}", base)
         };
-        if ctx.is_empty() {
-            format!("{}{} Karukan ({})", indicator, reading, model)
-        } else {
-            format!("{}{} Karukan ({}) | {}", indicator, reading, model, ctx)
+        if !self.config.verbose {
+            return format!("{indicator}{reading}");
         }
+        let model = format!(" Karukan ({})", self.model_name());
+        let ctx = Some(self.display_context_chunked())
+            .filter(|c| !c.is_empty())
+            .map(|c| format!(" | {c}"))
+            .unwrap_or_default();
+        format!("{indicator}{reading}{model}{ctx}")
     }
 
     /// Get the display name of the model used for the last conversion
@@ -177,17 +245,6 @@ impl InputMethodEngine {
         reading: &str,
         candidates: Option<&CandidateList>,
     ) -> String {
-        let ctx = self.display_context();
-        let ctx = if ctx.is_empty() {
-            String::new()
-        } else {
-            format!(" | {}", ctx)
-        };
-        let timing = format!(
-            "{}ms/{}ms",
-            self.metrics.conversion_ms, self.metrics.process_key_ms
-        );
-        let model = self.last_used_model();
         let page_info = candidates
             .filter(|c| c.total_pages() > 1)
             .map(|c| format!(" ({}/{})", c.current_page() + 1, c.total_pages()))
@@ -212,48 +269,49 @@ impl InputMethodEngine {
             .unwrap_or_default();
         // Active Ctrl+R source filter, shown in the header so the user
         // knows the window is narrowed (e.g. [変換:📝]).
-        let filter = match &self.state {
-            InputState::Conversion { filter, .. } => *filter,
-            _ => None,
-        };
-        let header = match filter.map(|s| s.emoji()) {
+        let header = match self.state.filter().map(|s| s.emoji()) {
             Some(emoji) => format!("[変換:{}]", emoji),
             None => "[変換]".to_string(),
         };
+        if !self.config.verbose {
+            return format!("{header}{page_info} {reading}{empty_note}{source_label}{delete_hint}");
+        }
+        let reading = self
+            .conversion_chunk_reading(reading)
+            .unwrap_or_else(|| reading.to_string());
+        let ctx = Some(self.display_context())
+            .filter(|c| !c.is_empty())
+            .map(|c| format!(" | {c}"))
+            .unwrap_or_default();
+        let timing = self.aux_timing();
+        let model = self.last_used_model();
         format!(
-            "{}{} {}{}{} | {} | {}{}{}",
-            header, page_info, reading, empty_note, ctx, timing, model, source_label, delete_hint
+            "{header}{page_info} {reading}{empty_note}{ctx} | {timing} | {model}{source_label}{delete_hint}"
         )
     }
 
     /// Format aux text for auto-suggest mode
     /// Timing shows inference_ms/process_key_ms (process_key_ms is from previous keystroke)
-    pub(super) fn format_aux_suggest(&self, reading: &str) -> String {
+    pub(super) fn format_aux_suggest(&self) -> String {
         // Single context block: the lctx is the current chunk's actual left
         // context (see `display_context_chunked`), so there is no separate
         // per-chunk lctx fragment widening the candidate window.
-        let ctx = self.display_context_chunked();
-        let timing = format!(
-            "{}ms/{}ms",
-            self.metrics.conversion_ms, self.metrics.process_key_ms
-        );
-        let model = self.last_used_model();
         let indicator = self.mode_indicator();
-        // Append unconverted pending romaji to reading (e.g. "わせだ" + "d" → "わせだd")
-        let romaji_buf = self.input_buf.pending();
-        let display_reading = if romaji_buf.is_empty() {
-            reading.to_string()
-        } else {
-            format!("{}{}", reading, romaji_buf)
-        };
-        if ctx.is_empty() {
-            format!("{} {} | {} | {}", indicator, display_reading, timing, model)
-        } else {
-            format!(
-                "{} {} | ctx: {} | {} | {}",
-                indicator, display_reading, ctx, timing, model
-            )
+        // Current chunk's reading + pending romaji with its fill counter, so
+        // the user sees which chunk they are typing into and how full it is.
+        let display_reading = self.aux_reading();
+        if !self.config.verbose {
+            return format!("{indicator} {display_reading}");
         }
+        let ctx = Some(self.display_context_chunked())
+            .filter(|c| !c.is_empty())
+            .map(|c| format!(" | ctx: {c}"))
+            .unwrap_or_default();
+        format!(
+            "{indicator} {display_reading}{ctx} | {} | {}",
+            self.aux_timing(),
+            self.last_used_model()
+        )
     }
 
     /// Truncate context to safe size for API calls
@@ -270,6 +328,6 @@ impl InputMethodEngine {
 
     /// Truncate a context string to safe size for API calls
     pub(super) fn truncate_context(&self, context: &str) -> String {
-        keep_last_chars(context, self.config.max_api_context_len)
+        keep_last_chars(context, self.config.context_chars)
     }
 }

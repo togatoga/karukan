@@ -205,6 +205,11 @@ pub fn ascii_to_fullwidth_char(c: char) -> char {
     }
 }
 
+/// Whether `c` is a decimal digit, half-width (`5`) or full-width (`５`).
+pub fn is_digit(c: char) -> bool {
+    fullwidth_to_ascii_char(c).is_ascii_digit()
+}
+
 /// Map a full-width ASCII alphanumeric character to its half-width form
 /// (e.g. `ａ` → `a`, `Ｚ` → `Z`, `５` → `5`). All other characters pass
 /// through unchanged.

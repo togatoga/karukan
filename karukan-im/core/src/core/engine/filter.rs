@@ -163,11 +163,11 @@ impl InputMethodEngine {
         }
     }
 
-    /// Model candidates for the narrowed AI view — the same tail-window
+    /// Model candidates for the narrowed AI view — the same split
     /// conversion as the mixed list, so right after Space this is normally
     /// a pure cache replay of the list's model rows.
     fn model_source_view(&mut self, reading: &str) -> Vec<Candidate> {
-        self.windowed_model_candidates(reading, self.config.num_candidates)
+        self.model_candidates(reading, self.config.num_candidates)
             .into_iter()
             .map(|text| Candidate {
                 text,

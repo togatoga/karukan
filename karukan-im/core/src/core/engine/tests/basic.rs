@@ -161,7 +161,7 @@ fn test_pipeline_config_defaults() {
 #[test]
 fn test_truncate_context() {
     let mut engine = InputMethodEngine::new();
-    engine.config.max_api_context_len = 5;
+    engine.config.context_chars = 5;
 
     // Short context - unchanged
     let short = engine.truncate_context("abc");

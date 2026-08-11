@@ -30,8 +30,7 @@ fn bench(conv: &KanaKanjiConverter, reading: &str, n: usize, iters: usize) -> (u
 }
 
 fn main() {
-    // 21 chars — the windowed path caps beams at beam_window_len (20) but the
-    // raw converter call here measures the model itself.
+    // 21 chars: about one chunk, the size the windowed path beams.
     let reading = "きょうはてんきがいいのでこうえんをさんぽした";
     let short = "きょうはいいてんき";
     let iters = 10;

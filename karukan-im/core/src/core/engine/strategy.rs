@@ -72,10 +72,10 @@ fn determine_adaptive_strategy(
             ConversionStrategy::LightModelBeam {
                 beam_width: num_candidates.min(config.beam_width),
             }
-        } else if reading_chars <= config.beam_window_len {
-            // Fits the beam window: parallel beam search. Explicit
-            // conversion pre-windows its reading to this length, so this
-            // is the normal path.
+        } else if reading_chars <= config.chunk_chars {
+            // Fits one chunk: parallel beam search. Explicit conversion
+            // splits its reading on the chunk grid first, so this is the
+            // normal path.
             ConversionStrategy::ParallelBeam {
                 beam_width: num_candidates.min(config.beam_width),
             }
@@ -91,9 +91,8 @@ impl InputMethodEngine {
     /// Determine the conversion strategy based on the reading length (in
     /// chars), adaptive latency flag, and configuration.
     ///
-    /// Char-based on purpose: `beam_window_len` is the same unit the
-    /// tail-window conversion caps its window at, so a windowed beam
-    /// request always qualifies for the beam here.
+    /// Char-based on purpose: `chunk_chars` is the unit the beam span is
+    /// bounded by, so a span always qualifies for the beam here.
     pub(super) fn determine_strategy(
         &self,
         reading: &str,

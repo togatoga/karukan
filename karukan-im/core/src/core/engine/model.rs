@@ -1,7 +1,7 @@
 //! Model dispatch and the conversion cache in front of it.
 //!
 //! Every model call in the engine goes through here: strategy dispatch,
-//! the per-computation cache, and the tail-window conversion that Space's
+//! the per-computation cache, and the split conversion that Space's
 //! mixed list and the AI view share.
 
 use std::collections::HashSet;
@@ -9,7 +9,6 @@ use std::time::Instant;
 
 use tracing::debug;
 
-use super::chunk::is_japanese;
 use super::*;
 
 impl InputMethodEngine {
@@ -28,8 +27,8 @@ impl InputMethodEngine {
         if !karukan_engine::contains_kana(reading) {
             return vec![];
         }
-        let katakana = karukan_engine::hiragana_to_katakana(reading);
         let strategy = self.determine_strategy(reading, num_candidates);
+        let katakana = karukan_engine::hiragana_to_katakana(reading);
 
         debug!(
             "convert: reading=\"{}\" api_context=\"{}\" candidates={} strategy={:?}",
@@ -264,61 +263,53 @@ impl InputMethodEngine {
             .collect()
     }
 
-    /// the cost stays bounded however long the reading grows. The head of
-    /// the list is the whole-reading grid replay — the exact text live
-    /// typing displays — so the window's raw char cut (which can land
-    /// mid-word) never degrades the visible top-1. Candidates equal to the
-    /// raw reading are dropped: an empty result means "no model suggestion".
-    pub(super) fn windowed_model_candidates(
-        &mut self,
-        reading: &str,
-        num_candidates: usize,
-    ) -> Vec<String> {
+    /// the cost stays bounded however long the reading grows. An empty
+    /// result means "the model produced nothing"; a candidate equal to the
+    /// reading is a real answer (kana-only words convert to themselves).
+    pub(super) fn model_candidates(&mut self, reading: &str, num_candidates: usize) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
         }
         let base_ctx = self.truncate_context_for_api();
         let chars: Vec<char> = reading.chars().collect();
-        let window_start = self.beam_window_start(&chars);
+        let span_start = self.beam_span_start(&chars);
+        let prefix = self.convert_on_chunk_grid(&chars[..span_start], &base_ctx);
 
-        // The head must run before the window beam: a slow beam may flip
-        // the adaptive flag, which changes the replay's cache keys — the
-        // head would miss the entries typing just filled and re-convert to
-        // a text the user never saw.
-        let live_top1 = self.convert_on_chunk_grid(&chars, &base_ctx);
+        // Nothing to beam (the reading ends outside Japanese): the grid
+        // conversion is the only candidate.
+        if span_start >= chars.len() {
+            return if prefix == reading {
+                // Nothing converted, so there is no model answer here.
+                Vec::new()
+            } else {
+                vec![prefix]
+            };
+        }
 
-        let prefix = self.convert_on_chunk_grid(&chars[..window_start], &base_ctx);
-        let window: String = chars[window_start..].iter().collect();
-
-        // An empty window (the reading ends in a non-Japanese run) leaves
-        // just the converted prefix as the single candidate.
-        let tails = if window.is_empty() {
-            vec![String::new()]
-        } else {
-            let lctx = self.lctx_for(&base_ctx, &prefix);
-            let beam = self.run_kana_kanji_conversion(&window, &lctx, num_candidates);
-            if beam.is_empty() { vec![window] } else { beam }
-        };
-
-        let prefixed = tails
+        // The span is the last chunk, so its main-model greedy is exactly
+        // what the whole-reading grid would compute for it: `prefix` plus
+        // that greedy IS the head, no separate pass. ParallelBeam runs it
+        // alongside the light beam and puts it first, so the head costs no
+        // extra wall time instead of a serial conversion before the beam.
+        let span: String = chars[span_start..].iter().collect();
+        let lctx = self.lctx_for(&base_ctx, &prefix);
+        // An empty beam means the model produced nothing (unavailable, or a
+        // conversion error), which is what "no model suggestion" means to
+        // the callers. A beam that returns the reading unchanged is a real
+        // answer — words that stay in kana (きゃりーぱみゅぱみゅ) convert to
+        // themselves — so it rides like any other candidate.
+        self.run_kana_kanji_conversion(&span, &lctx, num_candidates)
             .into_iter()
             .map(|tail| format!("{prefix}{tail}"))
-            .collect();
-        let mut merged = Self::merge_candidates_dedup(vec![live_top1], prefixed, usize::MAX);
-        merged.retain(|text| text != reading);
-        merged
+            .collect()
     }
 
-    /// Start of the beam window: the final Japanese run, never crossing a
-    /// chunk boundary, capped at `beam_window_len` chars (the strategy's
-    /// beam gate uses the same unit, so the window always qualifies for the
-    /// beam) and at the live-conversion chunk length.
-    fn beam_window_start(&self, chars: &[char]) -> usize {
-        let run_start = chars
-            .iter()
-            .rposition(|c| !is_japanese(*c))
-            .map_or(0, |i| i + 1);
-        let cap = self.config.beam_window_len.min(self.chunk_len());
-        run_start.max(chars.len().saturating_sub(cap))
+    /// Start of the beam span: the trailing Japanese chunks fitting
+    /// `beam_chars`, at least the last one. Only a grid boundary will do —
+    /// cutting anywhere else leaves a prefix live conversion never
+    /// converted, which costs an extra inference and shows a seam the user
+    /// never saw, and could feed a digit run to the model.
+    pub(super) fn beam_span_start(&self, chars: &[char]) -> usize {
+        self.trailing_chunks_start(chars, self.config.beam_chars)
     }
 }

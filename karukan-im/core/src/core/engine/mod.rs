@@ -150,13 +150,16 @@ pub struct InputMethodEngine {
     /// `conversion_cache`, so unchanged chunks cost a lookup, not an
     /// inference). Empty when not composing.
     chunks: Vec<ComposingChunk>,
+    /// Manual chunk boundaries (reading char positions) inserted with Ctrl+J.
+    /// Shifted along with edits (`edit_with_chunk_breaks`) and cleared when
+    /// the composition ends.
+    chunk_breaks: Vec<usize>,
     /// LRU cache of model conversion results keyed by reading + lctx +
     /// strategy. Content-addressed, so it survives commits and resets.
     conversion_cache: ConversionCache,
-    /// True only while a typing-refine keystroke inside a narrowed source
-    /// view passes through the composing path: its rendering is discarded
-    /// when the filtered conversion re-enters, so the auto-suggest model
-    /// call would be pure waste. Set and cleared around that one call.
+    /// Suppresses the auto-suggest model call while a conversion detours
+    /// through the composing path and throws the render away. Owned by
+    /// `in_composing`, which sets and clears it around the one call.
     suppress_suggest: bool,
     /// Mirror of the suggestion window shown while composing — what Ctrl+digit
     /// selects. The Conversion state owns its own list; this covers the
@@ -186,6 +189,7 @@ impl InputMethodEngine {
             input_buf: InputBuffer::new(),
             live: LiveConversion::default(),
             chunks: Vec::new(),
+            chunk_breaks: Vec::new(),
             conversion_cache: ConversionCache::default(),
             suppress_suggest: false,
             shown_suggestions: CandidateList::default(),
@@ -257,11 +261,20 @@ impl InputMethodEngine {
     pub fn reset(&mut self) {
         self.state = InputState::Empty;
         self.mode = ModeState::default();
+        self.clear_composition();
+        self.metrics = ConversionMetrics::default();
+    }
+
+    /// Drop all composition-scoped state in one place: the input buffer, the
+    /// live-conversion display flag, the chunks, and the manual chunk breaks.
+    /// Every path that ends (or freshly starts) a composition goes through
+    /// here, so a new composition-scoped field is a one-line change.
+    pub(super) fn clear_composition(&mut self) {
         self.input_buf.clear();
         self.live.shown = false;
         self.chunks.clear();
+        self.chunk_breaks.clear();
         self.shown_suggestions = CandidateList::default();
-        self.metrics = ConversionMetrics::default();
     }
 
     /// End the composition: clear the buffer, live display, and chunks,
@@ -269,10 +282,7 @@ impl InputMethodEngine {
     /// erase-to-empty path must go through here so no piece of the teardown
     /// is forgotten.
     fn end_composition(&mut self) {
-        self.input_buf.clear();
-        self.live.shown = false;
-        self.chunks.clear();
-        self.shown_suggestions = CandidateList::default();
+        self.clear_composition();
         self.state = InputState::Empty;
         self.mode.exit_temporary();
     }
@@ -311,7 +321,7 @@ impl InputMethodEngine {
 
     /// Settle the pending romaji segment into the composed text at the cursor
     fn settle_romaji(&mut self) {
-        self.input_buf.settle_romaji(&self.converters.romaji);
+        self.edit_with_chunk_breaks(|e| e.input_buf.settle_romaji(&e.converters.romaji));
     }
 
     /// Set surrounding context from the full text plus a cursor offset in
@@ -356,20 +366,14 @@ impl InputMethodEngine {
         let left = if left_context.is_empty() {
             None
         } else {
-            Some(keep_last_chars(
-                left_context,
-                self.config.max_api_context_len,
-            ))
+            Some(keep_last_chars(left_context, self.config.context_chars))
         };
 
         // Truncate right context to max length (keep beginning)
         let right = if right_context.is_empty() {
             None
         } else {
-            Some(keep_first_chars(
-                right_context,
-                self.config.max_api_context_len,
-            ))
+            Some(keep_first_chars(right_context, self.config.context_chars))
         };
 
         self.surrounding_context = Some(SurroundingContext { left, right });
@@ -455,6 +459,14 @@ impl InputMethodEngine {
             && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
         {
             return self.toggle_live_conversion();
+        }
+
+        // Ctrl+Shift+V: toggle the verbose aux line (works in all states)
+        if key.modifiers.control_key
+            && key.modifiers.shift_key
+            && (key.keysym == Keysym::KEY_V || key.keysym == Keysym::KEY_V_UPPER)
+        {
+            return self.toggle_verbose();
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)

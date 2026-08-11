@@ -21,6 +21,17 @@ pub struct Settings {
     pub conversion: ConversionSettings,
     /// Learning cache settings
     pub learning: LearningSettings,
+    /// What the aux line shows
+    pub display: DisplaySettings,
+}
+
+/// Aux-line settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplaySettings {
+    /// Start with the detailed aux line (Ctrl+Shift+V toggles it live):
+    /// which part the alternatives cover, inference timing, the model that
+    /// ran, and the context handed to it.
+    pub verbose: bool,
 }
 
 /// Conversion strategy mode
@@ -46,24 +57,33 @@ pub struct ConversionSettings {
     /// Use surrounding text (text left of cursor) as context for conversion
     pub use_context: bool,
     /// Maximum number of surrounding text characters passed to the conversion API
-    pub max_context_length: usize,
+    pub context_chars: usize,
     /// Maximum reading length (in characters) converted by the model in a single
     /// call during live conversion. The composing buffer is split into chunks
     /// of at most this many characters so per-keystroke latency stays bounded
     /// for long input; each chunk's left context is the converted text of the
     /// preceding chunks.
-    pub composing_chunk_len: usize,
+    pub chunk_chars: usize,
+    /// Marks (、。！？…) a chunk containing Japanese keeps instead of
+    /// splitting there, so a sentence keeps converting as one unit.
+    pub chunk_symbols: usize,
+    /// Digits a chunk containing Japanese keeps. The default 0 keeps them
+    /// out of the converter entirely, which is what protects them: the
+    /// model hallucinates on digit runs, dropping or duplicating figures.
+    /// Raising it lets short runs (「だい3かい」) convert with the text
+    /// around them; a run is kept whole or split off whole, never torn.
+    pub chunk_digits: usize,
     /// Path to dictionary binary file (optional, defaults to data_dir/dict.bin)
     pub dict_path: Option<String>,
     /// Model variant id (optional, defaults to registry default)
     pub model: Option<String>,
     /// Beam search model variant id (used on Space conversion, default model if unset)
     pub light_model: Option<String>,
-    /// Length in chars of the tail window the beam runs over: explicit
-    /// conversion beams the last `beam_window_len` chars of the final
-    /// Japanese run and converts everything before it top-1.
-    pub beam_window_len: usize,
-    /// Beam width for the windowed beam search
+    /// Chars the beam covers, snapped to chunk boundaries: the trailing
+    /// Japanese chunks fitting this budget, always at least the last one.
+    /// A digit/symbol chunk and a manual break both stop the span.
+    pub beam_chars: usize,
+    /// Beam width: how many alternatives the beam returns
     pub beam_width: usize,
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model
@@ -212,7 +232,7 @@ mod tests {
         let settings = Settings::default();
         assert_eq!(settings.conversion.num_candidates, 9);
         assert!(settings.conversion.use_context);
-        assert_eq!(settings.conversion.max_context_length, 10);
+        assert_eq!(settings.conversion.context_chars, 10);
         assert!(settings.learning.enabled);
         assert_eq!(settings.learning.max_entries, 10000);
         assert_eq!(settings.learning.max_surface_chars, 50);
@@ -236,7 +256,7 @@ beam_width = 5
         .unwrap();
 
         let settings = Settings::load_from(file.path()).unwrap();
-        assert_eq!(settings.conversion.beam_window_len, 20);
+        assert_eq!(settings.conversion.chunk_chars, 30);
         assert_eq!(settings.conversion.beam_width, 5);
     }
 
@@ -315,7 +335,7 @@ num_candidates = 3
         assert_eq!(settings.conversion.num_candidates, 3);
         // Should use default for unspecified values
         assert!(settings.conversion.use_context);
-        assert_eq!(settings.conversion.max_context_length, 10);
+        assert_eq!(settings.conversion.context_chars, 10);
     }
 
     #[test]
