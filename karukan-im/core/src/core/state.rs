@@ -55,6 +55,14 @@ impl InputState {
         }
     }
 
+    /// Get the active source filter in conversion state
+    pub fn filter(&self) -> Option<CandidateSource> {
+        match self {
+            Self::Conversion { filter, .. } => *filter,
+            _ => None,
+        }
+    }
+
     /// Get candidates in conversion state
     pub fn candidates(&self) -> Option<&CandidateList> {
         match self {

@@ -28,13 +28,9 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        // Run auto-suggest via chunked conversion. Normally skipped in alphabet
-        // mode (raw latin has no hiragana to convert), but if the buffer still
-        // contains kana — e.g. the user typed hiragana, switched to alphabet mode,
-        // and kept typing — keep converting the mixed reading so live conversion
-        // stays alive. `chunked_auto_suggest` splits long input into
-        // bounded-length chunks so per-keystroke latency stays flat; for input
-        // within one chunk this is identical to a whole-buffer call.
+        // Auto-suggest via chunked conversion. Skipped in alphabet mode
+        // unless the buffer still contains kana (mode switched mid-word),
+        // so live conversion stays alive on a mixed reading.
         let convert = !self.suppress_suggest
             && !full_reading.is_empty()
             && (self.mode.current() != InputMode::Alphabet
@@ -49,9 +45,8 @@ impl InputMethodEngine {
         };
 
         let Some((candidates, reading)) = candidates else {
-            // No useful AI suggestion — still show learning + dictionary + rule-based
-            // rewriter variants. The rewriter path produces mozc-style symbol variants
-            // (e.g. `「` → `『`, `【`, ...) for symbol-only inputs where the model is skipped.
+            // No useful model suggestion — still show learning, dictionary,
+            // and rewriter variants (e.g. `「` → `『`, `【`, …).
             self.live.shown = false;
             let preedit = self.set_composing_state();
             let reading = full_reading;
@@ -86,14 +81,10 @@ impl InputMethodEngine {
         self.suggest_result(candidates, &reading)
     }
 
-    /// Build the auto-suggest result shared by live conversion and normal
-    /// auto-suggest: composing preedit, candidate list, and aux text.
-    ///
-    /// Candidate ordering is learning → model → dictionary. Including the
-    /// model candidates guarantees the list is never empty, so the candidate
-    /// window — whose aux line is where frontends show the raw reading once
-    /// the preedit displays converted text — stays on screen for the whole
-    /// live conversion.
+    /// Build the auto-suggest result (preedit, candidates, aux), ordered
+    /// learning → model → dictionary. The model candidates keep the list
+    /// non-empty, so the candidate window — whose aux line shows the raw
+    /// reading — stays on screen for the whole live conversion.
     fn suggest_result(&mut self, candidates: Vec<String>, reading: &str) -> EngineResult {
         let preedit = self.set_composing_state();
         let mut all_candidates = self.lookup_learning_candidates(reading);
@@ -124,21 +115,10 @@ impl InputMethodEngine {
                 .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
         }
 
-        // Bare Space from Empty state:
-        //
-        // * Hiragana mode → commit a full-width `　` directly, matching
-        //   the Japanese-IME convention. We deliberately do NOT enter
-        //   Composing here: if we did, the next Space the user typed
-        //   would be interpreted by `process_key_composing` as the
-        //   conversion trigger and an unwanted candidate window would
-        //   appear after two spaces in a row.
-        // * Any other mode → return `not_consumed` so the OS delivers
-        //   a normal half-width ASCII space to the application. The
-        //   user is either typing ASCII (Alphabet) or in an edge mode
-        //   (Katakana / Emoji) where injecting `　` would be wrong.
-        //
-        // The full-width space gesture from Empty in any mode is
-        // `Ctrl+Space` (above), which seeds a Composing session.
+        // Bare Space from Empty: Hiragana mode commits `　` directly —
+        // without entering Composing, where a second Space would open an
+        // unwanted candidate window. Other modes pass it through as an
+        // ASCII space.
         if key.keysym == Keysym::SPACE && !key.modifiers.control_key && !key.modifiers.alt_key {
             return if self.mode.current() == InputMode::Hiragana {
                 EngineResult::consumed().with_action(EngineAction::Commit("\u{3000}".to_string()))
@@ -147,17 +127,9 @@ impl InputMethodEngine {
             };
         }
 
-        // `:` from Empty state enters emoji shortcode mode — `:pien` stays
-        // as `:pien` literally (no romaji conversion) while emoji candidates
-        // are surfaced via the rewriter. The mode auto-exits back to Hiragana
-        // on Escape or commit, so the user's next word lands in kana mode
-        // again without an explicit toggle.
-        //
-        // Two keysym shapes can produce `:` depending on how fcitx5
-        // resolves the layout: (a) the X11 `colon` keysym (0x003A)
-        // arriving directly, or (b) the `semicolon` keysym (0x003B)
-        // with shift held. Accept both so we don't depend on which
-        // shape the upstream stack happens to emit.
+        // `:` from Empty enters emoji shortcode mode. Accept both keysym
+        // shapes a layout can emit for `:` — the `colon` keysym directly,
+        // or `semicolon` with shift held.
         let typed_colon =
             key.to_char() == Some(':') || (shift_active && key.keysym == Keysym(b';' as u32));
         if typed_colon

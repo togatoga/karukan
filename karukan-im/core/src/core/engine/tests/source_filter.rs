@@ -292,28 +292,14 @@ fn test_typing_narrows_within_the_filtered_view() {
             .expect("aux")
             .starts_with("[変換:👤]")
     );
-    let texts: Vec<String> = engine
-        .candidates()
-        .unwrap()
-        .candidates()
-        .iter()
-        .map(|c| c.text.clone())
-        .collect();
-    assert_eq!(texts, vec!["亜", "藍"]);
+    assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
 
     // Typing narrows the SAME view: reading grows to あい, only 藍 stays.
     let result = engine.process_key(&press('i'));
     let aux = last_aux_text(&result).expect("aux");
     assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
-    let texts: Vec<String> = engine
-        .candidates()
-        .unwrap()
-        .candidates()
-        .iter()
-        .map(|c| c.text.clone())
-        .collect();
-    assert_eq!(texts, vec!["藍"]);
+    assert_eq!(shown_texts(&engine), vec!["藍"]);
 
     // A pending consonant keeps the view too (tail-aware narrowing).
     let result = engine.process_key(&press('k'));
@@ -338,27 +324,13 @@ fn test_backspace_widens_within_the_filtered_view() {
     engine.process_key(&press_key(Keysym::SPACE));
     engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
     engine.process_key(&press_ctrl(Keysym::KEY_R)); // 👤: [藍]
-    let texts: Vec<String> = engine
-        .candidates()
-        .unwrap()
-        .candidates()
-        .iter()
-        .map(|c| c.text.clone())
-        .collect();
-    assert_eq!(texts, vec!["藍"]);
+    assert_eq!(shown_texts(&engine), vec!["藍"]);
 
     let result = engine.process_key(&press_key(Keysym::BACKSPACE));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.starts_with("[変換:👤]"), "aux was: {aux}");
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
-    let texts: Vec<String> = engine
-        .candidates()
-        .unwrap()
-        .candidates()
-        .iter()
-        .map(|c| c.text.clone())
-        .collect();
-    assert_eq!(texts, vec!["亜", "藍"]);
+    assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
 
     // Emptying the buffer leaves the conversion entirely.
     engine.process_key(&press_key(Keysym::BACKSPACE));

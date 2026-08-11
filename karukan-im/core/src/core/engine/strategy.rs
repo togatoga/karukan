@@ -113,14 +113,10 @@ impl InputMethodEngine {
         )
     }
 
-    /// Update the adaptive model switching flag from a measured main-model
-    /// greedy latency. Callers pass a measurement only when the main model
-    /// actually ran greedy: `MainModelOnly`'s wall time, or `ParallelBeam`'s
-    /// main half timed on its own — the light beam running beside it is a
-    /// one-shot cost that must not read as "the main model is too slow" and
-    /// downgrade the rest of the word (a spurious downgrade also flips the
-    /// strategy in every conversion-cache key, so the entries built while
-    /// typing all become misses).
+    /// Update the adaptive switching flag from a measured main-model greedy
+    /// latency. Only an actual main greedy run may feed this: a beam's
+    /// one-shot cost must not read as "the main model is too slow" and
+    /// downgrade the rest of the word (flipping every cache key with it).
     pub(super) fn update_adaptive_model_flag(&mut self, main_ms: u64) {
         // Only Adaptive mode uses the adaptive flag
         if self.config.strategy != StrategyMode::Adaptive {

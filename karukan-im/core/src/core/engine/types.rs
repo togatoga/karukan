@@ -152,43 +152,24 @@ pub(crate) enum InputMode {
     Katakana,
     /// Alphabet (direct input) mode — characters bypass romaji conversion
     Alphabet,
-    /// Emoji shortcode mode — entered by typing `:` from Empty state.
-    /// Behaves like [`InputMode::Alphabet`] (ASCII inserted directly,
-    /// no romaji conversion) but auto-exits back to the prior mode on
-    /// commit/cancel (see [`ModeState`]) so the next word lands in kana
-    /// mode without the user having to toggle anything. The `EmojiRewriter`
-    /// picks up the `:`-prefixed input from the candidate-build pipeline
-    /// and surfaces emoji candidates as the user types.
+    /// Emoji shortcode mode — entered by typing `:` from Empty. Behaves
+    /// like [`InputMode::Alphabet`] but auto-exits to the prior mode on
+    /// commit/cancel; `EmojiRewriter` surfaces candidates for the query.
     Emoji,
 }
 
-/// Input-mode state: the current [`InputMode`] plus the mode to come back
-/// to when a *temporary* mode ends.
-///
-/// [`InputMode::Emoji`] (entered by typing `:`) and [`InputMode::Alphabet`]
-/// (entered via Shift+letter) are temporary, per-composition modes: commit,
-/// cancel, and backspace-to-empty exit them and put the user back in the
-/// kana mode they came from (e.g. a Katakana-mode user lands back in
-/// Katakana) instead of dropping them in Hiragana every time.
-///
-/// Modeled after mozc's `Composer` (`src/composer/composer.cc`), which
-/// pairs `input_mode_` with a non-optional `comeback_input_mode_`.
-/// `comeback` always holds the last *non-temporary* mode and equals
-/// `current` whenever the current mode itself is not temporary, so exiting
-/// is an unconditional `current = comeback` with no fallback case. Because
-/// `comeback` can never be a temporary mode, even the degenerate hop from
-/// one temporary mode into another (Shift+letter while composing an emoji
-/// query moves Emoji → Alphabet) still exits to the user's real kana mode.
-///
-/// The fields are private so every transition goes through the methods
-/// below, which maintain that invariant by construction.
+/// Current [`InputMode`] plus the mode to come back to when a *temporary*
+/// mode (Emoji, Alphabet) ends. `comeback` always holds the last
+/// non-temporary mode and equals `current` while none is active, so
+/// exiting is an unconditional `current = comeback` — even a hop between
+/// two temporary modes exits to the user's real kana mode. Fields are
+/// private so every transition maintains the invariant.
 #[derive(Debug, Default)]
 pub(crate) struct ModeState {
     /// Current input mode.
     current: InputMode,
     /// The last non-temporary mode; what [`ModeState::exit_temporary`]
-    /// restores. Equal to `current` whenever `current` is not temporary
-    /// (mozc's `comeback_input_mode_` invariant).
+    /// restores. Equal to `current` whenever `current` is not temporary.
     comeback: InputMode,
 }
 
@@ -203,9 +184,8 @@ impl ModeState {
         self.current
     }
 
-    /// Switch directly to `mode` (the mode-toggle key → Hiragana, Ctrl+K →
-    /// Katakana). The user explicitly picked a mode, so it also becomes the
-    /// comeback target (mozc's `SetInputMode`).
+    /// Switch directly to `mode`. The user explicitly picked it, so it
+    /// also becomes the comeback target.
     pub(crate) fn set(&mut self, mode: InputMode) {
         debug_assert!(
             !Self::is_temporary(mode),
@@ -215,11 +195,9 @@ impl ModeState {
         self.comeback = mode;
     }
 
-    /// Enter a *temporary* mode (Emoji or Alphabet), remembering the
-    /// current mode for [`ModeState::exit_temporary`] (mozc's
-    /// `SetTemporaryInputMode`). Hopping from one temporary mode into
-    /// another keeps the original comeback target, so re-entry can't
-    /// clobber the saved mode.
+    /// Enter a *temporary* mode, remembering the current one for
+    /// [`ModeState::exit_temporary`]. A hop between two temporary modes
+    /// keeps the original comeback target.
     pub(crate) fn enter_temporary(&mut self, mode: InputMode) {
         debug_assert!(
             Self::is_temporary(mode),
@@ -232,34 +210,19 @@ impl ModeState {
     }
 
     /// End any temporary mode: come back to the last non-temporary mode.
-    /// No-op when the current mode is not temporary (`comeback` equals
-    /// `current` then), so it's safe to call unconditionally from the
-    /// commit/cancel/erase-to-empty exit sites.
-    ///
-    /// This is what makes Shift-triggered alphabet input *temporary*: once
-    /// the word is committed (or abandoned), the next word returns to kana
-    /// without an explicit toggle key — the behavior US-layout users expect,
-    /// since they have no JIS かな key to switch back with (issue #37).
-    /// Likewise an emoji session is bound to the typed `:` and is over once
-    /// the query is committed, cancelled, or erased.
+    /// No-op when none is active, so the commit/cancel/erase exit sites
+    /// call it unconditionally. This is what returns the next word to kana
+    /// without an explicit toggle key (issue #37).
     pub(crate) fn exit_temporary(&mut self) {
         self.current = self.comeback;
     }
 }
 
-/// One internal chunk of the composing buffer (at most
-/// `EngineConfig::composing_chunk_len` reading chars) together with its cached
-/// model conversion.
-///
-/// Chunks are an internal optimization only — the user always sees the
-/// concatenation of every chunk's `converted` text as one continuous preedit;
-/// there are no visible bunsetsu boundaries. Splitting the reading bounds each
-/// model call to N chars so live-conversion latency stays flat for long input.
-///
-/// The left context (lctx) a chunk was converted with is *not* stored: it is
-/// just the editor surrounding text plus the `converted` text of the preceding
-/// chunks, so it is derived on demand via `chunk_lctx` instead of duplicated
-/// here.
+/// One internal chunk of the composing buffer with its cached model
+/// conversion. Chunks are invisible — the user sees the concatenation of
+/// every `converted` as one continuous preedit; splitting only bounds each
+/// model call for long input. The lctx a chunk was converted with is
+/// derived on demand (`chunk_lctx`), never stored.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(in crate::core) struct ComposingChunk {
     /// Hiragana reading for this chunk (≤ N chars).

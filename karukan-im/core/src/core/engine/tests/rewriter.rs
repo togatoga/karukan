@@ -4,7 +4,6 @@
 //! so they verify behaviour that holds independently of model output.
 
 use std::collections::HashSet;
-use std::io::Write;
 
 use karukan_engine::{Dictionary, RewriterChain};
 
@@ -33,15 +32,11 @@ fn conversion_texts(reading: &str) -> Vec<String> {
         .collect()
 }
 
-/// Build a one-entry user dictionary as a temp JSON file and load it.
+/// Build a one-entry user dictionary and load it.
 fn user_dict_with(reading: &str, surface: &str) -> Dictionary {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    let json = format!(
+    dict_from_json(&format!(
         r#"[{{"reading":"{reading}","candidates":[{{"surface":"{surface}","score":1.0}}]}}]"#
-    );
-    tmp.write_all(json.as_bytes()).unwrap();
-    tmp.flush().unwrap();
-    Dictionary::build_from_json(tmp.path()).unwrap()
+    ))
 }
 
 /// Drive the engine by typing a string of characters.

@@ -43,16 +43,9 @@ fn bytes_to_hex_display(bytes: &[u8]) -> String {
 }
 
 /// Whether an added-token string is a byte-fallback token like `<0xCE>`.
-///
-/// SentencePiece-derived tokenizer.json files mark the 256 byte-fallback
-/// tokens as `special: true`, but they carry real output bytes (a character
-/// outside the vocab is emitted as its UTF-8 bytes, e.g. `Ψ` as
-/// `<0xCE><0xA8>`), so they must never be skipped as special tokens.
-///
-/// This must classify exactly the tokens the tokenizer's `ByteFallback`
-/// decoder consumes, so the check below is a verbatim mirror of that
-/// decoder's own match
-/// (`tokenizers::decoders::byte_fallback::ByteFallback::decode_chain`).
+/// tokenizer.json marks them `special: true`, but they carry real output
+/// bytes and must never be skipped as special. The check mirrors the
+/// tokenizer's own `ByteFallback` decoder match exactly.
 fn is_byte_fallback_token(token: &str) -> bool {
     token.len() == 6
         && token.starts_with("<0x")
@@ -204,9 +197,8 @@ impl LlamaCppModel {
     /// cache size. Beam search needs more cells than a greedy run: every beam
     /// keeps its own generated tokens alongside the shared prompt.
     fn context_params_with_n_ctx(&self, n_ctx: u32) -> LlamaContextParams {
-        let params = LlamaContextParams::default().with_n_ctx(Some(
-            NonZeroU32::new(n_ctx.max(1)).expect("n_ctx must be non-zero"),
-        ));
+        let params = LlamaContextParams::default()
+            .with_n_ctx(Some(NonZeroU32::new(n_ctx).unwrap_or(NonZeroU32::MIN)));
         if self.n_threads > 0 {
             params
                 .with_n_threads(self.n_threads as i32)
@@ -230,14 +222,10 @@ impl LlamaCppModel {
         Ok(tokens)
     }
 
-    /// Decode tokens to string using the external tokenizer
-    ///
-    /// When `skip_special_tokens` is true, special tokens (BOS, EOS, EOG) are
-    /// excluded from the output. The filtering is done here by token id
-    /// rather than delegated to the tokenizer: tokenizer.json marks the
-    /// byte-fallback tokens (`<0xCE>` …) as special, so the tokenizer's own
-    /// `skip_special_tokens` would drop them before its ByteFallback decoder
-    /// can fuse them back into characters (`Ψ` = `<0xCE><0xA8>` would vanish).
+    /// Decode tokens via the external tokenizer. Special tokens are
+    /// filtered here by id, not by the tokenizer's own skip flag — that
+    /// would also drop byte-fallback tokens (`<0xCE>`…) before its
+    /// ByteFallback decoder can fuse them back into characters.
     pub fn decode(&self, tokens: &[LlamaToken], skip_special_tokens: bool) -> Result<String> {
         let ids: Vec<u32> = tokens
             .iter()
@@ -290,18 +278,9 @@ impl LlamaCppModel {
         )
     }
 
-    /// Generate multiple candidates using true beam search algorithm
-    ///
-    /// This implements proper beam search that tracks cumulative probabilities
-    /// at every step and keeps the globally best beam_size candidates.
-    ///
-    /// # Arguments
-    /// * `input_tokens` - Input token sequence
-    /// * `max_new_tokens` - Maximum new tokens to generate per candidate
-    /// * `eos_token_id` - Optional EOS token ID to stop generation
-    /// * `beam_size` - Number of candidates to keep at each step
-    ///
-    /// Returns candidates sorted by cumulative probability (highest first)
+    /// True beam search: tracks cumulative probabilities at every step and
+    /// keeps the globally best `beam_size` candidates, returned
+    /// highest-probability first.
     pub fn generate_beam_search(
         &self,
         input_tokens: &[LlamaToken],
@@ -312,19 +291,10 @@ impl LlamaCppModel {
         self.generate_beam_search_impl(input_tokens, max_new_tokens, eos_token_id, beam_size)
     }
 
-    /// Generate multiple candidates using depth-1 beam selection followed by greedy decoding
-    ///
-    /// This is a simplified approach: select top-k initial tokens based on probability,
-    /// then generate the rest of each sequence using greedy decoding independently.
-    /// This is faster than true beam search but may miss globally optimal candidates.
-    ///
-    /// # Arguments
-    /// * `input_tokens` - Input token sequence
-    /// * `max_new_tokens` - Maximum new tokens to generate per candidate
-    /// * `eos_token_id` - Optional EOS token ID to stop generation
-    /// * `beam_size` - Number of candidates to generate
-    ///
-    /// Returns candidates sorted by initial token probability (highest first)
+    /// Depth-1 beam: pick the top-k initial tokens, then continue each
+    /// sequence greedily and independently. Faster than true beam search
+    /// but may miss globally optimal candidates. Sorted by initial token
+    /// probability.
     pub fn generate_beam_search_d1_greedy(
         &self,
         input_tokens: &[LlamaToken],
@@ -480,43 +450,15 @@ impl LlamaCppModel {
         Ok(results)
     }
 
-    /// Internal implementation of true beam search algorithm
+    /// True beam search over a single context with a reused KV cache: the
+    /// prompt is decoded once into slot 0 and shared via cache copies, each
+    /// live beam owns one sequence slot, and a step decodes only one new
+    /// token per beam. Must return the same candidates as
+    /// `generate_beam_search_full_eval`, the re-prefilling reference the
+    /// equivalence test compares against.
     ///
-    /// Unlike depth-1 beam methods which select top-k initial tokens
-    /// and then generate greedily, this implements proper beam search that
-    /// tracks cumulative probabilities at every step and keeps the globally
-    /// best beam_size candidates.
-    ///
-    /// # Algorithm
-    ///
-    /// 1. Start with top-k initial tokens as beams
-    /// 2. At each step:
-    ///    - For each active beam, get top-k candidate next tokens
-    ///    - Score each candidate: beam_score + log_prob(new_token)
-    ///    - Keep only the best beam_size candidates globally
-    /// 3. Repeat until all beams reach EOS or max_new_tokens
-    ///
-    /// True beam search over a single context whose KV cache is reused.
-    ///
-    /// Each live beam owns one llama.cpp sequence slot, so a step only ever
-    /// decodes the *one* new token per beam and attends to the cached prefix.
-    /// The prompt is decoded once into slot 0 and shared with the other beams
-    /// via a cache copy.
-    ///
-    /// The previous implementation instead created a fresh [`LlamaContext`] and
-    /// re-decoded the whole prompt for every beam at every step, which made one
-    /// conversion cost `max_new_tokens * beam_size` context allocations and full
-    /// prefills — the dominant cost of pressing Space, and the reason latency
-    /// exploded under CPU contention. `generate_beam_search_full_eval` keeps
-    /// that formulation as the reference the equivalence test compares against.
-    ///
-    /// Beam bookkeeping is unchanged (same expansion factor, same scoring, same
-    /// early termination), so the candidates this returns match the reference.
-    ///
-    /// The KV-cache-reuse formulation was contributed by
-    /// [kazuph/karukan@707eb10](https://github.com/kazuph/karukan/commit/707eb101f5de7b210f993b74723cf0ba9cc8c2af);
-    /// the port added the output-buffer-aware `batch_cap` and the `beam_size`
-    /// clamp below.
+    /// KV-cache-reuse formulation contributed by
+    /// [kazuph/karukan@707eb10](https://github.com/kazuph/karukan/commit/707eb101f5de7b210f993b74723cf0ba9cc8c2af).
     fn generate_beam_search_impl(
         &self,
         input_tokens: &[LlamaToken],
@@ -638,41 +580,31 @@ impl LlamaCppModel {
             ctx.decode(&mut batch)
                 .map_err(|e| KanjiError::Inference(e.into()))?;
 
-            // Collect candidates from all beams, remembering which slot each
-            // one descends from so the cache can follow the selection.
-            let mut candidates: Vec<(usize, BeamState)> = Vec::new();
+            // Collect (parent slot, token, score) for every expansion — the
+            // slot lets the cache follow the selection, and the token Vecs
+            // are materialized only for the survivors below.
+            let mut candidates: Vec<(usize, LlamaToken, f32)> =
+                Vec::with_capacity(beams.len() * expand_k);
 
             for (slot, beam) in beams.iter().enumerate() {
                 let logits = ctx.get_logits_ith(slot as i32);
                 let (top_tokens, top_log_probs) = self.get_top_k_tokens(logits, expand_k);
-
                 for (&token, &log_prob) in top_tokens.iter().zip(top_log_probs.iter()) {
-                    let mut new_tokens = beam.tokens.clone();
-                    new_tokens.push(token);
-
-                    candidates.push((
-                        slot,
-                        BeamState {
-                            tokens: new_tokens,
-                            score: beam.score + log_prob,
-                        },
-                    ));
+                    candidates.push((slot, token, beam.score + log_prob));
                 }
             }
 
             // Sort and keep top beam_size candidates
-            candidates.sort_by(|a, b| b.1.score.total_cmp(&a.1.score));
+            candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
             candidates.truncate(beam_size);
 
             // Partition into finished and active beams
             let mut next: Vec<(usize, BeamState)> = Vec::new();
-            for (parent, candidate) in candidates {
-                let last_token = match candidate.tokens.last() {
-                    Some(&t) => t,
-                    None => continue,
-                };
-
-                if self.is_eos_token(last_token, eos_token_id, model_eos) {
+            for (parent, token, score) in candidates {
+                let mut tokens = beams[parent].tokens.clone();
+                tokens.push(token);
+                let candidate = BeamState { tokens, score };
+                if self.is_eos_token(token, eos_token_id, model_eos) {
                     finished_beams.push(candidate);
                 } else {
                     next.push((parent, candidate));

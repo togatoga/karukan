@@ -16,7 +16,8 @@ fn median(mut v: Vec<u128>) -> u128 {
 
 fn bench(conv: &KanaKanjiConverter, reading: &str, n: usize, iters: usize) -> (u128, usize) {
     // Warmup (first call touches cold caches / lazy init)
-    let mut count = conv.convert(reading, "", n).map(|c| c.len()).unwrap_or(0);
+    let _ = conv.convert(reading, "", n);
+    let mut count = 0;
     let mut times = Vec::with_capacity(iters);
     for _ in 0..iters {
         let t = Instant::now();

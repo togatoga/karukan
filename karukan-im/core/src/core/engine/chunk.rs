@@ -1,41 +1,20 @@
 //! Live-conversion chunking of the composing buffer.
 //!
-//! The composing buffer is split into internal [`ComposingChunk`]s so each
-//! model call stays bounded for long input. Chunking asks one question per
-//! character — Japanese or not (see [`is_japanese`]) — and starts a new chunk
-//! whenever the current one is full or that answer changes. A Japanese run is
-//! sent to the neural converter; a non-Japanese run (digits / symbols /
-//! alphabet) is passed through verbatim.
-//!
-//! Re-chunking after an edit is *not* incremental: every keystroke re-chunks
-//! the whole buffer from scratch and re-runs every chunk through
-//! `run_kana_kanji_conversion`, whose conversion cache (keyed by reading +
-//! lctx + strategy) turns unchanged chunks into lookups. Only chunks whose
-//! reading or left context actually changed reach the model, so the cost per
-//! keystroke matches the old prefix/suffix-diff scheme — without the diff
-//! algorithm, and with downstream chunks correctly reconverted when a middle
-//! edit changes their left context.
+//! The buffer is split into [`ComposingChunk`]s — a new chunk on every
+//! Japanese ⇄ non-Japanese switch ([`is_japanese`]) or length cap — so each
+//! model call stays bounded. Japanese runs go to the model, non-Japanese
+//! runs pass through verbatim. Every keystroke re-chunks from scratch; the
+//! conversion cache makes unchanged chunks free.
 
 use tracing::debug;
 
 use super::*;
 
-/// Whether `c` is "Japanese": hiragana, katakana (including the prolonged
-/// sound mark `ー`), or a CJK ideograph (kanji).
-///
-/// Everything else — ASCII / full-width digits, letters, and symbols, plus all
-/// punctuation — is non-Japanese. Chunking only ever asks this one question:
-/// Japanese text goes to the neural converter, a non-Japanese run is passed
-/// through to the preedit verbatim (the model otherwise tends to drop or
-/// mangle digits in the middle of a run such as `123456`). Because punctuation
-/// is non-Japanese it naturally separates clauses — `今日は。明日` chunks as
-/// `今日は` / `。` / `明日` — so no separate punctuation rule is needed.
-///
-/// The middle dot `・` (U+30FB) sits in the katakana block but is a separator
-/// symbol, so it is special-cased as non-Japanese: `ジョン・スミス` splits into
-/// `ジョン` / `・` / `スミス` with the `・` passed through verbatim. A katakana
-/// word like `スーパーマーケット` has no `・` and is entirely Japanese (the `ー`
-/// stays Japanese), so it remains one chunk.
+/// Whether `c` is "Japanese": hiragana, katakana (incl. `ー`), or kanji.
+/// Everything else — digits, letters, symbols, all punctuation — is not,
+/// which keeps digits out of the model and lets punctuation separate
+/// clauses with no extra rule. The 中黒 `・` sits in the katakana block but
+/// is special-cased as a separator (`ジョン・スミス` splits around it).
 pub(super) fn is_japanese(c: char) -> bool {
     // 中黒 (・): a katakana-block separator, treated as a non-Japanese symbol.
     if c == '\u{30FB}' {
@@ -53,7 +32,7 @@ pub(super) fn is_japanese(c: char) -> bool {
 /// [`is_japanese`]). So a maximal Japanese run and a maximal non-Japanese run
 /// each become their own chunk(s), and a run longer than `max` is hard-split
 /// into `max`-char pieces.
-pub(super) fn group_chunks(chars: &[char], max: usize) -> Vec<&[char]> {
+fn group_chunks(chars: &[char], max: usize) -> Vec<&[char]> {
     let mut out = Vec::new();
     let mut start = 0;
     while start < chars.len() {
@@ -70,29 +49,11 @@ pub(super) fn group_chunks(chars: &[char], max: usize) -> Vec<&[char]> {
 }
 
 impl InputMethodEngine {
-    /// Auto-suggest over the composing buffer, split into chunks of at most
-    /// `config.composing_chunk_len` reading characters so each model call
-    /// stays bounded for long input.
-    ///
-    /// The chunking is a pure function of the current text: the buffer is
-    /// re-chunked from scratch and every chunk re-converted on each call.
-    /// `run_kana_kanji_conversion` caches results by reading + lctx +
-    /// strategy, so chunks whose reading and left context are unchanged are
-    /// cache hits — a keystroke at the end only infers the final chunk, and
-    /// backspacing over just-typed text hits the cache for every chunk. A
-    /// middle edit changes the left context of the chunks to its right, so
-    /// those miss and are reconverted with the correct context.
-    ///
-    /// Each chunk's left context is the editor surrounding text plus the
-    /// converted text of all preceding chunks, truncated to
-    /// `max_api_context_len`.
-    ///
-    /// Returns the concatenated conversion of the whole buffer, or `None` when
-    /// it equals the raw reading (no useful model suggestion).
-    ///
-    /// Note: for input no longer than one chunk (the common case, default
-    /// N=30) this produces exactly one model call over the whole buffer, i.e.
-    /// identical behavior to a whole-buffer conversion.
+    /// Auto-suggest over the composing buffer via [`Self::convert_chunks`],
+    /// storing the chunks for display. Returns the concatenated conversion,
+    /// or `None` when it equals the raw reading (no useful suggestion).
+    /// Input no longer than one chunk — the common case — is a single
+    /// whole-buffer model call.
     pub(super) fn chunked_auto_suggest(&mut self) -> Option<String> {
         let full_reading = self.input_buf.reading();
         if full_reading.is_empty() {
@@ -101,18 +62,11 @@ impl InputMethodEngine {
         }
         self.ensure_kanji_converter();
 
-        let chunk_len = self.chunk_len();
         let text: Vec<char> = full_reading.chars().collect();
         let base_ctx = self.truncate_context_for_api();
 
-        let mut chunks: Vec<ComposingChunk> = Vec::new();
-        let mut combined = String::new();
-        for chunk in group_chunks(&text, chunk_len) {
-            let reading: String = chunk.iter().collect();
-            let new = self.convert_new_chunk(reading, &base_ctx, &combined);
-            combined.push_str(&new.converted);
-            chunks.push(new);
-        }
+        let chunks = self.convert_chunks(&text, &base_ctx);
+        let combined: String = chunks.iter().map(|c| c.converted.as_str()).collect();
 
         self.chunks = chunks;
         self.log_chunk_state("convert");
@@ -120,12 +74,35 @@ impl InputMethodEngine {
         (combined != full_reading).then_some(combined)
     }
 
-    /// Build one converted chunk for `reading`, whose left context is
-    /// `base_ctx` plus everything converted so far (`combined`). A non-Japanese
-    /// reading (digits / symbols / alphabet) is passed through verbatim — never
-    /// sent to the model, which tends to drop digits mid-run; a Japanese
-    /// reading is converted with that left context. The reading is
-    /// group-homogeneous, so its first char decides. See [`is_japanese`].
+    /// The single implementation of the chunk-grid conversion: split with
+    /// [`group_chunks`], each chunk built with the converted text of the
+    /// preceding chunks as its left context.
+    fn convert_chunks(&mut self, chars: &[char], base_ctx: &str) -> Vec<ComposingChunk> {
+        let mut chunks: Vec<ComposingChunk> = Vec::new();
+        let mut combined = String::new();
+        for chunk in group_chunks(chars, self.chunk_len()) {
+            let new = self.convert_new_chunk(chunk.iter().collect(), base_ctx, &combined);
+            combined.push_str(&new.converted);
+            chunks.push(new);
+        }
+        chunks
+    }
+
+    /// Top-1 conversion of `chars` on the live-conversion chunk grid:
+    /// Japanese chunks go through the model (conversion-cache hits while
+    /// the user types), non-Japanese chunks pass through verbatim, and
+    /// each chunk's lctx is `base_ctx` plus the converted text before it.
+    pub(super) fn convert_on_chunk_grid(&mut self, chars: &[char], base_ctx: &str) -> String {
+        self.convert_chunks(chars, base_ctx)
+            .into_iter()
+            .map(|c| c.converted)
+            .collect()
+    }
+
+    /// Build one converted chunk: a Japanese reading goes to the model with
+    /// `base_ctx` + `combined` as left context, a non-Japanese one passes
+    /// through verbatim. The reading is group-homogeneous, so its first
+    /// char decides.
     fn convert_new_chunk(
         &mut self,
         reading: String,
@@ -146,19 +123,15 @@ impl InputMethodEngine {
         self.config.composing_chunk_len.max(1)
     }
 
-    /// The left context (lctx) a chunk is built with: the editor surrounding
-    /// text `base` followed by the converted text of every preceding chunk,
-    /// truncated to the API context budget. Defined once so the context the
-    /// model is given at conversion time (`convert_new_chunk`) stays identical
-    /// to the one displayed in the aux text (`chunk_lctx`).
+    /// The left context (lctx) a chunk is built with: `base` (editor
+    /// surrounding text) + preceding converted text, truncated to the API
+    /// budget. Defined once so conversion and the aux display can't drift.
     pub(super) fn lctx_for(&self, base: &str, preceding_converted: &str) -> String {
         self.truncate_context(&format!("{base}{preceding_converted}"))
     }
 
-    /// Left context for the chunk at `index`: the editor surrounding text plus
-    /// the converted text of every preceding chunk, truncated to the context
-    /// budget. Derived on demand (the chunk doesn't store it) — it is just "the
-    /// value of the chunks to the left".
+    /// Left context for the chunk at `index`, derived on demand from the
+    /// chunks to its left.
     pub(super) fn chunk_lctx(&self, index: usize) -> String {
         let base = self.truncate_context_for_api();
         let preceding: String = self.chunks[..index.min(self.chunks.len())]
@@ -169,10 +142,8 @@ impl InputMethodEngine {
     }
 
     /// Best-effort lazy init of the kanji converter. Chunking proceeds even
-    /// on failure so `self.chunks` always mirrors the current buffer (which
-    /// chunk the cursor is in, etc.); `run_kana_kanji_conversion` handles a
-    /// missing converter by yielding nothing, and each chunk falls back to its
-    /// own reading.
+    /// on failure so `self.chunks` always mirrors the buffer; each chunk
+    /// then falls back to its own reading.
     fn ensure_kanji_converter(&mut self) {
         if self.converters.kanji.is_none()
             && let Err(e) = self.init_kanji_converter()
@@ -190,11 +161,9 @@ impl InputMethodEngine {
             .unwrap_or_else(|| reading.to_string())
     }
 
-    /// Index of the chunk the cursor currently sits in, found by walking the
-    /// actual chunk lengths (chunks are variable-length — group splits and the
-    /// length cap — so a fixed `cursor / chunk_len` is wrong). This is the
-    /// chunk a character insert/delete at the cursor lands in. Returns 0 for an
-    /// empty buffer or a cursor at the very start.
+    /// Index of the chunk the cursor sits in, by walking the actual chunk
+    /// lengths (chunks are variable-length, so `cursor / chunk_len` is
+    /// wrong). 0 for an empty buffer or a cursor at the very start.
     pub(super) fn current_chunk_index(&self) -> usize {
         let pos = self.input_buf.reading_cursor().saturating_sub(1);
         let mut end = 0;
@@ -207,11 +176,8 @@ impl InputMethodEngine {
         self.chunks.len().saturating_sub(1)
     }
 
-    /// Emit a debug line describing the current chunking: how many chunks
-    /// exist and which one — and how long — the cursor currently sits in. `at`
-    /// labels the call site (e.g. `"convert"` after re-chunking, `"cursor"`
-    /// after a caret move) so the log shows chunk changes on cursor movement,
-    /// not just on conversion.
+    /// Debug-log the current chunking; `at` labels the call site
+    /// (`"convert"`, `"cursor"`, …).
     pub(super) fn log_chunk_state(&self, at: &str) {
         let current = self.current_chunk_index();
         let current_len = self

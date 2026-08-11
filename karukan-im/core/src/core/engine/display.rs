@@ -58,14 +58,10 @@ impl InputMethodEngine {
         preedit
     }
 
-    /// The live conversion result as displayed: the live text plus the settled
-    /// pending romaji tail (早稲田 + d → 早稲田d). Committing or preserving
-    /// the live text alone would drop the tail, since the live suggestion only
-    /// covers the settled reading. Empty when live conversion has no result
-    /// or the cursor is away from the end — there the display already fell
-    /// back to kana (see `build_composing_preedit`) and the pending run sits
-    /// mid-buffer, so the concatenation would not match what is shown.
-    /// Must be called before `settle_romaji` (which empties the pending run).
+    /// The live conversion result as displayed: live text plus the settled
+    /// pending romaji tail (早稲田 + d → 早稲田d). Empty when there is no
+    /// live result or the cursor is away from the end (the display fell
+    /// back to kana there). Call before `settle_romaji` empties the tail.
     pub(super) fn live_text_with_pending(&self) -> String {
         let live = self.live_text();
         if live.is_empty() || self.input_buf.cursor() != self.input_buf.char_count() {
@@ -117,13 +113,10 @@ impl InputMethodEngine {
         )
     }
 
-    /// Context line for live conversion (composing / auto-suggest). The single
-    /// `lctx:` shown is the *current chunk's* left context — the editor
-    /// surrounding text plus the converted text of the preceding chunks, derived
-    /// via `chunk_lctx` — so the model context that chunk uses is what gets
-    /// displayed, rather than a second redundant lctx. It already folds in the
-    /// editor surrounding left context (so an empty buffer shows it as-is). The
-    /// right side stays the editor surrounding right context.
+    /// Context line for live conversion: the `lctx:` shown is the *current
+    /// chunk's* left context (`chunk_lctx`), i.e. exactly what the model
+    /// uses for that chunk; the right side stays the editor surrounding
+    /// right context.
     pub(super) fn display_context_chunked(&self) -> String {
         let lctx = self.chunk_lctx(self.current_chunk_index());
         let left = (!lctx.is_empty()).then_some(lctx.as_str());
