@@ -3,97 +3,23 @@
 //! Splitting bounds each model call and freezes settled text: once a
 //! boundary is behind the caret that chunk's reading and lctx stop
 //! changing, so it stays a cache hit and its display no longer flickers.
-//! Boundary rules live in [`group_chunks`]; the user-facing rationale is
-//! `docs/chunking.md`.
+//! The user-facing rationale is `docs/chunking.md`.
 //!
 //! Every keystroke re-chunks the whole buffer from scratch. The conversion
 //! cache turns unchanged chunks into lookups, so only chunks whose reading
 //! or left context actually changed reach the model.
+//!
+//! Where the boundaries fall is [`split`], which knows nothing of the
+//! engine.
+mod split;
+
 use tracing::debug;
 
-use karukan_engine::kana::is_digit;
+use split::{ChunkLimits, group_chunks};
+
+pub(super) use split::is_japanese;
 
 use super::*;
-
-/// Whether `c` is "Japanese": hiragana, katakana (incl. `ー`), or kanji.
-/// Everything else — digits, letters, symbols, all punctuation — is not, and
-/// only a chunk containing Japanese reaches the model. The 中黒 `・` sits in
-/// the katakana block but is special-cased as a separator symbol, so it
-/// counts against the absorption budget like any other mark.
-pub(super) fn is_japanese(c: char) -> bool {
-    // 中黒 (・): a katakana-block separator, treated as a non-Japanese symbol.
-    if c == '\u{30FB}' {
-        return false;
-    }
-    matches!(c,
-        '\u{3040}'..='\u{309F}'   // hiragana
-        | '\u{30A0}'..='\u{30FF}' // katakana (incl. ー U+30FC)
-        | '\u{3400}'..='\u{9FFF}' // CJK ideographs (kanji)
-    )
-}
-
-/// Split `chars` into chunks. A boundary opens at every position in
-/// `breaks` (manual boundaries, sorted), wherever a chunk reaches `max`
-/// chars, and around non-Japanese chars, except that a chunk containing
-/// Japanese keeps marks up to `max_symbols` and digits up to `max_digits`.
-/// Digits count per run, so a run is kept whole or split off whole and
-/// never tears. Letters never join a Japanese chunk: latin text is
-/// passthrough, and an unresolved romaji tail must not reach the model as
-/// part of the reading. A chunk with no Japanese has nothing to convert and
-/// is exempt from both caps.
-fn group_chunks<'a>(
-    chars: &'a [char],
-    max: usize,
-    max_symbols: usize,
-    max_digits: usize,
-    breaks: &[usize],
-) -> Vec<&'a [char]> {
-    let mut out = Vec::new();
-    let mut start = 0;
-    let mut has_japanese = false;
-    let mut symbols = 0;
-    let mut digits = 0;
-    for (i, &c) in chars.iter().enumerate() {
-        let japanese = is_japanese(c);
-        // Whether the current chunk can keep `c`. A digit is judged by the
-        // whole run it belongs to (decided at the run's first char; a kept
-        // run's later digits re-check with a shorter tail and stay).
-        let keeps = if japanese {
-            true
-        } else if is_digit(c) {
-            let run = chars[i..].iter().take_while(|&&r| is_digit(r)).count();
-            digits + run <= max_digits
-        } else if c.is_alphabetic() {
-            false
-        } else {
-            symbols < max_symbols
-        };
-        let cut = i > start
-            && (breaks.contains(&i)
-                || i - start >= max
-                || (japanese && !has_japanese)
-                || (!japanese && has_japanese && !keeps));
-        if cut {
-            out.push(&chars[start..i]);
-            start = i;
-            has_japanese = false;
-            symbols = 0;
-            digits = 0;
-        }
-        has_japanese |= japanese;
-        if !japanese {
-            if is_digit(c) {
-                digits += 1;
-            } else {
-                symbols += 1;
-            }
-        }
-    }
-    if start < chars.len() {
-        out.push(&chars[start..]);
-    }
-    out
-}
 
 impl InputMethodEngine {
     /// Auto-suggest over the composing buffer via [`Self::convert_chunks`],
@@ -130,8 +56,8 @@ impl InputMethodEngine {
         let groups = self.split_chunks(chars);
         let mut chunks: Vec<ComposingChunk> = Vec::new();
         let mut combined = String::new();
-        for chunk in groups {
-            let new = self.convert_new_chunk(chunk.iter().collect(), base_ctx, &combined);
+        for reading in groups {
+            let new = self.convert_new_chunk(reading, base_ctx, &combined);
             combined.push_str(&new.converted);
             chunks.push(new);
         }
@@ -150,14 +76,15 @@ impl InputMethodEngine {
             // A chunk with no Japanese has nothing to convert and must never
             // reach the model, so it walls the span off — including when it
             // is the last chunk, which then leaves the span empty.
-            if !chunk.iter().any(|&c| is_japanese(c)) {
+            if !chunk.chars().any(is_japanese) {
                 break;
             }
-            if taken > 0 && taken + chunk.len() > budget {
+            let len = chunk.chars().count();
+            if taken > 0 && taken + len > budget {
                 break;
             }
-            taken += chunk.len();
-            start -= chunk.len();
+            taken += len;
+            start -= len;
             if self.chunk_breaks.contains(&start) {
                 break;
             }
@@ -168,14 +95,13 @@ impl InputMethodEngine {
     /// Split `chars` with the engine's configured rules. The single place
     /// the settings and the manual breaks meet [`group_chunks`], so a new
     /// rule reaches every caller at once.
-    fn split_chunks<'a>(&self, chars: &'a [char]) -> Vec<&'a [char]> {
-        group_chunks(
-            chars,
-            self.chunk_chars(),
-            self.config.chunk_symbols,
-            self.config.chunk_digits,
-            &self.chunk_breaks,
-        )
+    fn split_chunks(&self, chars: &[char]) -> Vec<String> {
+        let limits = ChunkLimits {
+            chars: self.chunk_chars(),
+            symbols: self.config.chunk_symbols,
+            digits: self.config.chunk_digits,
+        };
+        group_chunks(chars, limits, &self.chunk_breaks)
     }
 
     /// Top-1 conversion of `chars` on the same chunk grid live conversion
@@ -353,171 +279,5 @@ impl InputMethodEngine {
             current,
             current_len
         );
-    }
-}
-
-#[cfg(test)]
-mod group_chunk_tests {
-    use super::group_chunks;
-
-    /// The default per-chunk symbol cap (mirrors `EngineConfig::default` /
-    /// default.toml).
-    const SYMBOLS: usize = 1;
-    /// Digits stay out of the converter (default.toml `chunk_digits = 0`).
-    const DIGITS: usize = 0;
-
-    /// Split with the default caps and no manual breaks.
-    fn split(s: &str, max: usize) -> Vec<String> {
-        split_full(s, max, SYMBOLS, DIGITS, &[])
-    }
-
-    fn split_full(
-        s: &str,
-        max: usize,
-        max_symbols: usize,
-        max_digits: usize,
-        breaks: &[usize],
-    ) -> Vec<String> {
-        let chars: Vec<char> = s.chars().collect();
-        group_chunks(&chars, max, max_symbols, max_digits, breaks)
-            .into_iter()
-            .map(|c| c.iter().collect())
-            .collect()
-    }
-
-    #[test]
-    fn japanese_run_splits_by_length_cap() {
-        assert_eq!(split("あいうえお", 2), vec!["あい", "うえ", "お"]);
-    }
-
-    #[test]
-    fn long_japanese_run_hard_breaks() {
-        assert_eq!(split("あいうえお", 3), vec!["あいう", "えお"]);
-    }
-
-    #[test]
-    fn a_run_of_marks_after_japanese_forms_one_chunk() {
-        // The first mark rides along; the rest have no Japanese in front of
-        // them, so they grow into a single verbatim chunk instead of
-        // splitting one by one.
-        assert_eq!(split("ア、、、、、", 40), vec!["ア、", "、、、、"]);
-    }
-
-    #[test]
-    fn a_mark_rides_along_with_the_japanese_around_it() {
-        // The mark stays inline while the chunk has budget left, so 「おい、」
-        // keeps converting as one unit instead of freezing 「おい」 (as 老)
-        // the moment the mark is typed.
-        assert_eq!(split("おい、", 10), vec!["おい、"]);
-        assert_eq!(split("あ、いう", 10), vec!["あ、いう"]);
-        assert_eq!(split("いいね！すごい", 10), vec!["いいね！すごい"]);
-        assert_eq!(split("きごう〜", 10), vec!["きごう〜"]);
-    }
-
-    #[test]
-    fn mark_past_the_cap_forces_a_new_chunk() {
-        // One mark per chunk by default: the second opens a new chunk even
-        // directly after Japanese, which is roughly one clause each.
-        assert_eq!(split("あ、い。う", 10), vec!["あ、い", "。", "う"]);
-        assert_eq!(
-            split("おい、おまえだよ。まて、こら", 20),
-            vec!["おい、おまえだよ", "。", "まて、こら"]
-        );
-        // The kept mark stays put, so the left chunk is not reshaped.
-        assert_eq!(split("すごい！？", 10), vec!["すごい！", "？"]);
-        assert_eq!(split("は、じ。", 10), vec!["は、じ", "。"]);
-    }
-
-    #[test]
-    fn digits_ride_along_when_allowed() {
-        // Raising the digit budget lets short runs go through the converter
-        // with the text around them.
-        assert_eq!(split_full("あ12い", 10, SYMBOLS, 4, &[]), vec!["あ12い"]);
-        assert_eq!(
-            split_full("だい3かい", 10, SYMBOLS, 4, &[]),
-            vec!["だい3かい"]
-        );
-        // A run is kept whole or split off whole, never torn.
-        assert_eq!(
-            split_full("あ1234い", 40, SYMBOLS, 2, &[]),
-            vec!["あ", "1234", "い"]
-        );
-    }
-
-    #[test]
-    fn letters_never_ride_along() {
-        // Latin text is passthrough, and an unresolved romaji tail must not
-        // reach the converter as part of the reading.
-        assert_eq!(split("あいk", 40), vec!["あい", "k"]);
-    }
-
-    #[test]
-    fn caps_are_configurable() {
-        // Two marks per chunk.
-        assert_eq!(
-            split_full("あ、い。う", 10, 2, DIGITS, &[]),
-            vec!["あ、い。う"]
-        );
-        // No marks at all: split at every one.
-        assert_eq!(split_full("おい、", 10, 0, DIGITS, &[]), vec!["おい", "、"]);
-    }
-
-    #[test]
-    fn chunk_with_no_japanese_is_exempt_from_the_cap() {
-        // A chunk never *starts* with absorbed symbols: with no Japanese in
-        // front of them, digits/symbols form a verbatim chunk of their own,
-        // growing to the length cap regardless of how many symbols it holds.
-        assert_eq!(split("123あ", 40), vec!["123", "あ"]);
-        assert_eq!(split("1233413！！〜〜", 40), vec!["1233413！！〜〜"]);
-        assert_eq!(split("iPhone15", 40), vec!["iPhone15"]);
-    }
-
-    #[test]
-    fn non_japanese_run_is_capped_at_max() {
-        assert_eq!(split("abcdef", 2), vec!["ab", "cd", "ef"]);
-    }
-
-    #[test]
-    fn katakana_word_with_prolonged_mark_stays_together() {
-        // `ー` (U+30FC) lives in the katakana block, so a katakana word is one
-        // Japanese chunk and is never split off as a symbol.
-        assert_eq!(split("スーパーマーケット", 40), vec!["スーパーマーケット"]);
-    }
-
-    #[test]
-    fn middle_dot_counts_toward_the_symbol_cap() {
-        // 中黒 ・ (U+30FB) sits in the katakana block but is special-cased as
-        // a symbol: it is absorbed like any other mark and counts against the
-        // cap.
-        assert_eq!(split("ジョン・スミス", 40), vec!["ジョン・スミス"]);
-        assert_eq!(split("あ・い・う・え", 40), vec!["あ・い", "・", "う・え"]);
-    }
-
-    #[test]
-    fn manual_breaks_force_boundaries() {
-        assert_eq!(
-            split_full("あいうえ", 40, SYMBOLS, DIGITS, &[2]),
-            vec!["あい", "うえ"]
-        );
-        assert_eq!(
-            split_full("あいうえ", 40, SYMBOLS, DIGITS, &[1, 3]),
-            vec!["あ", "いう", "え"]
-        );
-        // A break at 0 or at the very end changes nothing.
-        assert_eq!(split_full("あい", 40, SYMBOLS, DIGITS, &[0]), vec!["あい"]);
-        assert_eq!(split_full("あい", 40, SYMBOLS, DIGITS, &[2]), vec!["あい"]);
-    }
-
-    #[test]
-    fn manual_break_splits_a_non_japanese_run() {
-        assert_eq!(
-            split_full("1234", 40, SYMBOLS, DIGITS, &[2]),
-            vec!["12", "34"]
-        );
-    }
-
-    #[test]
-    fn absorbed_symbols_count_against_the_length_cap() {
-        assert_eq!(split("あ、いうえ", 3), vec!["あ、い", "うえ"]);
     }
 }
