@@ -7,7 +7,24 @@ use super::error::KanjiError;
 use super::model_config::{ModelFamily, VariantConfig, registry};
 type Result<T> = super::error::Result<T>;
 use hf_hub::{HFClientSync, split_id};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+/// Paths already resolved in this process, keyed by (repo, filename).
+///
+/// Resolving the same file twice is not free, and not even safe to do
+/// concurrently: unless the revision is a commit hash, hf-hub takes the
+/// network path on every call and rebuilds the snapshot symlink by removing
+/// it first, so the file briefly does not exist. A second thread that
+/// resolved the path just before can then be handed a path that vanishes
+/// under it — which is what made parallel test runs fail at random inside
+/// `LlamaModel::load_from_file`. Resolving once per process closes the
+/// window, and drops a HEAD request from every model load.
+fn resolved_paths() -> &'static Mutex<HashMap<(String, String), PathBuf>> {
+    static PATHS: OnceLock<Mutex<HashMap<(String, String), PathBuf>>> = OnceLock::new();
+    PATHS.get_or_init(Mutex::default)
+}
 
 /// Download a GGUF model from HuggingFace Hub
 ///
@@ -21,6 +38,15 @@ use std::path::PathBuf;
 /// # Environment Variables
 /// * `HF_TOKEN` - HuggingFace API token (required for private repositories)
 pub fn download_gguf(repo_id: &str, filename: &str) -> Result<PathBuf> {
+    let key = (repo_id.to_string(), filename.to_string());
+    // Held across the download so a second caller waits for the result
+    // instead of racing hf-hub for the same file. Only successes are
+    // remembered: a transient failure must not stick for the process.
+    let mut resolved = resolved_paths().lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(path) = resolved.get(&key) {
+        return Ok(path.clone());
+    }
+
     // HFClientSync::new() resolves HF_TOKEN (env var or cached login) itself
     let client = HFClientSync::new().map_err(|e| KanjiError::Download(e.into()))?;
 
@@ -37,6 +63,7 @@ pub fn download_gguf(repo_id: &str, filename: &str) -> Result<PathBuf> {
 
     tracing::info!("Downloaded to {:?}", path);
 
+    resolved.insert(key, path.clone());
     Ok(path)
 }
 
