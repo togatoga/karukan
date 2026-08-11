@@ -553,10 +553,10 @@ impl InputMethodEngine {
                         // keysym cases — some environments fold Shift into
                         // an uppercase keysym; direction must not change.
                         Keysym::KEY_R | Keysym::KEY_R_UPPER => {
-                            return self.cycle_candidate_filter(FilterDirection::Forward);
+                            return self.cycle_candidate_filter(FilterDirection::Backward);
                         }
                         Keysym::KEY_T | Keysym::KEY_T_UPPER => {
-                            return self.cycle_candidate_filter(FilterDirection::Backward);
+                            return self.cycle_candidate_filter(FilterDirection::Forward);
                         }
                         // Ctrl+J: split at the caret and rebuild, so the
                         // alternatives cover only the text after the break.

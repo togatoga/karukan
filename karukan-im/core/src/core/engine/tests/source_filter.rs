@@ -44,9 +44,9 @@ fn shown_texts(engine: &InputMethodEngine) -> Vec<String> {
 /// dictionaries, so its candidates carry either dictionary's source.
 fn cycle_expecting_dictionary_view(engine: &mut InputMethodEngine, forward: bool) {
     let key = if forward {
-        Keysym::KEY_R
-    } else {
         Keysym::KEY_T
+    } else {
+        Keysym::KEY_R
     };
     let result = engine.process_key(&press_ctrl(key));
     let aux = last_aux_text(&result).expect("aux text action");
@@ -68,9 +68,9 @@ fn cycle_expecting_dictionary_view(engine: &mut InputMethodEngine, forward: bool
 
 fn cycle_expecting_rewriter_view(engine: &mut InputMethodEngine, forward: bool) {
     let key = if forward {
-        Keysym::KEY_R
-    } else {
         Keysym::KEY_T
+    } else {
+        Keysym::KEY_R
     };
     let result = engine.process_key(&press_ctrl(key));
     let aux = last_aux_text(&result).expect("aux text action");
@@ -109,9 +109,9 @@ fn cycle_expecting_rewriter_view(engine: &mut InputMethodEngine, forward: bool) 
 /// EMPTY `source` view: no candidates, 「候補なし」 in the aux.
 fn cycle_expecting_empty(engine: &mut InputMethodEngine, forward: bool, source: CandidateSource) {
     let result = if forward {
-        engine.process_key(&press_ctrl(Keysym::KEY_R))
-    } else {
         engine.process_key(&press_ctrl(Keysym::KEY_T))
+    } else {
+        engine.process_key(&press_ctrl(Keysym::KEY_R))
     };
     assert_eq!(engine.candidates().unwrap().len(), 0);
     let aux = last_aux_text(&result).expect("aux text action");
@@ -134,9 +134,9 @@ fn open_model_view(engine: &mut InputMethodEngine) {
 /// `source`, with its emoji in the aux header.
 fn cycle_expecting(engine: &mut InputMethodEngine, forward: bool, source: CandidateSource) {
     let result = if forward {
-        engine.process_key(&press_ctrl(Keysym::KEY_R))
-    } else {
         engine.process_key(&press_ctrl(Keysym::KEY_T))
+    } else {
+        engine.process_key(&press_ctrl(Keysym::KEY_R))
     };
     assert!(
         shown_sources(engine).iter().all(|s| *s == Some(source)),
@@ -165,13 +165,13 @@ fn test_cycle_visits_every_source_without_skipping() {
 }
 
 #[test]
-fn test_ctrl_r_from_composing_opens_filtered_conversion() {
-    // Straight from typing: Ctrl+R starts the conversion already narrowed
+fn test_ctrl_t_from_composing_opens_filtered_conversion() {
+    // Straight from typing: Ctrl+T starts the conversion already narrowed
     // to the first source (learning) — no Space needed.
     let mut engine = engine_with_learned("あい", "愛");
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_T));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
@@ -183,14 +183,14 @@ fn test_ctrl_r_from_composing_opens_filtered_conversion() {
 }
 
 #[test]
-fn test_ctrl_t_from_composing_opens_reverse_filtered_conversion() {
-    // The reverse entry works straight from typing too: Ctrl+T starts
+fn test_ctrl_r_from_composing_opens_reverse_filtered_conversion() {
+    // The reverse entry works straight from typing too: Ctrl+R starts
     // the conversion narrowed to the cycle's tail (rewriter — one press
-    // away for things like future date conversion).
+    // away for the plain kana).
     let mut engine = engine_with_learned("あい", "愛");
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_T));
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.starts_with("[変換:🔄]"), "aux was: {aux}");
@@ -201,12 +201,12 @@ fn test_ctrl_t_from_composing_opens_reverse_filtered_conversion() {
 }
 
 #[test]
-fn test_uppercase_ctrl_r_without_shift_cycles_forward() {
-    // Some environments deliver Ctrl+R as keysym 'R' (uppercase) with the
+fn test_uppercase_ctrl_t_without_shift_cycles_forward() {
+    // Some environments deliver Ctrl+T as keysym 'T' (uppercase) with the
     // shift bit unset; direction must follow the modifier, not the case.
     let mut engine = engine_in_conversion();
     let key = KeyEvent::new(
-        Keysym::KEY_R_UPPER,
+        Keysym::KEY_T_UPPER,
         KeyModifiers::new().with_control(true),
         true,
     );
@@ -252,7 +252,7 @@ fn test_cycle_backward_reaches_last_source_first() {
 fn test_commit_from_filtered_list() {
     // Return commits the selected row of the narrowed list.
     let mut engine = engine_in_conversion();
-    engine.process_key(&press_ctrl(Keysym::KEY_R));
+    engine.process_key(&press_ctrl(Keysym::KEY_T));
     let result = engine.process_key(&press_key(Keysym::RETURN));
     let committed = result.actions.iter().find_map(|a| match a {
         EngineAction::Commit(text) => Some(text.clone()),
@@ -288,8 +288,8 @@ fn test_dictionary_view_prefix_matches_from_one_char() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 学習（候補なし）
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📚辞書
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 学習（候補なし）
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚辞書
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
     let candidates = engine.candidates().unwrap().candidates().to_vec();
@@ -318,8 +318,8 @@ fn test_typing_narrows_within_the_filtered_view() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📚
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝（候補なし）
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚
     assert!(
         last_aux_text(&result)
             .expect("aux")
@@ -355,8 +355,8 @@ fn test_backspace_widens_within_the_filtered_view() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝（候補なし）
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📚: [藍]
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝（候補なし）
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚: [藍]
     assert_eq!(shown_texts(&engine), vec!["藍"]);
 
     let result = engine.process_key(&press_key(Keysym::BACKSPACE));
@@ -602,7 +602,7 @@ fn test_filtered_conversion_replaces_live_display() {
     }];
     engine.live.shown = true;
 
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝 view: [愛]
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝 view: [愛]
     engine.process_key(&press_key(Keysym::RETURN)); // commit 愛
 
     let result = engine.process_key(&press('k'));
@@ -620,7 +620,7 @@ fn test_emoji_rewriter_view_has_no_literal_query() {
     let mut engine = InputMethodEngine::new();
     engine.process_key(&press(':'));
     engine.process_key(&press('s'));
-    engine.process_key(&press_ctrl(Keysym::KEY_T)); // cycle tail = 🔄
+    engine.process_key(&press_ctrl(Keysym::KEY_R)); // cycle tail = 🔄
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     let texts = shown_texts(&engine);
     assert!(
@@ -779,7 +779,7 @@ fn test_mid_caret_typing_does_not_tail_predict() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_ctrl(Keysym::KEY_R)); // 📝 view for あい
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝 view for あい
     assert_eq!(shown_texts(&engine), vec!["愛香"]);
 
     // `k` lands mid-buffer (あk|い): the prediction disappears instead of
@@ -1077,7 +1077,7 @@ fn test_ctrl_i_jumps_straight_to_the_ai_view() {
     assert!(
         last_aux_text(&result)
             .expect("aux")
-            .starts_with("[変換:🔄]")
+            .starts_with("[変換:📚]")
     );
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     assert!(

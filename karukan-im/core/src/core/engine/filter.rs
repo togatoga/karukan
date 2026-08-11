@@ -7,16 +7,19 @@
 use super::conversion::width_annotation;
 use super::*;
 
-/// Ctrl+R/T rotate through the source views, grouped by what the user is
-/// looking for: what they taught the IME (learning), what it has looked up
-/// (both dictionaries, as one stop), what it guessed (the model), and the
-/// mechanical rewrites. The model sits late on purpose — Ctrl+I reaches it
-/// in one press from anywhere, so the cycle does not have to keep it near
-/// the front.
+/// The source views Ctrl+T and Ctrl+R rotate through, grouped by what the
+/// user is looking for: what they taught the IME (learning), what it has
+/// looked up (both dictionaries, as one stop), what it guessed (the model),
+/// and the mechanical rewrites. The model sits late on purpose — Ctrl+I
+/// reaches it in one press from anywhere, so the cycle does not have to
+/// keep it near the front.
+///
+/// Ctrl+R is the reverse one, matching readline's reverse-i-search and the
+/// fact that R sits left of T.
 ///
 /// The full list is not a stop: it is what Space already shows, and
 /// Esc → Space returns to it. Fallback has no slot of its own — the plain
-/// kana ride at the tail of the rewriter view, which sits last so Ctrl+T
+/// kana ride at the tail of the rewriter view, which sits last so Ctrl+R
 /// reaches it in one press from the full list.
 const FILTER_CYCLE: [CandidateSource; 4] = [
     CandidateSource::Learning,
@@ -46,7 +49,7 @@ impl InputMethodEngine {
         }
     }
 
-    /// Ctrl+R / Ctrl+T: rotate to the next / previous view in
+    /// Ctrl+T / Ctrl+R: rotate to the next / previous view in
     /// [`FILTER_CYCLE`], exactly one step per press — an empty source shows
     /// 「候補なし」, never skipped, so the position stays predictable. The
     /// rotation never returns to the full list.
@@ -68,8 +71,9 @@ impl InputMethodEngine {
         self.apply_candidate_filter(FILTER_CYCLE[pos])
     }
 
-    /// Ctrl+R while composing: enter the Conversion state and immediately
-    /// narrow it one step, so the filtered view opens without Space.
+    /// Ctrl+T / Ctrl+R while composing: enter the Conversion state and
+    /// immediately narrow it one step, so the filtered view opens without
+    /// Space.
     pub(super) fn start_filtered_conversion(&mut self, direction: FilterDirection) -> EngineResult {
         if !self.enter_conversion_for_filter() {
             return EngineResult::consumed();
