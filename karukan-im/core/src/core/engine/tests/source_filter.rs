@@ -96,6 +96,14 @@ fn cycle_expecting_empty(engine: &mut InputMethodEngine, forward: bool, source: 
     );
 }
 
+/// Open the 🤖 view with its own key, for tests about what the view shows
+/// rather than how the cycle reaches it.
+fn open_model_view(engine: &mut InputMethodEngine) {
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.starts_with("[変換:🤖]"), "aux was: {aux}");
+}
+
 /// Press Ctrl+R (or Ctrl+Shift+R) and assert the window narrowed to
 /// `source`, with its emoji in the aux header.
 fn cycle_expecting(engine: &mut InputMethodEngine, forward: bool, source: CandidateSource) {
@@ -122,8 +130,8 @@ fn test_cycle_visits_every_source_without_skipping() {
     // 「候補なし」, never skipped, so the position is always predictable.
     cycle_expecting(&mut engine, true, CandidateSource::Learning);
     cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
     cycle_expecting_empty(&mut engine, true, CandidateSource::Dictionary);
+    cycle_expecting(&mut engine, true, CandidateSource::Model);
     cycle_expecting_rewriter_view(&mut engine, true);
 
     // The rotation never returns to the full list: one more wraps to the
@@ -212,7 +220,7 @@ fn test_cycle_backward_reaches_last_source_first() {
     // skipping empty sources.
     let mut engine = engine_in_conversion();
     cycle_expecting_rewriter_view(&mut engine, false);
-    cycle_expecting_empty(&mut engine, false, CandidateSource::Dictionary);
+    cycle_expecting(&mut engine, false, CandidateSource::Model);
 }
 
 #[test]
@@ -607,9 +615,7 @@ fn test_model_view_queries_the_settled_reading() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press('k'));
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    open_model_view(&mut engine);
     assert_eq!(shown_texts(&engine), vec!["合いk"]);
 }
 
@@ -624,9 +630,7 @@ fn test_model_view_converts_japanese_run_and_passes_digits_through() {
         engine.process_key(&press(ch));
     }
     engine.process_key(&press_key(Keysym::SPACE));
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    open_model_view(&mut engine);
     assert_eq!(shown_texts(&engine), vec!["合い123"]);
 }
 
@@ -647,9 +651,7 @@ fn test_model_view_beams_a_tail_window_on_long_readings() {
     for ch in ['a', 'i', 'u', 'e'] {
         engine.process_key(&press(ch));
     }
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    open_model_view(&mut engine);
     assert_eq!(shown_texts(&engine), vec!["合い上", "合い植え"]);
 }
 
@@ -706,9 +708,7 @@ fn test_model_view_head_is_the_live_grid_conversion() {
     for ch in ['a', 'i', 'u', 'e'] {
         engine.process_key(&press(ch));
     }
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    open_model_view(&mut engine);
     assert_eq!(shown_texts(&engine), vec!["合い上", "合い植え"]);
 }
 
@@ -733,7 +733,6 @@ fn test_system_view_keeps_surfaces_shared_with_user_dict() {
     cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
     cycle_expecting(&mut engine, true, CandidateSource::UserDictionary);
     assert_eq!(shown_texts(&engine), vec!["藍"]);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
     cycle_expecting(&mut engine, true, CandidateSource::Dictionary);
     let texts = shown_texts(&engine);
     assert!(texts.contains(&"藍".to_string()), "texts were: {texts:?}");
@@ -817,9 +816,7 @@ fn test_ai_view_respects_a_manual_chunk_break() {
     assert_eq!(engine.beam_span_start(&chars), 2);
 
     engine.process_key(&press_key(Keysym::SPACE));
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    cycle_expecting(&mut engine, true, CandidateSource::Model);
+    open_model_view(&mut engine);
     assert_eq!(shown_texts(&engine), vec!["愛上"]);
 }
 
@@ -877,9 +874,7 @@ fn test_ctrl_j_narrows_the_window_without_leaving_the_conversion() {
         engine.process_key(&press(ch));
     }
     engine.process_key(&press_key(Keysym::SPACE));
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     assert!(
         last_aux_text(&result)
             .expect("aux")
@@ -910,9 +905,7 @@ fn test_model_kana_top1_survives() {
     seed_model_cache(&mut engine, "アイ", "", &["あい"]);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    cycle_expecting_empty(&mut engine, true, CandidateSource::Learning);
-    cycle_expecting_empty(&mut engine, true, CandidateSource::UserDictionary);
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     let aux = last_aux_text(&result).expect("aux");
     assert!(aux.starts_with("[変換:🤖]"), "aux was: {aux}");
     assert_eq!(shown_texts(&engine), vec!["あい"]);
@@ -1054,7 +1047,7 @@ fn test_ctrl_i_jumps_straight_to_the_ai_view() {
     assert!(
         last_aux_text(&result)
             .expect("aux")
-            .starts_with("[変換:📚]")
+            .starts_with("[変換:🔄]")
     );
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     assert!(

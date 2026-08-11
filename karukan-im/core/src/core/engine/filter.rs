@@ -7,16 +7,22 @@
 use super::conversion::width_annotation;
 use super::*;
 
-/// Ctrl+R/T rotate through the source views in the mixed list's priority
-/// order — the full list is not a stop (it is what Space already shows;
-/// Esc → Space returns to it). Fallback has no slot of its own — the
-/// plain kana ride at the tail of the rewriter view, which sits last so
-/// Ctrl+T reaches it in one press from the full list.
+/// Ctrl+R/T rotate through the source views, grouped by what the user is
+/// looking for: what they taught the IME (learning, then their own
+/// dictionary), then what it knows (the system dictionary), then what it
+/// guesses (the model), then the mechanical rewrites. The model sits late
+/// on purpose — Ctrl+I reaches it in one press from anywhere, so the cycle
+/// does not have to keep it near the front.
+///
+/// The full list is not a stop: it is what Space already shows, and
+/// Esc → Space returns to it. Fallback has no slot of its own — the plain
+/// kana ride at the tail of the rewriter view, which sits last so Ctrl+T
+/// reaches it in one press from the full list.
 const FILTER_CYCLE: [CandidateSource; 5] = [
     CandidateSource::Learning,
     CandidateSource::UserDictionary,
-    CandidateSource::Model,
     CandidateSource::Dictionary,
+    CandidateSource::Model,
     CandidateSource::Rewriter,
 ];
 
