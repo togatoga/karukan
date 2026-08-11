@@ -48,6 +48,7 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 - [設定](docs/configuration.md) — config.toml の設定項目、ライブ変換、変換ストラテジー、学習キャッシュ
 - [辞書](docs/dictionary.md) — システム辞書のインストール、ユーザー辞書、候補の優先順位
 - [ユーザー辞書](docs/user-dictionary.md) — 対応形式（Mozc/Google IME TSV・バイナリ）と登録方法
+- [Chunk](docs/chunking.md) — 変換が Chunk に区切られる場所と、自分で区切って表示を固定する方法
 
 ## ライセンス
 

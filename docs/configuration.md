@@ -5,16 +5,18 @@
 ```toml
 [conversion]
 live_conversion = true          # ライブ変換を起動時に有効化（Ctrl+Shift+L で実行中も切替。既定ON）
-composing_chunk_len = 30        # ライブ変換で1回のモデル変換が扱う読みの最大文字数（= 1キーあたりレイテンシの上限）
+chunk_chars = 30                # 一度にAI変換する Chunk の最大文字数（[Chunk](chunking.md) 参照）
+chunk_symbols = 1               # Chunk に残せる記号（、。！？など）の数
+chunk_digits = 0                # Chunk に残せる数字の桁数（0 = 数字はAI変換にかけない）
 strategy = "adaptive"           # 変換ストラテジー（adaptive / light / main）
 num_candidates = 9              # 変換候補数（Space押下時）
 n_threads = 4                   # 推論スレッド数（0 = 全コア使用）
 model = "jinen-v2-small-q5"     # メインモデル（モデルID or GGUFパス）
 light_model = "jinen-v2-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用）
 use_context = true              # Surrounding Textを変換に使用する
-max_context_length = 10         # コンテキストの最大文字数
-beam_window_len = 20            # ビームサーチを当てる末尾ウィンドウの文字数
-beam_width = 3                  # ビーム幅
+context_chars = 10          # 変換に使う前後テキストの最大文字数
+beam_chars = 30                 # 別候補を出す範囲の文字数（Chunk単位で後ろからまとめる）
+beam_width = 3                  # 別候補の本数
 max_latency_ms = 100            # メインモデルの許容レイテンシ（ms）。超過時は軽量モデルに自動切替（0 = 無効）
 dict_path = "/path/to/dict.bin" # システム辞書パス（省略時はデータディレクトリの dict.bin。[Dictionary](dictionary.md) 参照）
 
@@ -41,7 +43,26 @@ max_surface_chars = 50         # 学習する変換結果の最大文字数
 
 入力と同時にかな漢字変換の結果をプリエディットへリアルタイム表示します（Spaceを押さずに変換が進む）。`Ctrl+Shift+L` でON/OFFを切り替えられ、既定では `live_conversion = true` で有効です。
 
-長文入力でも1キーあたりのレイテンシを一定に保つため、変換中のバッファを内部で最大 `composing_chunk_len` 文字（既定30）のチャンクに分割し、編集した箇所のチャンクだけを再変換します。チャンクは内部的な分割で、ユーザーには連続した1つのプリエディットとして見えます。記号・数字の連続は日本語とは別チャンクに分けてそのまま通すため、`123456` のような並びが変換で崩れることはありません。
+打っている途中の文が長くなっても待ち時間が伸びないよう、変換は一定の長さごとの Chunk に区切って行われます。Chunk の決まり方、表示のちらつきを止める手動区切り、`chunk_*` の調整方法は [Chunk](chunking.md) を参照してください。
+
+## 詳細表示（verbose）
+
+```toml
+[display]
+verbose = false                 # 補助テキストに詳細を出す（Ctrl+Shift+V で切替）
+```
+
+
+補助テキストは既定では静かな表示で、変換に必要な情報だけが出ます。状態、読み、選択中の候補がどこから来たか、ページ番号などです。
+
+開発や調整で内部の様子を見たいときは `Ctrl+Shift+V` で詳細表示に切り替えられます。押した時点で表示が切り替わります（起動時から有効にするなら `[display] verbose = true`）。詳細表示では次が加わります。
+
+| 項目 | 例 | 読み方 |
+|------|-----|--------|
+| ビームサーチの対象 | `🎯 うえ 2/30` | 🎯 の後ろ（`うえ`）だけが別候補を持つ。それより前は表示中の変換のまま。`2/30` は対象の文字数と `beam_chars` |
+| 推論時間 | `推論: 41ms key: 45ms` | モデル呼び出しにかかった時間 / その打鍵の処理全体。キャッシュに当たれば推論は `0ms` |
+| モデル名 | `jinen-v2-small-q5` | その変換を実際に担当したモデル |
+| モデルに渡した文脈 | `lctx: 昨日は` | 変換時に前方の文脈として渡した文字列 |
 
 ## Conversion Strategy
 
