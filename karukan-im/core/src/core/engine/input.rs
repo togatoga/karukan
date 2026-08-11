@@ -251,10 +251,10 @@ impl InputMethodEngine {
                 // (first source / the cycle's tail), straight from typing —
                 // no Space needed to reach the filtered view.
                 Keysym::KEY_R | Keysym::KEY_R_UPPER => {
-                    return self.start_filtered_conversion(true);
+                    return self.start_filtered_conversion(FilterDirection::Forward);
                 }
                 Keysym::KEY_T | Keysym::KEY_T_UPPER => {
-                    return self.start_filtered_conversion(false);
+                    return self.start_filtered_conversion(FilterDirection::Backward);
                 }
                 _ => {}
             }
@@ -275,8 +275,8 @@ impl InputMethodEngine {
             // Tab triggers conversion that bypasses the learning cache, so users
             // can escape stale or unwanted learned entries (mozc binds Tab to a
             // different conversion path — PredictAndConvert — in the same spirit).
-            Keysym::TAB => self.start_conversion(true),
-            Keysym::SPACE | Keysym::DOWN => self.start_conversion(false),
+            Keysym::TAB => self.start_conversion(LearningLookup::Skip),
+            Keysym::SPACE | Keysym::DOWN => self.start_conversion(LearningLookup::Use),
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
             Keysym::HOME => self.move_caret_home(),

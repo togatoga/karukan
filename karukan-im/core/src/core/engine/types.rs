@@ -280,6 +280,21 @@ pub(in crate::core) enum ConversionStrategy {
     MainModelBeam { beam_width: usize },
 }
 
+/// Which way Ctrl+R / Ctrl+T rotates the source-filter cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::core) enum FilterDirection {
+    Forward,
+    Backward,
+}
+
+/// Whether a conversion consults the learning cache. Tab asks for
+/// [`Self::Skip`] so a noisy history can be escaped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::core) enum LearningLookup {
+    Use,
+    Skip,
+}
+
 /// Timing and adaptive model selection metrics for conversion
 #[derive(Debug, Clone, Default)]
 pub(in crate::core) struct ConversionMetrics {

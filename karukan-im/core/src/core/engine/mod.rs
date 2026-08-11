@@ -8,10 +8,12 @@ mod chunk;
 mod conversion;
 mod cursor;
 mod display;
+mod filter;
 mod init;
 mod input;
 mod input_buffer;
 mod mode;
+mod model;
 mod strategy;
 mod types;
 

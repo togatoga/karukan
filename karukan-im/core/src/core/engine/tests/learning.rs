@@ -12,7 +12,7 @@ fn build_candidates_includes_learning_when_not_skipped() {
     let mut engine = engine_with_learned("あい", "藍");
 
     let texts: Vec<String> = engine
-        .build_conversion_candidates("あい", "あい", "", 9, false)
+        .build_conversion_candidates("あい", "あい", "", 9, LearningLookup::Use)
         .into_iter()
         .map(|c| c.text)
         .collect();
@@ -29,7 +29,7 @@ fn build_candidates_omits_learning_when_skipped() {
     let mut engine = engine_with_learned("あい", "藍");
 
     let texts: Vec<String> = engine
-        .build_conversion_candidates("あい", "あい", "", 9, true)
+        .build_conversion_candidates("あい", "あい", "", 9, LearningLookup::Skip)
         .into_iter()
         .map(|c| c.text)
         .collect();

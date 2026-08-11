@@ -135,9 +135,11 @@ cargo clippy --workspace  # Lint all crates
   - `types.rs` — EngineConfig, EngineResult, EngineAction, Converters, ConversionStrategy
   - `input.rs` — Key input handling for Composing state
   - `input_buffer.rs` — Composition record: per-display-char element array (`Romaji`/`Converted`) + caret index; display/reading/pending are derived views
-  - `conversion.rs` — Conversion mode handling (candidate building, commit)
+  - `conversion.rs` — Conversion mode handling (mixed candidate list, key handling, commit)
+  - `model.rs` — Model dispatch and the cache in front of it (`run_kana_kanji_conversion`, `cached_convert`, `run_parallel_beam`, `windowed_model_candidates`)
+  - `filter.rs` — Ctrl+R / Ctrl+T source-filtered candidate views (`FILTER_CYCLE`, `source_view`, `apply_candidate_filter`)
   - `chunk.rs` — Live-conversion chunking: the Japanese/non-Japanese split (`is_japanese`, `group_chunks`) and `chunked_auto_suggest`
-  - `cache.rs` — LRU conversion cache keyed by (katakana reading, lctx, strategy) used by `run_kana_kanji_conversion`
+  - `cache.rs` — LRU conversion cache keyed by the computation: (katakana reading, lctx, model role, beam width)
   - `cursor.rs` — Cursor movement
   - `display.rs` — Preedit text display
   - `mode.rs` — Mode switching (katakana, alphabet, live conversion)

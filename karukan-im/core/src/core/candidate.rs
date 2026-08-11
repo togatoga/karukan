@@ -104,18 +104,6 @@ impl Candidate {
     }
 }
 
-impl From<String> for Candidate {
-    fn from(text: String) -> Self {
-        Self::new(text)
-    }
-}
-
-impl From<&str> for Candidate {
-    fn from(text: &str) -> Self {
-        Self::new(text)
-    }
-}
-
 /// A list of candidates with pagination and selection support
 #[derive(Debug, Clone)]
 pub struct CandidateList {
@@ -140,7 +128,8 @@ impl CandidateList {
         }
     }
 
-    /// Create a candidate list from strings
+    /// Create a candidate list from strings (test fixture).
+    #[cfg(test)]
     pub fn from_strings(strings: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self::new(strings.into_iter().map(Candidate::new).collect())
     }
@@ -292,17 +281,6 @@ impl CandidateList {
     /// Move the cursor to `cursor`, clamped into the list (0 when empty).
     pub fn set_cursor(&mut self, cursor: usize) {
         self.cursor = cursor.min(self.candidates.len().saturating_sub(1));
-    }
-
-    /// Reset cursor to beginning
-    pub fn reset(&mut self) {
-        self.cursor = 0;
-    }
-
-    /// Update the candidate list with new candidates
-    pub fn update(&mut self, candidates: Vec<Candidate>) {
-        self.candidates = candidates;
-        self.cursor = 0;
     }
 }
 
