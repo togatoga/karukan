@@ -10,7 +10,7 @@ num_candidates = 9
 use_context = true
 # 変換API に渡す周辺テキストの最大文字数
 context_chars = 10
-# 一度にAI変換する Chunk の最大文字数。長文を入力しても1キーあたりの待ち時間が
+# 一度にAI変換する Chunk の最大文字数。長文を入力しても1キーあたりの変換時間が
 # 伸びないようにするための区切り。詳細は docs/chunking.md を参照。
 chunk_chars = 30
 # ひと続きで変換する Chunk に残せる記号（、。！？など）の数。
