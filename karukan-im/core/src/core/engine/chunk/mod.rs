@@ -100,6 +100,7 @@ impl InputMethodEngine {
             chars: self.chunk_chars(),
             symbols: self.config.chunk_symbols,
             digits: self.config.chunk_digits,
+            alphabets: self.config.chunk_alphabets,
         };
         group_chunks(chars, limits, &self.chunk_breaks)
     }

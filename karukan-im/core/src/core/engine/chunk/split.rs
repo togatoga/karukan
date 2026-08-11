@@ -1,9 +1,9 @@
 //! Where the chunk boundaries are: the splitting rules, and nothing else.
 //!
-//! Two phases, like a lexer. [`tokenize`] classifies every character into a
-//! [`Token`]; [`group_chunks`] pops them off the queue and packs them into
-//! chunks. Both are pure functions of the text and the settings, so the
-//! rules can be exercised without an engine.
+//! Like a lexer: every character is classified into a [`Token`], and
+//! [`group_chunks`] walks them once, packing them into chunks. Pure
+//! functions of the text and the settings, so the rules can be exercised
+//! without an engine.
 //!
 //! Why the text is split at all is `docs/chunking.md`; what the engine does
 //! with the chunks is the parent module.
@@ -38,6 +38,8 @@ pub(super) struct ChunkLimits {
     pub(super) symbols: usize,
     /// Digits a chunk containing Japanese may keep.
     pub(super) digits: usize,
+    /// Alphabet chars a chunk containing Japanese may keep.
+    pub(super) alphabets: usize,
 }
 
 /// One character, classified. Only Japanese is converted; the rest is
@@ -49,7 +51,7 @@ enum Token {
     Digit(char),
     /// Punctuation and every other mark.
     Symbol(char),
-    Letter(char),
+    Alphabet(char),
 }
 
 impl From<char> for Token {
@@ -59,7 +61,7 @@ impl From<char> for Token {
         } else if is_digit(c) {
             Self::Digit(c)
         } else if c.is_alphabetic() {
-            Self::Letter(c)
+            Self::Alphabet(c)
         } else {
             Self::Symbol(c)
         }
@@ -70,119 +72,77 @@ impl Token {
     /// The character it stands for.
     fn ch(self) -> char {
         match self {
-            Self::Japanese(c) | Self::Digit(c) | Self::Symbol(c) | Self::Letter(c) => c,
+            Self::Japanese(c) | Self::Digit(c) | Self::Symbol(c) | Self::Alphabet(c) => c,
         }
     }
 
     fn is_japanese(self) -> bool {
         matches!(self, Self::Japanese(_))
     }
+
+    /// Same variant, whatever the char.
+    fn same_kind(self, other: Self) -> bool {
+        mem::discriminant(&self) == mem::discriminant(&other)
+    }
+
+    /// How many of this kind a chunk containing Japanese may keep. Japanese
+    /// itself has no budget: it is what the budgets are spent alongside.
+    fn budget(self, limits: ChunkLimits) -> Option<usize> {
+        match self {
+            Self::Japanese(_) => None,
+            Self::Symbol(_) => Some(limits.symbols),
+            Self::Digit(_) => Some(limits.digits),
+            // The alphabet budget also covers the unfired romaji tail, which
+            // would otherwise reach the model as part of the reading.
+            Self::Alphabet(_) => Some(limits.alphabets),
+        }
+    }
 }
 
-/// Classify every character, in order.
-fn tokenize(chars: &[char]) -> VecDeque<Token> {
-    chars.iter().copied().map(Token::from).collect()
-}
-
-/// Whether `chunk` can keep one more `token`. The budgets are counted off
-/// the tokens the chunk already holds, so there is no running tally to keep
-/// in step with them.
-fn accepts(chunk: &[Token], token: Token, limits: ChunkLimits) -> bool {
+/// Whether `token` still fits the chunk being built. Everything the rules
+/// need is counted off the tokens the chunk already holds, so there is no
+/// running tally to keep in step with them.
+fn fits(token: Token, chunk: &[Token], limits: ChunkLimits) -> bool {
     if chunk.len() >= limits.chars {
         return false;
     }
     let has_japanese = chunk.iter().any(|t| t.is_japanese());
-    let count = |kept: fn(&Token) -> bool| chunk.iter().filter(|t| kept(t)).count();
-    match token {
-        // Japanese never joins a chunk that is pure passthrough.
-        Token::Japanese(_) => has_japanese,
+    match token.budget(limits) {
+        // Japanese never joins a chunk that is pure passthrough: that chunk
+        // is not converted, so the Japanese in it would never be either.
+        None => has_japanese,
         // A passthrough chunk has nothing to convert, so the budgets do not
-        // apply and it grows to the length cap.
-        _ if !has_japanese => true,
-        // Latin text is passthrough, and an unresolved romaji tail must not
-        // reach the model as part of the reading.
-        Token::Letter(_) => false,
-        Token::Digit(_) => count(|t| matches!(t, Token::Digit(_))) < limits.digits,
-        Token::Symbol(_) => count(|t| matches!(t, Token::Symbol(_))) < limits.symbols,
+        // apply to it and it grows to the length cap. This is what keeps a
+        // run of digits or marks together instead of one per chunk.
+        Some(_) if !has_japanese => true,
+        Some(budget) => chunk.iter().filter(|t| t.same_kind(token)).count() < budget,
     }
 }
 
 /// Split `chars` into the chunk readings: each token goes into the chunk
 /// being built, or ends it and starts the next one. `breaks` are the manual
-/// boundaries, sorted, so the next one is always at the front.
+/// boundaries, sorted, so the next one is always at the front of the queue.
 pub(super) fn group_chunks(chars: &[char], limits: ChunkLimits, breaks: &[usize]) -> Vec<String> {
-    let mut queue = tokenize(chars);
     let mut breaks: VecDeque<usize> = breaks.iter().copied().collect();
     let mut chunks: Vec<Vec<Token>> = Vec::new();
     let mut chunk: Vec<Token> = Vec::new();
-    let mut pos = 0;
-    while let Some(&token) = queue.front() {
+    for (pos, token) in chars.iter().copied().map(Token::from).enumerate() {
         let at_break = breaks.front() == Some(&pos);
         if at_break {
             breaks.pop_front();
         }
-        if !chunk.is_empty() && (at_break || !accepts(&chunk, token, limits)) {
+        if !chunk.is_empty() && (at_break || !fits(token, &chunk, limits)) {
             chunks.push(mem::take(&mut chunk));
         }
-        chunk.push(queue.pop_front().expect("just peeked"));
-        pos += 1;
+        chunk.push(token);
     }
     if !chunk.is_empty() {
         chunks.push(chunk);
     }
     chunks
-        .iter()
-        .map(|chunk| chunk.iter().map(|t| t.ch()).collect())
+        .into_iter()
+        .map(|chunk| chunk.into_iter().map(Token::ch).collect())
         .collect()
-}
-
-#[cfg(test)]
-mod tokenize_tests {
-    use super::{Token, tokenize};
-
-    /// The classification of each char, one letter per char.
-    fn lex(s: &str) -> String {
-        tokenize(&s.chars().collect::<Vec<_>>())
-            .iter()
-            .map(|t| match t {
-                Token::Japanese(_) => 'J',
-                Token::Digit(_) => 'D',
-                Token::Symbol(_) => 'S',
-                Token::Letter(_) => 'L',
-            })
-            .collect()
-    }
-
-    #[test]
-    fn hiragana_katakana_and_kanji_are_one_class() {
-        // A word is not classified into pieces at its script changes.
-        assert_eq!(lex("私はパンを食べる"), "JJJJJJJJ");
-        assert_eq!(lex("ラーメン"), "JJJJ");
-    }
-
-    #[test]
-    fn every_char_gets_its_class() {
-        assert_eq!(lex("あ12いabc"), "JDDJLLL");
-    }
-
-    #[test]
-    fn marks_are_symbols_including_the_middle_dot() {
-        assert_eq!(lex("あ、。"), "JSS");
-        // 中黒 sits in the katakana block but is a separator, not Japanese.
-        assert_eq!(lex("ア・イ"), "JSJ");
-    }
-
-    #[test]
-    fn a_token_keeps_its_char() {
-        let chars: Vec<char> = "あ1a、".chars().collect();
-        let text: String = tokenize(&chars).iter().map(|t| t.ch()).collect();
-        assert_eq!(text, "あ1a、");
-    }
-
-    #[test]
-    fn empty_input_has_no_tokens() {
-        assert!(lex("").is_empty());
-    }
 }
 
 #[cfg(test)]
@@ -194,10 +154,12 @@ mod group_chunk_tests {
     const SYMBOLS: usize = 1;
     /// Digits stay out of the converter (default.toml `chunk_digits = 0`).
     const DIGITS: usize = 0;
+    /// Alphabet chars stay out too (default.toml `chunk_alphabets = 0`).
+    const ALPHABETS: usize = 0;
 
     /// Split with the default caps and no manual breaks.
     fn split(s: &str, max: usize) -> Vec<String> {
-        split_full(s, max, SYMBOLS, DIGITS, &[])
+        split_full(s, max, SYMBOLS, DIGITS, ALPHABETS, &[])
     }
 
     fn split_full(
@@ -205,6 +167,7 @@ mod group_chunk_tests {
         max: usize,
         max_symbols: usize,
         max_digits: usize,
+        max_alphabets: usize,
         breaks: &[usize],
     ) -> Vec<String> {
         let chars: Vec<char> = s.chars().collect();
@@ -212,8 +175,14 @@ mod group_chunk_tests {
             chars: max,
             symbols: max_symbols,
             digits: max_digits,
+            alphabets: max_alphabets,
         };
         group_chunks(&chars, limits, breaks).into_iter().collect()
+    }
+
+    #[test]
+    fn empty_input_has_no_chunks() {
+        assert!(split("", 40).is_empty());
     }
 
     #[test]
@@ -264,42 +233,62 @@ mod group_chunk_tests {
         // Raising the digit budget lets short runs go through the converter
         // with the text around them.
         assert_eq!(
-            split_full("だい3かい", 10, SYMBOLS, 1, &[]),
+            split_full("だい3かい", 10, SYMBOLS, 1, ALPHABETS, &[]),
             vec!["だい3かい"]
         );
-        assert_eq!(split_full("あ12い", 10, SYMBOLS, 2, &[]), vec!["あ12い"]);
+        assert_eq!(
+            split_full("あ12い", 10, SYMBOLS, 2, ALPHABETS, &[]),
+            vec!["あ12い"]
+        );
         // The budget fills like the symbol one: the digits that fit ride
         // along and the rest form a chunk of their own.
         assert_eq!(
-            split_full("あ1234", 40, SYMBOLS, 0, &[]),
+            split_full("あ1234", 40, SYMBOLS, 0, ALPHABETS, &[]),
             vec!["あ", "1234"]
         );
         assert_eq!(
-            split_full("あ1234", 40, SYMBOLS, 1, &[]),
+            split_full("あ1234", 40, SYMBOLS, 1, ALPHABETS, &[]),
             vec!["あ1", "234"]
         );
         assert_eq!(
-            split_full("あ1234", 40, SYMBOLS, 2, &[]),
+            split_full("あ1234", 40, SYMBOLS, 2, ALPHABETS, &[]),
             vec!["あ12", "34"]
         );
     }
 
     #[test]
-    fn letters_never_ride_along() {
-        // Latin text is passthrough, and an unresolved romaji tail must not
-        // reach the converter as part of the reading.
+    fn alphabets_never_ride_along_by_default() {
+        // Latin text is passthrough, and so is the unfired romaji tail.
         assert_eq!(split("あいk", 40), vec!["あい", "k"]);
+        // Raising the budget lets it ride, like the other two.
+        assert_eq!(
+            split_full("これはRustです", 40, SYMBOLS, DIGITS, 4, &[]),
+            vec!["これはRustです"]
+        );
+        assert_eq!(
+            split_full("あいkかき", 40, SYMBOLS, DIGITS, 1, &[]),
+            vec!["あいkかき"]
+        );
+        // Only after Japanese, though: a chunk still never starts with the
+        // text it absorbs.
+        assert_eq!(
+            split_full("Rustで", 40, SYMBOLS, DIGITS, 4, &[]),
+            vec!["Rust", "で"]
+        );
     }
 
     #[test]
     fn caps_are_configurable() {
         // Two marks per chunk.
         assert_eq!(
-            split_full("あ、い。う", 10, 2, DIGITS, &[]),
+            split_full("あ、い。う", 10, 2, DIGITS, ALPHABETS, &[]),
             vec!["あ、い。う"]
         );
         // No marks at all: split at every one.
-        assert_eq!(split_full("おい、", 10, 0, DIGITS, &[]), vec!["おい", "、"]);
+        assert_eq!(
+            split_full("おい、", 10, 0, DIGITS, ALPHABETS, &[]),
+            vec!["おい", "、"]
+        );
     }
 
     #[test]
@@ -336,22 +325,28 @@ mod group_chunk_tests {
     #[test]
     fn manual_breaks_force_boundaries() {
         assert_eq!(
-            split_full("あいうえ", 40, SYMBOLS, DIGITS, &[2]),
+            split_full("あいうえ", 40, SYMBOLS, DIGITS, ALPHABETS, &[2]),
             vec!["あい", "うえ"]
         );
         assert_eq!(
-            split_full("あいうえ", 40, SYMBOLS, DIGITS, &[1, 3]),
+            split_full("あいうえ", 40, SYMBOLS, DIGITS, ALPHABETS, &[1, 3]),
             vec!["あ", "いう", "え"]
         );
         // A break at 0 or at the very end changes nothing.
-        assert_eq!(split_full("あい", 40, SYMBOLS, DIGITS, &[0]), vec!["あい"]);
-        assert_eq!(split_full("あい", 40, SYMBOLS, DIGITS, &[2]), vec!["あい"]);
+        assert_eq!(
+            split_full("あい", 40, SYMBOLS, DIGITS, ALPHABETS, &[0]),
+            vec!["あい"]
+        );
+        assert_eq!(
+            split_full("あい", 40, SYMBOLS, DIGITS, ALPHABETS, &[2]),
+            vec!["あい"]
+        );
     }
 
     #[test]
     fn manual_break_splits_a_non_japanese_run() {
         assert_eq!(
-            split_full("1234", 40, SYMBOLS, DIGITS, &[2]),
+            split_full("1234", 40, SYMBOLS, DIGITS, ALPHABETS, &[2]),
             vec!["12", "34"]
         );
     }

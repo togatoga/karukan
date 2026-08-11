@@ -83,6 +83,9 @@ pub struct EngineConfig {
     pub chunk_symbols: usize,
     /// Digits a chunk containing Japanese keeps (0 = split at every run).
     pub chunk_digits: usize,
+    /// Alphabet chars a chunk containing Japanese keeps (0 = split at every
+    /// run, which also keeps the romaji tail out of the model).
+    pub chunk_alphabets: usize,
     /// Chars the beam covers, snapped to chunk boundaries.
     pub beam_chars: usize,
     /// Beam width: how many alternatives the beam returns
@@ -113,6 +116,7 @@ impl EngineConfig {
             chunk_chars: settings.conversion.chunk_chars,
             chunk_symbols: settings.conversion.chunk_symbols,
             chunk_digits: settings.conversion.chunk_digits,
+            chunk_alphabets: settings.conversion.chunk_alphabets,
             beam_chars: settings.conversion.beam_chars,
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
@@ -132,6 +136,7 @@ impl Default for EngineConfig {
             chunk_chars: 30,
             chunk_symbols: 1,
             chunk_digits: 0,
+            chunk_alphabets: 0,
             beam_chars: 30,
             beam_width: 3,
             max_latency_ms: 100,

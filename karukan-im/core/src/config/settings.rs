@@ -71,8 +71,15 @@ pub struct ConversionSettings {
     /// out of the converter entirely, which is what protects them: the
     /// model hallucinates on digit runs, dropping or duplicating figures.
     /// Raising it lets short runs (「だい3かい」) convert with the text
-    /// around them; a run is kept whole or split off whole, never torn.
+    /// around them; the digits that fit ride along and the rest open the
+    /// next chunk.
     pub chunk_digits: usize,
+    /// Alphabet chars a chunk containing Japanese keeps. The default 0 keeps
+    /// latin text passthrough, and keeps the in-progress romaji tail out of
+    /// the converter: while 「わせだd」 is being typed, the `d` is an unfired
+    /// keystroke, not text. Raising it lets 「Rustで」 convert as one unit at
+    /// the cost of feeding that tail to the model on every keystroke.
+    pub chunk_alphabets: usize,
     /// Path to dictionary binary file (optional, defaults to data_dir/dict.bin)
     pub dict_path: Option<String>,
     /// Model variant id (optional, defaults to registry default)

@@ -8,6 +8,7 @@ live_conversion = true          # ライブ変換を起動時に有効化（Ctrl
 chunk_chars = 30                # 一度にAI変換する Chunk の最大文字数（[Chunk](chunking.md) 参照）
 chunk_symbols = 1               # Chunk に残せる記号（、。！？など）の数
 chunk_digits = 0                # Chunk に残せる数字の桁数（0 = 数字はAI変換にかけない）
+chunk_alphabets = 0             # Chunk に残せる英字の数（0 = 英字はAI変換にかけない）
 strategy = "adaptive"           # 変換ストラテジー（adaptive / light / main）
 num_candidates = 9              # 変換候補数（Space押下時）
 n_threads = 4                   # 推論スレッド数（0 = 全コア使用）
