@@ -1,5 +1,6 @@
 //! Composing input handling (Empty and Composing states)
 
+use super::filter::source_for_key;
 use super::*;
 
 /// Append candidates to `target`, skipping duplicates by text.
@@ -233,6 +234,10 @@ impl InputMethodEngine {
                     return self.start_filtered_conversion(FilterDirection::Backward);
                 }
                 _ => {}
+            }
+            // Ctrl+Y/U/I/O: jump straight to one source's view.
+            if let Some(source) = source_for_key(key.keysym) {
+                return self.jump_to_source(source);
             }
             // Ctrl+1..9: commit the numbered candidate from the suggestion
             // window. Bare digits stay plain text input, so numbers can be

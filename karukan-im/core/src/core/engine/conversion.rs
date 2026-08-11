@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use tracing::debug;
 
+use super::filter::source_for_key;
 use super::*;
 
 /// Maximum number of learning candidates to show
@@ -563,6 +564,11 @@ impl InputMethodEngine {
                             return self.rebreak_conversion();
                         }
                         _ => {}
+                    }
+
+                    // Ctrl+Y/U/I/O: jump straight to one source's view.
+                    if let Some(source) = source_for_key(key.keysym) {
+                        return self.jump_to_source(source);
                     }
 
                     // Ctrl+1..9: select and commit that candidate. Bare

@@ -1035,3 +1035,31 @@ fn test_verbose_toggle_keeps_what_conversion_needs() {
     assert!(loud.contains("📝"), "candidate source: {loud}");
     assert!(loud.contains("推論"), "timing now shown: {loud}");
 }
+
+#[test]
+fn test_ctrl_i_jumps_straight_to_the_ai_view() {
+    // One press reaches the AI view from either state, instead of walking
+    // the cycle to it.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.starts_with("[変換:🤖]"), "from composing: {aux}");
+
+    // And from inside another view: one press comes back, however far the
+    // cycle has wandered.
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
+    assert!(
+        last_aux_text(&result)
+            .expect("aux")
+            .starts_with("[変換:📚]")
+    );
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
+    assert!(
+        last_aux_text(&result)
+            .expect("aux")
+            .starts_with("[変換:🤖]")
+    );
+}
