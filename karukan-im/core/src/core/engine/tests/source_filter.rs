@@ -1086,3 +1086,45 @@ fn test_ctrl_i_jumps_straight_to_the_ai_view() {
             .starts_with("[変換:🤖]")
     );
 }
+
+#[test]
+fn test_filtered_view_aux_shows_what_is_being_typed() {
+    // Typing refines the view in place, so the aux has to keep showing the
+    // query — including an unfired romaji tail. It used to show only the
+    // selected candidate's own reading, which for a predictive entry runs
+    // past what was typed and left no sign of the actual input.
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.user = Some(dict_from_json(
+        r#"[
+        {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1.0}]},
+        {"reading":"わせだだいがく","candidates":[{"surface":"早稲田大学","score":1.0}]}
+    ]"#,
+    ));
+    for c in ['w', 'a', 's', 'e', 'd', 'a'] {
+        engine.process_key(&press(c));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝（候補なし）
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚
+
+    // An exact match commits what was typed: the query alone.
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(aux.starts_with("[変換:📚] わせだ |"), "aux was: {aux}");
+
+    // The tail `d` is unfired, and the surviving entry is predictive: the
+    // query leads, its full reading follows.
+    let result = engine.process_key(&press('d'));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(
+        aux.starts_with("[変換:📚] わせだd → わせだだいがく"),
+        "aux was: {aux}"
+    );
+    assert_eq!(shown_texts(&engine), vec!["早稲田大学"]);
+
+    let result = engine.process_key(&press('a'));
+    let aux = last_aux_text(&result).expect("aux");
+    assert!(
+        aux.starts_with("[変換:📚] わせだだ → わせだだいがく"),
+        "aux was: {aux}"
+    );
+}

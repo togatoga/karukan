@@ -114,13 +114,18 @@ impl InputMethodEngine {
         let list = CandidateList::new(self.source_view(next, &reading));
         let selected = list.selected_text().unwrap_or(&reading).to_string();
         let preedit = Preedit::with_text_highlighted(&selected);
-        // Like candidate navigation, the aux shows the selected candidate's
-        // own reading (predictive entries carry a longer one), falling back
-        // to the base reading for an empty view.
-        let aux_reading = list
-            .selected()
-            .and_then(|c| c.reading.clone())
-            .unwrap_or_else(|| reading.clone());
+        // The aux leads with what the user typed, tail included — typing
+        // refines the view in place, and the selected candidate's own
+        // reading would otherwise be the only thing on the line, leaving no
+        // sign of what is being typed. A predictive entry, whose reading
+        // runs past the query, shows both: committing it records under the
+        // longer one.
+        let (base, pending) = self.live_query_split(&reading);
+        let typed = format!("{base}{pending}");
+        let aux_reading = match list.selected().and_then(|c| c.reading.as_deref()) {
+            Some(full) if full != typed => format!("{typed} → {full}"),
+            _ => typed,
+        };
         if let InputState::Conversion {
             filter,
             candidates,
