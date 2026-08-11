@@ -15,7 +15,7 @@ n_threads = 4                   # 推論スレッド数（0 = 全コア使用）
 model = "jinen-v2-small-q5"     # メインモデル（モデルID or GGUFパス）
 light_model = "jinen-v2-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用）
 use_context = true              # Surrounding Textを変換に使用する
-context_chars = 10          # 変換に使う前後テキストの最大文字数
+context_chars = 10              # 変換に使う前後テキストの最大文字数
 beam_chars = 30                 # 別候補を出す範囲の文字数（Chunk単位で後ろからまとめる）
 beam_width = 3                  # 別候補の本数
 max_latency_ms = 100            # メインモデルの許容レイテンシ（ms）。超過時は軽量モデルに自動切替（0 = 無効）
@@ -52,7 +52,6 @@ max_surface_chars = 50         # 学習する変換結果の最大文字数
 [display]
 verbose = false                 # 補助テキストに詳細を出す（Ctrl+Shift+V で切替）
 ```
-
 
 補助テキストには既定では、変換に必要な情報だけが表示されます。入力の状態、読み、選択中の候補がどこから来たか、候補のページ番号です。
 

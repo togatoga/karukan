@@ -84,10 +84,10 @@ impl Keysym {
     pub const KEY_P_UPPER: Keysym = Keysym(0x0050); // uppercase 'P'
     pub const KEY_R: Keysym = Keysym(0x0072); // lowercase 'r'
     pub const KEY_R_UPPER: Keysym = Keysym(0x0052); // uppercase 'R'
-    pub const KEY_V: Keysym = Keysym(0x0076); // lowercase 'v'
-    pub const KEY_V_UPPER: Keysym = Keysym(0x0056); // uppercase 'V'
     pub const KEY_T: Keysym = Keysym(0x0074); // lowercase 't'
     pub const KEY_T_UPPER: Keysym = Keysym(0x0054); // uppercase 'T'
+    pub const KEY_V: Keysym = Keysym(0x0076); // lowercase 'v'
+    pub const KEY_V_UPPER: Keysym = Keysym(0x0056); // uppercase 'V'
 
     /// Check if this keysym represents a printable character
     pub fn is_printable(&self) -> bool {
