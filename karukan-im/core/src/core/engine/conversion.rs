@@ -796,11 +796,13 @@ impl InputMethodEngine {
                         }
                         _ => {}
                     }
-                }
 
-                // Check for digit selection (1-9)
-                if let Some(digit) = key.keysym.digit_value() {
-                    return self.select_candidate_by_digit(digit);
+                    // Ctrl+1..9: select and commit that candidate. Bare
+                    // digits refine below like any printable character, so
+                    // typing numbers never conflicts with selection.
+                    if let Some(digit) = key.keysym.digit_value() {
+                        return self.select_candidate_by_digit(digit);
+                    }
                 }
 
                 // A printable character refines instead of committing:
@@ -855,28 +857,25 @@ impl InputMethodEngine {
         }
     }
 
-    /// Record a conversion selection in the learning cache.
+    /// Record a selection in the learning cache. No-op in emoji mode — the
+    /// buffer is a `:query`, not a kana reading, and would corrupt the
+    /// kana-keyed cache.
     pub(super) fn record_learning(&mut self, reading: &str, surface: &str) {
+        if self.mode.current() == InputMode::Emoji {
+            return;
+        }
         if let Some(cache) = &mut self.learning {
             cache.record(reading, surface);
         }
     }
 
-    /// Record the committed conversion in the learning cache and reset to Empty state.
-    ///
-    /// Skips learning when the buffer is a `:shortcode` query — the
-    /// reading would be e.g. `:smile`, which isn't a hiragana key
-    /// and would corrupt the kana-keyed learning cache.
-    fn finish_conversion(&mut self, text: &str, reading: &Option<String>) {
-        if self.mode.current() != InputMode::Emoji
-            && let Some(reading) = reading
-        {
+    /// Record the committed conversion in the learning cache and end the
+    /// composition.
+    pub(super) fn finish_conversion(&mut self, text: &str, reading: &Option<String>) {
+        if let Some(reading) = reading {
             self.record_learning(reading, text);
         }
-
-        self.state = InputState::Empty;
-        self.input_buf.clear();
-        self.mode.exit_temporary();
+        self.end_composition();
     }
 
     /// Commit the current conversion
@@ -1270,12 +1269,11 @@ impl InputMethodEngine {
         result
     }
 
-    /// Select candidate by digit (1-9)
+    /// Select and commit the candidate at `digit` (1-9) on the current page.
     fn select_candidate_by_digit(&mut self, digit: usize) -> EngineResult {
         let (selected_text, reading) = {
-            let candidates = match self.state.candidates_mut() {
-                Some(c) => c,
-                None => return EngineResult::not_consumed(),
+            let Some(candidates) = self.state.candidates_mut() else {
+                return EngineResult::not_consumed();
             };
 
             if candidates.select_on_page(digit).is_none() {
@@ -1287,14 +1285,7 @@ impl InputMethodEngine {
             (text, reading)
         };
 
-        // Record learning before committing
-        if let Some(reading) = &reading {
-            self.record_learning(reading, &selected_text);
-        }
-
-        // Commit immediately after digit selection
-
-        self.state = InputState::Empty;
+        self.finish_conversion(&selected_text, &reading);
 
         EngineResult::consumed()
             .with_action(EngineAction::HideCandidates)

@@ -52,7 +52,9 @@ void KarukanCandidateWord::select(InputContext* inputContext) const {
 KarukanCandidateList::KarukanCandidateList(KarukanEngine* engine) : engine_(engine) {
     setLayoutHint(CandidateLayoutHint::Vertical);
     setPageSize(9);
-    // Set selection key labels (1-9)
+    // Row labels only. Selection is Ctrl+digit and is handled by the Rust
+    // engine, which consumes bare digits as text input before fcitx5 could
+    // act on them.
     setSelectionKey(Key::keyListFromString("1 2 3 4 5 6 7 8 9"));
 }
 

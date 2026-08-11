@@ -144,6 +144,10 @@ pub struct InputMethodEngine {
     /// when the filtered conversion re-enters, so the auto-suggest model
     /// call would be pure waste. Set and cleared around that one call.
     suppress_suggest: bool,
+    /// Mirror of the suggestion window shown while composing — what Ctrl+digit
+    /// selects. The Conversion state owns its own list; this covers the
+    /// Composing state, which renders candidates without holding them.
+    shown_suggestions: CandidateList,
     /// Dictionaries (system, user)
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
@@ -170,6 +174,7 @@ impl InputMethodEngine {
             chunks: Vec::new(),
             conversion_cache: ConversionCache::default(),
             suppress_suggest: false,
+            shown_suggestions: CandidateList::default(),
             dicts: Dictionaries::default(),
             learning: None,
         }
@@ -241,26 +246,28 @@ impl InputMethodEngine {
         self.input_buf.clear();
         self.live.shown = false;
         self.chunks.clear();
+        self.shown_suggestions = CandidateList::default();
         self.metrics = ConversionMetrics::default();
+    }
+
+    /// End the composition: clear the buffer, live display, and chunks,
+    /// return to Empty, and exit any temporary mode. Every commit/cancel/
+    /// erase-to-empty path must go through here so no piece of the teardown
+    /// is forgotten.
+    fn end_composition(&mut self) {
+        self.input_buf.clear();
+        self.live.shown = false;
+        self.chunks.clear();
+        self.shown_suggestions = CandidateList::default();
+        self.state = InputState::Empty;
+        self.mode.exit_temporary();
     }
 
     /// If the composition is empty, reset to Empty state and return the result.
     /// Returns None if elements remain (caller should continue normally).
     fn try_reset_if_empty(&mut self) -> Option<EngineResult> {
         if self.input_buf.is_empty() {
-            self.state = InputState::Empty;
-            self.input_buf.clear();
-            // Erasing the whole buffer ends the composition: drop the live
-            // display and the chunks so neither leaks into the next
-            // composing session.
-            self.live.shown = false;
-            self.chunks.clear();
-            // Temporary modes (Emoji, Alphabet) are per-composition:
-            // erasing back to an empty buffer ends the session, so restore
-            // the mode the user was in before entering it (a Katakana-mode
-            // user lands back in Katakana, and the next keypress doesn't
-            // get treated as a literal emoji-query char).
-            self.mode.exit_temporary();
+            self.end_composition();
             Some(
                 EngineResult::consumed()
                     .with_action(EngineAction::UpdatePreedit(Preedit::new()))
@@ -471,42 +478,28 @@ impl InputMethodEngine {
         result
     }
 
-    /// Commit any pending input and return the text
+    /// Commit any pending input and return the text. Shares the resolution
+    /// and teardown with the Enter-commit paths, so a focus-out commit can
+    /// never diverge from what Enter would have produced.
     pub fn commit(&mut self) -> String {
-        match &self.state {
+        let text = match &self.state {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
-                // Resolve the live text before settling: it needs the pending run
-                let live_text = self.live_text_with_pending();
-                self.settle_romaji();
-                let reading = self.input_buf.reading();
-                let text = if !live_text.is_empty() {
-                    live_text
-                } else {
-                    reading.clone()
-                };
-                // Record live conversion result in learning cache
+                let (reading, text) = self.resolve_composing_commit();
                 self.record_learning(&reading, &text);
-                self.input_buf.clear();
-                self.live.shown = false;
-                self.state = InputState::Empty;
-                self.surrounding_context = None;
+                self.end_composition();
                 text
             }
             InputState::Conversion { .. } => {
                 let (text, reading) = self
                     .selected_conversion_info()
                     .expect("state is Conversion");
-                // Record conversion result in learning cache
-                if let Some(reading) = &reading {
-                    self.record_learning(reading, &text);
-                }
-                self.input_buf.clear();
-                self.state = InputState::Empty;
-                self.surrounding_context = None;
+                self.finish_conversion(&text, &reading);
                 text
             }
-        }
+        };
+        self.surrounding_context = None;
+        text
     }
 
     /// Commit any pending input as an [`EngineResult`], emitting the same
