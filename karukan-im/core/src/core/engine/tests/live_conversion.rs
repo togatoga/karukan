@@ -318,55 +318,44 @@ fn test_alphabet_mode_pure_latin_preserves_live_text() {
     assert_eq!(engine.live_text(), "AB");
 }
 
-// --- Ctrl+Space full-width space tests ---
+// --- Shift+Space space insertion tests ---
 
 #[test]
-fn test_ctrl_space_inserts_fullwidth_space_in_empty() {
-    let mut engine = InputMethodEngine::new();
-
-    // Ctrl+Space in Empty state -> start input with full-width space
-    let result = engine.process_key(&press_ctrl(Keysym::SPACE));
-    assert!(result.consumed);
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.preedit().unwrap().text(), "\u{3000}");
+fn test_shift_space_alone_commits_a_fullwidth_space() {
+    // The exception to the setting, committed directly rather than opening
+    // a composition a second Space would convert.
+    for mut engine in [InputMethodEngine::new(), fullwidth_space_engine()] {
+        let result = engine.process_key(&press_shift_key(Keysym::SPACE));
+        assert!(result.consumed);
+        assert!(matches!(engine.state(), InputState::Empty));
+        let commit = result.actions.iter().find_map(|a| match a {
+            EngineAction::Commit(text) => Some(text.clone()),
+            _ => None,
+        });
+        assert_eq!(commit.as_deref(), Some("\u{3000}"));
+    }
 }
 
 #[test]
-fn test_ctrl_space_inserts_fullwidth_space_in_hiragana() {
-    let mut engine = InputMethodEngine::new();
+fn test_shift_space_inserts_the_configured_space_into_a_composition() {
+    // Bare Space converts here, so this chord is the only way to put a
+    // space into a composition — and it takes the everyday width, so a
+    // half-width space can be part of what gets converted.
+    for (mut engine, expected) in [
+        (InputMethodEngine::new(), "あ "),
+        (fullwidth_space_engine(), "あ\u{3000}"),
+    ] {
+        engine.process_key(&press('a'));
+        engine.process_key(&press_shift_key(Keysym::SPACE));
+        assert_eq!(engine.preedit().unwrap().text(), expected);
 
-    // Type "あ"
-    engine.process_key(&press('a'));
-    assert_eq!(engine.preedit().unwrap().text(), "あ");
-
-    // Ctrl+Space -> insert full-width space
-    let result = engine.process_key(&press_ctrl(Keysym::SPACE));
-    assert!(result.consumed);
-    assert_eq!(engine.preedit().unwrap().text(), "あ\u{3000}");
-}
-
-#[test]
-fn test_ctrl_space_fullwidth_space_commit() {
-    let mut engine = InputMethodEngine::new();
-
-    // Type "あ" + fullwidth space
-    engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::SPACE));
-
-    // Enter to commit
-    let result = engine.process_key(&press_key(Keysym::RETURN));
-    let commit_text = result
-        .actions
-        .iter()
-        .find_map(|a| {
-            if let EngineAction::Commit(text) = a {
-                Some(text.clone())
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    assert_eq!(commit_text, "あ\u{3000}");
+        let result = engine.process_key(&press_key(Keysym::RETURN));
+        let commit = result.actions.iter().find_map(|a| match a {
+            EngineAction::Commit(text) => Some(text.clone()),
+            _ => None,
+        });
+        assert_eq!(commit.as_deref(), Some(expected));
+    }
 }
 
 // --- Ctrl+Shift+L live conversion toggle tests ---

@@ -1,8 +1,10 @@
 //! Type definitions for the IME engine
 
-use karukan_engine::{Dictionary, KanaKanjiConverter, RewriterChain, RomajiConverter};
+use karukan_engine::{
+    Dictionary, KanaKanjiConverter, RewriterChain, RomajiConverter, SymbolStyle, WidthRules,
+};
 
-use crate::config::settings::StrategyMode;
+use crate::config::settings::{SpaceStyle, StrategyMode};
 
 use super::super::candidate::CandidateList;
 use super::super::preedit::Preedit;
@@ -99,6 +101,12 @@ pub struct EngineConfig {
     pub verbose: bool,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
+    /// Which symbol the `,` `.` `/` `[` `]` keys type
+    pub symbol: SymbolStyle,
+    /// The width kana input comes out at, per character group
+    pub width: WidthRules,
+    /// The space the Space key inputs
+    pub space: SpaceStyle,
 }
 
 impl EngineConfig {
@@ -123,6 +131,9 @@ impl EngineConfig {
             strategy: settings.conversion.strategy,
             verbose: settings.display.verbose,
             live_conversion: settings.conversion.live_conversion,
+            symbol: settings.symbol.style(),
+            width: settings.width,
+            space: settings.symbol.space,
         }
     }
 }
@@ -143,6 +154,9 @@ impl Default for EngineConfig {
             strategy: StrategyMode::default(),
             verbose: false,
             live_conversion: false,
+            symbol: SymbolStyle::default(),
+            width: WidthRules::default(),
+            space: SpaceStyle::default(),
         }
     }
 }

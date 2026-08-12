@@ -23,6 +23,7 @@ mod rewriter;
 mod source_filter;
 mod strategy;
 mod surrounding;
+mod width;
 
 /// Engine seeded with a learning entry `reading → surface`, no kanji model.
 /// Bypasses `init.rs` (which gates learning on settings + file I/O) and
@@ -81,6 +82,10 @@ fn press_shift(ch: char) -> KeyEvent {
     )
 }
 
+fn press_shift_key(keysym: Keysym) -> KeyEvent {
+    KeyEvent::new(keysym, KeyModifiers::new().with_shift(true), true)
+}
+
 fn press_ctrl(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(keysym, KeyModifiers::new().with_control(true), true)
 }
@@ -120,6 +125,14 @@ fn last_aux_text(result: &EngineResult) -> Option<String> {
     result.actions.iter().rev().find_map(|a| match a {
         EngineAction::UpdateAuxText(text) => Some(text.clone()),
         _ => None,
+    })
+}
+
+/// Engine whose Space setting is the full-width one (the default is half).
+fn fullwidth_space_engine() -> InputMethodEngine {
+    InputMethodEngine::with_config(EngineConfig {
+        space: crate::config::settings::SpaceStyle::Full,
+        ..EngineConfig::default()
     })
 }
 

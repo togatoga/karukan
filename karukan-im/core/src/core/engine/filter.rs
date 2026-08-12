@@ -111,7 +111,8 @@ impl InputMethodEngine {
         let Some(reading) = self.state.reading().map(str::to_string) else {
             return EngineResult::not_consumed();
         };
-        let list = CandidateList::new(self.source_view(next, &reading));
+        let view = self.source_view(next, &reading);
+        let list = self.settle_candidates(view);
         let selected = list.selected_text().unwrap_or(&reading).to_string();
         let preedit = Preedit::with_text_highlighted(&selected);
         // The aux leads with what the user typed, tail included — typing

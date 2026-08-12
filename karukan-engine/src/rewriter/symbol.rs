@@ -44,7 +44,8 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 
-use super::{RewriteOutput, Rewriter, is_pure_digit, to_fullwidth, to_halfwidth};
+use super::{RewriteOutput, Rewriter, is_pure_digit};
+use crate::width::{has_width_pair, to_full_width, to_half_width};
 
 const SYMBOLS_YAML: &str = include_str!("../../data/symbols.yml");
 
@@ -147,23 +148,41 @@ impl SymbolRewriter {
     }
 }
 
-/// For a digit-only string, return the all-full-width and all-half-width forms
-/// that differ from the input. Supports arbitrary length (e.g. `123` → `１２３`,
-/// `１２` → `12`).
-fn digit_width_variants(candidate: &str) -> Vec<String> {
-    if !is_pure_digit(candidate) {
+/// The whole candidate at one width and the other (`(1)` → `（１）`, `123`
+/// → `１２３`), each with its width marker (`全` / `半`) and the label to
+/// use when the variant is new (`記号` / `数字`).
+///
+/// Only for candidates made entirely of characters that *have* both forms,
+/// so a word with one mark in it (`きょう。`) is not offered as 「きょう｡」.
+/// Pure letters are left to [`super::AlphabetRewriter`], which covers case
+/// as well as width.
+fn width_variants(candidate: &str) -> Vec<(String, &'static str, &'static str)> {
+    let convertible =
+        !candidate.is_empty() && candidate.chars().all(has_width_pair) && !is_pure_alpha(candidate);
+    if !convertible {
         return Vec::new();
     }
-    let full = to_fullwidth(candidate);
-    let half = to_halfwidth(candidate);
-    let mut out = Vec::new();
-    if full != candidate {
-        out.push(full);
-    }
-    if half != candidate && !out.iter().any(|s| s == &half) {
-        out.push(half);
-    }
-    out
+    let kind = if is_pure_digit(candidate) {
+        "数字"
+    } else {
+        "記号"
+    };
+    [
+        (to_full_width(candidate), "全"),
+        (to_half_width(candidate), "半"),
+    ]
+    .into_iter()
+    .filter(|(text, _)| text != candidate)
+    .map(|(text, marker)| (text, marker, kind))
+    .collect()
+}
+
+/// True for a non-empty run of ASCII or full-width letters.
+fn is_pure_alpha(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphabetic() || matches!(c, 'Ａ'..='Ｚ' | 'ａ'..='ｚ'))
 }
 
 impl Rewriter for SymbolRewriter {
@@ -203,8 +222,18 @@ impl Rewriter for SymbolRewriter {
             }
         }
 
-        for v in digit_width_variants(candidate) {
-            push_unique(v, None, &mut out);
+        // The width pair annotates in place when an earlier step already
+        // produced the same text — a variant chain reaches `｡` and `＠`
+        // before this does — so neither half of the information is lost:
+        // `＠` reads 「[全]アットマーク」, `｡` 「[半]記号」.
+        for (text, marker, kind) in width_variants(candidate) {
+            match out.iter_mut().find(|(t, _)| *t == text) {
+                Some((_, desc)) => {
+                    let label = desc.as_deref().unwrap_or(kind);
+                    *desc = Some(format!("[{marker}]{label}"));
+                }
+                None => out.push((text, Some(format!("[{marker}]{kind}")))),
+            }
         }
 
         out
@@ -286,14 +315,61 @@ mod tests {
     }
 
     #[test]
-    fn mixed_or_non_digit_no_width_pair() {
+    fn pure_letters_are_left_to_the_alphabet_rewriter() {
+        // That one covers case as well as width, so it owns `abc`.
         let r = SymbolRewriter::new();
-        // Digits mixed with other chars are NOT expanded by digit_width_variants.
-        let out = texts(&r.rewrite("a1"));
-        assert!(!out.iter().any(|s| s == "ａ１"));
-        // Pure ASCII letters also not expanded (digit-only gate).
         let out = texts(&r.rewrite("abc"));
         assert!(!out.iter().any(|s| s == "ａｂｃ"));
+    }
+
+    #[test]
+    fn a_mixed_run_offers_both_widths() {
+        // What the engine passes in is the reading as displayed, which
+        // under the default settings is itself mixed (symbols full, digits
+        // half): both patterns have to come back from it.
+        let r = SymbolRewriter::new();
+        let out = r.rewrite("＜＞1234");
+        assert_eq!(desc(&out, "＜＞１２３４"), Some("[全]記号".to_string()));
+        assert_eq!(desc(&out, "<>1234"), Some("[半]記号".to_string()));
+
+        // A form equal to the input is not a variant and is left out.
+        let out = r.rewrite("（ａ１）");
+        assert!(!texts(&out).contains(&"（ａ１）".to_string()));
+        assert_eq!(desc(&out, "(a1)"), Some("[半]記号".to_string()));
+    }
+
+    #[test]
+    fn a_word_with_a_mark_in_it_is_not_converted() {
+        // 「きょう。」 must not be offered as 「きょう｡」: the marks around a
+        // word are not what the user is choosing a width for.
+        let r = SymbolRewriter::new();
+        let out = texts(&r.rewrite("きょう。"));
+        assert!(!out.iter().any(|s| s == "きょう｡"));
+    }
+
+    #[test]
+    fn width_variants_are_annotated() {
+        let r = SymbolRewriter::new();
+        let out = r.rewrite("123");
+        assert_eq!(desc(&out, "１２３"), Some("[全]数字".to_string()));
+        let out = r.rewrite("１２３");
+        assert_eq!(desc(&out, "123"), Some("[半]数字".to_string()));
+    }
+
+    #[test]
+    fn a_variant_the_chain_also_produces_still_gets_its_width_label() {
+        // `｡` comes from 。's variant chain first; the width pair reaches it
+        // second and supplies the label the chain has none for.
+        let r = SymbolRewriter::new();
+        let out = r.rewrite("。");
+        assert_eq!(desc(&out, "｡"), Some("[半]記号".to_string()));
+        // An entry the width pair does not reach keeps its own label.
+        assert_eq!(desc(&out, "．"), Some("ピリオド".to_string()));
+
+        let out = r.rewrite("@");
+        // A name the table already carries is kept, with the width marker
+        // in front of it.
+        assert_eq!(desc(&out, "＠"), Some("[全]アットマーク".to_string()));
     }
 
     #[test]

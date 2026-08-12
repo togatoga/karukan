@@ -2,23 +2,23 @@ use super::*;
 
 #[test]
 fn test_passthrough_no_double_counting() {
-    // Regression test: typing '<' twice should produce "<<" in the preedit,
-    // not "<<<" or "<<<<". The converter adds PassThrough chars to output()
-    // AND returns them as PassThrough events; without proper handling, both
-    // paths would insert the char.
+    // Regression test: typing '<' twice should produce one char per press,
+    // not two. The converter adds PassThrough chars to output() AND returns
+    // them as PassThrough events; without proper handling, both paths would
+    // insert the char. (Kana input is full-width, so `<` shows as `＜`.)
     let mut engine = InputMethodEngine::new();
 
-    // Type '<' from empty state → enters Composing with preedit "<"
+    // Type '<' from empty state → enters Composing with preedit "＜"
     engine.process_key(&press('<'));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.preedit().unwrap().text(), "<");
+    assert_eq!(engine.preedit().unwrap().text(), "＜");
 
-    // Type '<' again → preedit becomes "<<", not "<<<"
+    // Type '<' again → preedit becomes "＜＜", not "＜＜＜"
     engine.process_key(&press('<'));
     assert_eq!(
         engine.preedit().unwrap().text(),
-        "<<",
-        "Second '<' should produce '<<', not over-count chars"
+        "＜＜",
+        "Second '<' should produce two chars, not over-count"
     );
 }
 
@@ -34,7 +34,7 @@ fn test_apostrophe_starts_input_mode() {
         matches!(engine.state(), InputState::Composing { .. }),
         "Apostrophe should enter Composing, not auto-commit"
     );
-    assert_eq!(engine.preedit().unwrap().text(), "'");
+    assert_eq!(engine.preedit().unwrap().text(), "＇");
 
     // No Commit action should have fired.
     assert!(
@@ -87,12 +87,12 @@ fn test_passthrough_after_hiragana_no_double() {
     // Type '<' while in hiragana input state
     engine.process_key(&press('<'));
     let preedit = engine.preedit().unwrap().text().to_string();
-    assert_eq!(preedit, "あ<", "Should be 'あ<', not 'あ<<'");
+    assert_eq!(preedit, "あ＜", "Should be one '＜', not two");
 
     // Type another '<'
     engine.process_key(&press('<'));
     let preedit = engine.preedit().unwrap().text().to_string();
-    assert_eq!(preedit, "あ<<", "Should be 'あ<<', not 'あ<<<'");
+    assert_eq!(preedit, "あ＜＜", "Should be two '＜', not three");
 }
 
 #[test]

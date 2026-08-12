@@ -105,28 +105,27 @@ impl InputMethodEngine {
     /// Show `candidates` in the composing suggestion window, remembering the
     /// list so Ctrl+digit can select from exactly what is on screen.
     fn show_suggestions(&mut self, candidates: Vec<Candidate>) -> EngineAction {
-        self.shown_suggestions = CandidateList::new(candidates);
+        self.shown_suggestions = self.settle_candidates(candidates);
         EngineAction::ShowCandidates(self.shown_suggestions.clone())
     }
 
     /// Process key in empty state
     pub(super) fn process_key_empty(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
-        // Ctrl+Space: start input with full-width space
-        if key.modifiers.control_key && key.keysym == Keysym::SPACE {
-            self.clear_composition();
-            self.input_buf.push_direct('\u{3000}');
-            let preedit = self.set_composing_state();
+        // Shift+Space on its own is the "I want a full-width space" gesture,
+        // whatever the setting says. Committed directly, so no composition
+        // opens for a second Space to convert.
+        if shift_active && key.keysym == Keysym::SPACE && !key.modifiers.control_key {
             return EngineResult::consumed()
-                .with_action(EngineAction::UpdatePreedit(preedit))
-                .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()));
+                .with_action(EngineAction::Commit("\u{3000}".to_string()));
         }
 
-        // Bare Space from Empty: Hiragana mode commits `　` directly —
+        // Bare Space from Empty: a full-width space is committed directly —
         // without entering Composing, where a second Space would open an
-        // unwanted candidate window. Other modes pass it through as an
-        // ASCII space.
+        // unwanted candidate window. A half-width one is passed through, so
+        // the application keeps whatever it does with Space (scrolling a
+        // page) when the IME has nothing to compose.
         if key.keysym == Keysym::SPACE && !key.modifiers.control_key && !key.modifiers.alt_key {
-            return if self.mode.current() == InputMode::Hiragana {
+            return if self.space_char() == '\u{3000}' {
                 EngineResult::consumed().with_action(EngineAction::Commit("\u{3000}".to_string()))
             } else {
                 EngineResult::not_consumed()
@@ -195,9 +194,26 @@ impl InputMethodEngine {
             .with_action(EngineAction::UpdateAuxText(self.format_aux_composing()))
     }
 
-    /// Insert a full-width space (U+3000) after the active elements
-    pub(super) fn input_fullwidth_space(&mut self) -> EngineResult {
-        self.edit_with_chunk_breaks(|e| e.input_buf.push_direct('\u{3000}'));
+    /// The space the Space key inputs: the configured one while typing
+    /// kana, the ASCII one in direct input — the same edge the width rules
+    /// stop at.
+    pub(super) fn space_char(&self) -> char {
+        match self.mode.current() {
+            InputMode::Alphabet | InputMode::Emoji => ' ',
+            InputMode::Hiragana | InputMode::Katakana => match self.config.space {
+                SpaceStyle::Full => '\u{3000}',
+                SpaceStyle::Half => ' ',
+            },
+        }
+    }
+
+    /// Insert the configured space after the active elements. Bare Space
+    /// converts mid-composition, so Shift+Space is the only way to put a
+    /// space into a composition — and the width wanted there is the
+    /// everyday one, not the exception Shift+Space commits from Empty.
+    pub(super) fn input_space(&mut self) -> EngineResult {
+        let space = self.space_char();
+        self.edit_with_chunk_breaks(|e| e.input_buf.push_direct(space));
         self.refresh_input_state()
     }
 
@@ -210,8 +226,6 @@ impl InputMethodEngine {
         // Handle Ctrl+key shortcuts
         if key.modifiers.control_key {
             match key.keysym {
-                // Ctrl+Space: insert full-width space (U+3000)
-                Keysym::SPACE => return self.input_fullwidth_space(),
                 // Ctrl+J: start a new live-conversion chunk at the caret
                 Keysym::KEY_J | Keysym::KEY_J_UPPER => return self.insert_chunk_break(),
                 // Ctrl+K: enter katakana mode
@@ -252,7 +266,12 @@ impl InputMethodEngine {
             Keysym::ESCAPE => self.cancel_composing(),
             Keysym::BACKSPACE => self.backspace_composing(),
             Keysym::DELETE => self.delete_composing(),
-            Keysym::SPACE if self.mode.current() == InputMode::Alphabet => self.input_char(' '),
+            // Shift+Space: a space, since bare Space converts here.
+            Keysym::SPACE if shift_active => self.input_space(),
+            Keysym::SPACE if self.mode.current() == InputMode::Alphabet => {
+                let space = self.space_char();
+                self.input_char(space)
+            }
             // Tab triggers conversion that bypasses the learning cache, so users
             // can escape stale or unwanted learned entries (mozc binds Tab to a
             // different conversion path — PredictAndConvert — in the same spirit).
@@ -321,9 +340,7 @@ impl InputMethodEngine {
     /// or `None` if none match. Used by Enter in emoji mode so committing
     /// `:smile` produces 😄 directly rather than the literal `:smile`.
     fn first_emoji_candidate(&self, reading: &str) -> Option<String> {
-        self.converters
-            .rewriters
-            .rewrite_all(&[reading.to_string()])
+        self.rewriter_variants(reading)
             .into_iter()
             .map(|(text, _desc)| text)
             .next()

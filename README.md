@@ -49,6 +49,7 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 - [辞書](docs/dictionary.md) — システム辞書のインストール、ユーザー辞書、候補の優先順位
 - [ユーザー辞書](docs/user-dictionary.md) — 対応形式（Mozc/Google IME TSV・バイナリ）と登録方法
 - [Chunk](docs/chunking.md) — 変換が Chunk に区切られる場所と、自分で区切って表示を固定する方法
+- [記号・半角全角](docs/symbols.md) — 句読点や括弧の種類、記号・数字・英字の幅、スペースの設定
 
 ## ライセンス
 

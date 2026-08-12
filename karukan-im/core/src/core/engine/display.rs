@@ -30,7 +30,10 @@ impl InputMethodEngine {
         if !self.live.shown {
             return String::new();
         }
-        self.chunks.iter().map(|c| c.converted.as_str()).collect()
+        // Model output, so it settles here: the prompt is NFKC-normalized
+        // and the answer comes back half-width whatever was typed.
+        let converted: String = self.chunks.iter().map(|c| c.converted.as_str()).collect();
+        self.settle_text(&converted)
     }
 
     /// Build a preedit for composing state.

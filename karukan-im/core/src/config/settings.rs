@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use directories::ProjectDirs;
+use karukan_engine::{BracketStyle, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -23,6 +24,49 @@ pub struct Settings {
     pub learning: LearningSettings,
     /// What the aux line shows
     pub display: DisplaySettings,
+    /// Which symbol each configurable key types
+    pub symbol: SymbolSettings,
+    /// The width kana input comes out at, per character group
+    pub width: WidthRules,
+}
+
+/// The space the Space key inputs while typing kana. Alphabet and emoji
+/// input always take the ASCII one, like the width rules leave direct input
+/// alone.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpaceStyle {
+    /// The ASCII space.
+    #[default]
+    Half,
+    /// The ideographic space `　`.
+    Full,
+}
+
+/// Which symbol the keys with more than one conventional output type. The
+/// width these settle at is `[width]`, not this section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolSettings {
+    /// What `,` and `.` type: 、。 ，． 、． ，。
+    pub punctuation: PunctuationStyle,
+    /// What `[` and `]` type: 「」 or []
+    pub bracket: BracketStyle,
+    /// What `/` types: ・ or /
+    pub slash: SlashStyle,
+    /// The space Space inputs while typing kana
+    pub space: SpaceStyle,
+}
+
+impl SymbolSettings {
+    /// The key-to-symbol style the romaji converter is built with. Space is
+    /// not part of it: no romaji rule types a space.
+    pub fn style(&self) -> SymbolStyle {
+        SymbolStyle {
+            punctuation: self.punctuation,
+            bracket: self.bracket,
+            slash: self.slash,
+        }
+    }
 }
 
 /// Aux-line settings
@@ -231,6 +275,7 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use karukan_engine::Width;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -243,6 +288,62 @@ mod tests {
         assert!(settings.learning.enabled);
         assert_eq!(settings.learning.max_entries, 10000);
         assert_eq!(settings.learning.max_surface_chars, 50);
+    }
+
+    #[test]
+    fn test_default_symbol_and_width_settings() {
+        // Shipped defaults: the Japanese symbols, and kana input that comes
+        // out full-width apart from digits.
+        let settings = Settings::default();
+        assert_eq!(settings.symbol.punctuation, PunctuationStyle::KutenTouten);
+        assert_eq!(settings.symbol.bracket, BracketStyle::Corner);
+        assert_eq!(settings.symbol.slash, SlashStyle::MiddleDot);
+        assert_eq!(settings.symbol.space, SpaceStyle::Half);
+        assert_eq!(settings.width.kana_symbol, Width::Full);
+        assert_eq!(settings.width.ascii_symbol, Width::Full);
+        assert_eq!(settings.width.digit, Width::Half);
+    }
+
+    #[test]
+    fn test_symbol_style_is_written_as_the_symbols() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[symbol]
+punctuation = "，．"
+bracket = "[]"
+slash = "/"
+space = "half"
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(settings.symbol.punctuation, PunctuationStyle::CommaPeriod);
+        assert_eq!(settings.symbol.bracket, BracketStyle::Square);
+        assert_eq!(settings.symbol.slash, SlashStyle::Slash);
+        assert_eq!(settings.symbol.space, SpaceStyle::Half);
+    }
+
+    #[test]
+    fn test_width_partial_config() {
+        // Setting one group leaves the others at their default.
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[width]
+ascii_symbol = "half"
+digit = "full"
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(settings.width.ascii_symbol, Width::Half);
+        assert_eq!(settings.width.digit, Width::Full);
+        assert_eq!(settings.width.kana_symbol, Width::Full);
     }
 
     #[test]

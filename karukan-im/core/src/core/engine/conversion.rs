@@ -133,17 +133,18 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
+        let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
         self.enter_conversion_state(&reading, candidate_list)
     }
 
     /// Map builder output to the public [`CandidateList`] shown in the
-    /// conversion window.
+    /// conversion window, settled at the configured width.
     fn to_conversion_candidate_list(
+        &self,
         candidates: Vec<AnnotatedCandidate>,
         reading: &str,
     ) -> CandidateList {
-        CandidateList::new(
+        self.settle_candidates(
             candidates
                 .into_iter()
                 .map(|ac| ac.into_candidate(reading))
@@ -369,11 +370,7 @@ impl InputMethodEngine {
         }
         // Rewriters run on the typed reading only; running them on other
         // sources' candidates would emit variants nobody asked for.
-        for (variant, description) in self
-            .converters
-            .rewriters
-            .rewrite_all(&[reading.to_string()])
-        {
+        for (variant, description) in self.rewriter_variants(reading) {
             builder.push(
                 AnnotatedCandidate::new(variant, CandidateSource::Rewriter)
                     .with_description(description),
@@ -486,13 +483,25 @@ impl InputMethodEngine {
         .collect()
     }
 
+    /// Rewriter variants for `reading`, as `(text, description)` pairs.
+    ///
+    /// In emoji mode only the emoji rewriter runs: `:smile` is a query, and
+    /// another rewriter's width variant (`：ｓｍｉｌｅ`) would head the
+    /// picker and be what Enter commits.
+    pub(super) fn rewriter_variants(&self, reading: &str) -> Vec<RewriteOutput> {
+        if self.mode.current() == InputMode::Emoji {
+            return EmojiRewriter.rewrite(reading);
+        }
+        self.converters
+            .rewriters
+            .rewrite_all(&[reading.to_string()])
+    }
+
     /// Build rule-based rewriter variants for the reading itself (e.g. for
     /// symbol input `「` → `『`, `【`, `（`, ...). Used in the auto-suggest path
     /// so users see mozc-style symbol variants without pressing Space first.
     pub(super) fn lookup_rewriter_variants(&self, reading: &str) -> Vec<Candidate> {
-        self.converters
-            .rewriters
-            .rewrite_all(&[reading.to_string()])
+        self.rewriter_variants(reading)
             .into_iter()
             .map(|(text, description)| Candidate {
                 text,
@@ -748,7 +757,7 @@ impl InputMethodEngine {
         if candidates.is_empty() {
             return self.cancel_conversion();
         }
-        let candidate_list = Self::to_conversion_candidate_list(candidates, &reading);
+        let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
         let mut result = self.enter_conversion_state(&reading, candidate_list);
 
         if let Some(source) = prev_filter {

@@ -1,5 +1,7 @@
 use super::rules::build_rules;
+use super::style::SymbolStyle;
 use super::trie::TrieNode;
+use crate::width::WidthRules;
 
 /// Result of converting a raw input string.
 #[derive(Debug, Clone, PartialEq)]
@@ -12,19 +14,33 @@ pub struct Converted {
 
 /// Stateless romaji-to-hiragana converter.
 ///
-/// Holds only the rule trie; each call derives its result from the full raw
-/// input, so the caller owns all editing state.
+/// Holds the rule trie and the width rules; each call derives its result
+/// from the full raw input, so the caller owns all editing state.
 #[derive(Debug)]
 pub struct RomajiConverter {
     trie: TrieNode,
+    width: WidthRules,
 }
 
 impl RomajiConverter {
     /// Create a new converter with default rules
     pub fn new() -> Self {
+        Self::with_rules(SymbolStyle::default(), WidthRules::default())
+    }
+
+    /// Create a converter whose `,` `.` `/` `[` `]` keys type `style`, and
+    /// whose output settles at `width`.
+    pub fn with_rules(style: SymbolStyle, width: WidthRules) -> Self {
         Self {
-            trie: build_rules(),
+            trie: build_rules(style),
+            width,
         }
+    }
+
+    /// The width a character settles at once it is no longer a live
+    /// keystroke. Applied by the caller, which is what knows when that is.
+    pub fn width(&self) -> &WidthRules {
+        &self.width
     }
 
     /// Convert `raw` left to right. `pending` holds the trailing input that
@@ -67,11 +83,13 @@ impl RomajiConverter {
         result
     }
 
-    /// Convert then flush the leftover: the committed form of `raw`.
+    /// Convert then flush the leftover: the committed form of `raw`, at the
+    /// configured width. [`Self::convert`] leaves the width alone because
+    /// part of its output is still live keystrokes; here everything settles.
     pub fn convert_flush(&self, raw: &str) -> String {
         let Converted { mut text, pending } = self.convert(raw);
         text.push_str(&self.flush_pending(&pending));
-        text
+        self.width.apply_str(&text)
     }
 
     /// Whether `ch` can begin a conversion rule (`k`, `y`, `n` — a later
@@ -324,7 +342,8 @@ mod tests {
     #[test]
     fn rule_outputs_are_never_ascii() {
         // Callers tell passed-through keystrokes (ASCII) apart from rule
-        // output by this property, so no rule may output an ASCII char
+        // output by this property, so no rule may output an ASCII char.
+        // The configurable outputs are guarded in `style.rs`.
         fn walk(node: &TrieNode, check: &mut impl FnMut(&str)) {
             if let Some(output) = &node.output {
                 check(output);
@@ -340,6 +359,22 @@ mod tests {
                 "rule output contains ASCII: {output:?}"
             );
         });
+    }
+
+    #[test]
+    fn symbol_style_picks_the_output() {
+        use super::super::style::{BracketStyle, PunctuationStyle, SlashStyle};
+        let c = RomajiConverter::with_rules(
+            SymbolStyle {
+                punctuation: PunctuationStyle::CommaPeriod,
+                bracket: BracketStyle::Square,
+                slash: SlashStyle::Slash,
+            },
+            WidthRules::default(),
+        );
+        assert_eq!(c.convert_flush("a,b.").as_str(), "あ，b．");
+        assert_eq!(c.convert_flush("[a]").as_str(), "［あ］");
+        assert_eq!(c.convert_flush("a/b").as_str(), "あ／b");
     }
 
     #[test]
