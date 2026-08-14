@@ -29,5 +29,4 @@ karukan-im = { path = "karukan-im/core" }
 tempfile = "3"
 
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
