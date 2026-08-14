@@ -172,13 +172,10 @@ pub struct InputMethodEngine {
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
     learning: Option<LearningCache>,
-    /// Receiver for the background model-loading thread spawned by
-    /// `init_from_settings`. Model resolution can block on the network
-    /// (first download, or a cache miss while offline), so it must never
-    /// run on the thread that answers key events; until the converters
-    /// arrive the engine runs dictionary/kana-only. Drained by
-    /// `poll_loaded_models` at the top of `process_key`; a disconnected
-    /// channel means loading failed and the engine stays model-less.
+    /// Receiver for the background model-loading thread: model resolution
+    /// can block on the network, so it never runs on the key-event thread.
+    /// Drained by `poll_loaded_models` at the top of `process_key`; until
+    /// then (or if loading failed) the engine runs dictionary/kana-only.
     model_loading: Option<std::sync::mpsc::Receiver<init::LoadedConverters>>,
 }
 
