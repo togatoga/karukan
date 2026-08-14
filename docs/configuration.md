@@ -38,7 +38,7 @@ ascii_symbol = "full"          # ?! ,. (){}[] @ : ~ ほかの記号
 digit = "half"                 # 0-9
 ```
 
-`model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回利用時にHugging Faceから自動ダウンロードされます）。設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
+`model` / `light_model` に指定できるモデルIDは以下です（指定したモデルは初回起動時にHugging Faceからバックグラウンドで自動ダウンロードされます）。設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
 
 | モデルID | ベースモデル | パラメータ数 | Accuracy@1 (NFKC) |
 |---------|-----------|-----------|------:|
