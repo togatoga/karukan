@@ -293,14 +293,10 @@ impl InputMethodEngine {
         num_candidates: usize,
         learning: LearningLookup,
     ) -> Vec<AnnotatedCandidate> {
-        // Init failure is not fatal: symbol-only inputs don't need the
-        // model and still get dictionary/rewriter/fallback candidates.
-        if self.converters.kanji.is_none()
-            && let Err(e) = self.init_kanji_converter()
-        {
-            debug!("Failed to initialize kanji converter: {}", e);
-        }
-
+        // No converter (still loading in the background, or loading failed)
+        // just means no model candidates: symbol-only and early keystrokes
+        // still get dictionary/rewriter/fallback candidates. Loading here
+        // synchronously would block the key-event thread on the download.
         let candidates = self.model_candidates(reading, num_candidates);
 
         let hiragana = reading.to_string();

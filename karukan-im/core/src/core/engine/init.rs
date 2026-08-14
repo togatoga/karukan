@@ -103,15 +103,6 @@ fn load_converters(
     }
 }
 
-/// Format the n_threads value for debug logging.
-fn threads_label(n_threads: u32) -> String {
-    if n_threads > 0 {
-        n_threads.to_string()
-    } else {
-        "default".to_string()
-    }
-}
-
 impl InputMethodEngine {
     /// Full engine initialization from user settings: system dictionary,
     /// user dictionaries, learning cache, and conversion models according
@@ -207,50 +198,6 @@ impl InputMethodEngine {
                 self.model_loading = None;
             }
         }
-    }
-
-    /// Initialize the kanji converter (call this early to avoid latency)
-    /// Uses the default model from the registry.
-    pub fn init_kanji_converter(&mut self) -> Result<()> {
-        let default_id = karukan_engine::kanji::registry().default_model.clone();
-        self.init_kanji_converter_with_model(&default_id, 0)
-    }
-
-    /// Initialize the kanji converter with a specific variant id
-    pub fn init_kanji_converter_with_model(
-        &mut self,
-        variant_id: &str,
-        n_threads: u32,
-    ) -> Result<()> {
-        if self.converters.kanji.is_none() {
-            debug!("Initializing kanji converter with variant: {}", variant_id);
-            let converter = create_converter(variant_id, n_threads)?;
-            debug!(
-                "Kanji converter initialized: {} (n_threads={})",
-                converter.model_display_name(),
-                threads_label(n_threads)
-            );
-            self.converters.kanji = Some(converter);
-        }
-        Ok(())
-    }
-
-    /// Initialize the light model for beam search (generates multiple candidates on Space conversion)
-    pub fn init_light_kanji_converter(&mut self, variant_id: &str, n_threads: u32) -> Result<()> {
-        if self.converters.light_kanji.is_none() {
-            debug!(
-                "Initializing light kanji converter with variant: {}",
-                variant_id
-            );
-            let converter = create_converter(variant_id, n_threads)?;
-            debug!(
-                "Light kanji converter initialized: {} (n_threads={})",
-                converter.model_display_name(),
-                threads_label(n_threads)
-            );
-            self.converters.light_kanji = Some(converter);
-        }
-        Ok(())
     }
 
     /// Initialize the system dictionary for candidate lookup

@@ -33,8 +33,6 @@ impl InputMethodEngine {
             self.chunks.clear();
             return None;
         }
-        self.ensure_kanji_converter();
-
         let text: Vec<char> = full_reading.chars().collect();
         let base_ctx = self.truncate_context_for_api();
 
@@ -157,17 +155,6 @@ impl InputMethodEngine {
             .map(|c| c.converted.as_str())
             .collect();
         self.lctx_for(&base, &preceding)
-    }
-
-    /// Best-effort lazy init of the kanji converter. Chunking proceeds even
-    /// on failure so `self.chunks` always mirrors the buffer; each chunk
-    /// then falls back to its own reading.
-    fn ensure_kanji_converter(&mut self) {
-        if self.converters.kanji.is_none()
-            && let Err(e) = self.init_kanji_converter()
-        {
-            debug!("Failed to initialize kanji converter: {}", e);
-        }
     }
 
     /// Model conversion of one chunk's `reading` given `lctx`, falling back to
