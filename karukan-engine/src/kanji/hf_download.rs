@@ -2,14 +2,31 @@
 //!
 //! Downloads GGUF models from HuggingFace Hub and caches them locally.
 //! Model definitions are loaded from `models.toml` via [`super::model_config`].
+//!
+//! Resolution is cache-first: a file already in the HuggingFace cache is
+//! served from disk without any network request, so a cached model resolves
+//! instantly whether or not the machine is online. The network is only
+//! touched on a cache miss. The flip side is that an update pushed to the
+//! same repo/filename is not picked up once the file is cached — model
+//! updates must change the filename (or the user clears the HF cache).
 
 use super::error::KanjiError;
 use super::model_config::{ModelFamily, VariantConfig, registry};
 type Result<T> = super::error::Result<T>;
-use hf_hub::{HFClientSync, split_id};
+use hf_hub::{HFClient, HFError, split_id};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
+
+/// Retry budget for the network path. hf-hub's default (5 retries) meant an
+/// unreachable host was retried for minutes — each attempt eats a full OS
+/// connect timeout (~30s), and hf-hub only falls back to its cache after the
+/// whole cycle. Two retries keeps resilience against transient blips while
+/// bounding the worst case; the delay between attempts is dwarfed by the
+/// connect timeout anyway.
+const NETWORK_MAX_RETRIES: usize = 2;
+const NETWORK_RETRY_BASE_DELAY: Duration = Duration::from_millis(200);
 
 /// Paths already resolved in this process, keyed by (repo, filename).
 ///
@@ -47,11 +64,38 @@ pub fn download_gguf(repo_id: &str, filename: &str) -> Result<PathBuf> {
         return Ok(path.clone());
     }
 
-    // HFClientSync::new() resolves HF_TOKEN (env var or cached login) itself
-    let client = HFClientSync::new().map_err(|e| KanjiError::Download(e.into()))?;
+    // The builder resolves HF_TOKEN (env var or cached login) itself.
+    let client = HFClient::builder()
+        .retry_max_attempts(NETWORK_MAX_RETRIES)
+        .retry_base_delay(NETWORK_RETRY_BASE_DELAY)
+        .build_sync()
+        .map_err(|e| KanjiError::Download(e.into()))?;
 
     let (owner, name) = split_id(repo_id);
     let repo = client.model(owner, name);
+
+    // Cache first, never the network. With the default revision (`main`)
+    // hf-hub would otherwise revalidate with a HEAD request on every
+    // resolve, and offline that means waiting out connect timeout × retries
+    // per file before it falls back to this same cache — minutes during
+    // which an IME is unusable.
+    match repo
+        .download_file()
+        .filename(filename)
+        .local_files_only(true)
+        .send()
+    {
+        Ok(path) => {
+            tracing::debug!("Resolved {} from local cache: {:?}", filename, path);
+            resolved.insert(key, path.clone());
+            return Ok(path);
+        }
+        // Not cached: fall through to the network.
+        Err(HFError::LocalEntryNotFound { .. }) => {}
+        // A broken cache entry shouldn't be fatal either — the network path
+        // rebuilds it.
+        Err(e) => tracing::warn!("cache lookup failed for {}/{}: {}", repo_id, filename, e),
+    }
 
     tracing::info!("Downloading {} from {}...", filename, repo_id);
 

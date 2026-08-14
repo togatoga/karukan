@@ -1,11 +1,20 @@
 //! Engine initialization (model loading, dictionary setup)
 
+use std::sync::mpsc;
+
 use anyhow::{Context, Result};
 use tracing::debug;
 
 use crate::config::settings::StrategyMode;
 
 use super::*;
+
+/// Converters produced by the background model-loading thread, handed to the
+/// engine through the `model_loading` channel.
+pub(super) struct LoadedConverters {
+    pub kanji: Option<KanaKanjiConverter>,
+    pub light_kanji: Option<KanaKanjiConverter>,
+}
 
 /// Create a KanaKanjiConverter from a variant id, optionally setting thread count.
 fn create_converter(variant_id: &str, n_threads: u32) -> Result<KanaKanjiConverter> {
@@ -15,6 +24,83 @@ fn create_converter(variant_id: &str, n_threads: u32) -> Result<KanaKanjiConvert
         converter.set_n_threads(n_threads);
     }
     Ok(converter)
+}
+
+/// Load the conversion models for a strategy. Runs on the background
+/// loading thread — it may block on a model download, which is exactly what
+/// must stay off the key-event thread. In `Adaptive` mode a light-model
+/// failure is non-fatal (beam search is simply unavailable).
+fn load_converters(
+    strategy: StrategyMode,
+    model: Option<&str>,
+    light_model: Option<&str>,
+    n_threads: u32,
+) -> Result<LoadedConverters> {
+    match strategy {
+        StrategyMode::Light => {
+            // Light mode: load light_model into the main (kanji) slot only
+            let light_variant =
+                resolve_variant_id(light_model).context("invalid light_model settings")?;
+            let converter = create_converter(&light_variant, n_threads)
+                .context("failed to initialize light model")?;
+            tracing::info!(
+                "Light model loaded into main slot: {}",
+                converter.model_display_name()
+            );
+            Ok(LoadedConverters {
+                kanji: Some(converter),
+                light_kanji: None,
+            })
+        }
+        StrategyMode::Main => {
+            // Main mode: load main model only, no light model
+            let main_variant = resolve_variant_id(model).context("invalid model settings")?;
+            let converter = create_converter(&main_variant, n_threads)
+                .context("failed to initialize main model")?;
+            tracing::info!("Main model loaded: {}", converter.model_display_name());
+            Ok(LoadedConverters {
+                kanji: Some(converter),
+                light_kanji: None,
+            })
+        }
+        StrategyMode::Adaptive => {
+            // Adaptive mode: load both main and light models
+            let main_variant = resolve_variant_id(model).context("invalid model settings")?;
+            let main_converter = create_converter(&main_variant, n_threads)
+                .context("failed to initialize default model")?;
+            tracing::info!(
+                "Default model loaded: {}",
+                main_converter.model_display_name()
+            );
+
+            // Light model for beam search (non-fatal on failure)
+            let light_variant = match resolve_variant_id(light_model) {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::warn!("Invalid light_model settings, using default: {}", e);
+                    karukan_engine::kanji::registry().default_model.clone()
+                }
+            };
+            let light_converter = match create_converter(&light_variant, n_threads) {
+                Ok(converter) => {
+                    tracing::info!("Beam model loaded");
+                    Some(converter)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to initialize beam model (light_model={:?}): {}",
+                        light_model,
+                        e
+                    );
+                    None
+                }
+            };
+            Ok(LoadedConverters {
+                kanji: Some(main_converter),
+                light_kanji: light_converter,
+            })
+        }
+    }
 }
 
 /// Format the n_threads value for debug logging.
@@ -32,15 +118,19 @@ impl InputMethodEngine {
     /// to the configured strategy.
     ///
     /// Shared by the fcitx5 FFI (`karukan_engine_init`) and the stdio
-    /// JSON-RPC server (`init` method). In `Adaptive` mode a light-model
-    /// failure is non-fatal (beam search is simply unavailable).
+    /// JSON-RPC server (`init` method). Dictionaries and the learning cache
+    /// load synchronously (local files, fast); the conversion models load on
+    /// a background thread because resolving them can touch the network
+    /// (first download, or a cache miss while offline) and blocking here
+    /// stalls every key event behind this call. Until the models arrive —
+    /// and if loading them fails outright — the engine runs with what it
+    /// has: romaji conversion, dictionaries, learning cache, rewriters.
     pub fn init_from_settings(&mut self, settings: &Settings) -> Result<()> {
-        let strategy = settings.conversion.strategy;
         tracing::info!(
             "Karukan init: model={:?}, light_model={:?}, strategy={:?}",
             settings.conversion.model,
             settings.conversion.light_model,
-            strategy,
+            settings.conversion.strategy,
         );
 
         self.init_system_dictionary(settings.conversion.dict_path.as_deref());
@@ -53,56 +143,70 @@ impl InputMethodEngine {
             },
         );
 
-        let n_threads = settings.conversion.n_threads;
+        self.spawn_model_loading(settings);
+        Ok(())
+    }
 
-        match strategy {
-            StrategyMode::Light => {
-                // Light mode: load light_model into the main (kanji) slot only
-                let light_variant = resolve_variant_id(settings.conversion.light_model.as_deref())
-                    .context("invalid light_model settings")?;
-                self.init_kanji_converter_with_model(&light_variant, n_threads)
-                    .context("failed to initialize light model")?;
-                tracing::info!("Light model loaded into main slot: {}", self.model_name());
-            }
-            StrategyMode::Main => {
-                // Main mode: load main model only, no light model
-                let main_variant = resolve_variant_id(settings.conversion.model.as_deref())
-                    .context("invalid model settings")?;
-                self.init_kanji_converter_with_model(&main_variant, n_threads)
-                    .context("failed to initialize main model")?;
-                tracing::info!("Main model loaded: {}", self.model_name());
-            }
-            StrategyMode::Adaptive => {
-                // Adaptive mode: load both main and light models
-                let main_variant = resolve_variant_id(settings.conversion.model.as_deref())
-                    .context("invalid model settings")?;
-                let light_model = settings.conversion.light_model.clone();
-                self.init_kanji_converter_with_model(&main_variant, n_threads)
-                    .context("failed to initialize default model")?;
-                tracing::info!("Default model loaded: {}", self.model_name());
-
-                // Initialize light model for beam search (non-fatal on failure)
-                let light_variant = match resolve_variant_id(light_model.as_deref()) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        tracing::warn!("Invalid light_model settings, using default: {}", e);
-                        karukan_engine::kanji::registry().default_model.clone()
-                    }
-                };
-                if let Err(e) = self.init_light_kanji_converter(&light_variant, n_threads) {
-                    tracing::warn!(
-                        "Failed to initialize beam model (light_model={:?}): {}",
-                        light_model,
-                        e
-                    );
-                } else {
-                    tracing::info!("Beam model loaded");
-                }
-            }
+    /// Load the conversion models on a background thread; never blocks.
+    ///
+    /// The result arrives through the `model_loading` channel and is
+    /// installed by `poll_loaded_models` on the next key event. A failure is
+    /// logged on the loader thread and surfaces here only as a disconnected
+    /// channel: the engine keeps running without a model.
+    pub fn spawn_model_loading(&mut self, settings: &Settings) {
+        if self.converters.kanji.is_some() || self.model_loading.is_some() {
+            return;
         }
 
-        tracing::info!("Karukan init complete: {}", self.model_name());
-        Ok(())
+        let strategy = settings.conversion.strategy;
+        let model = settings.conversion.model.clone();
+        let light_model = settings.conversion.light_model.clone();
+        let n_threads = settings.conversion.n_threads;
+
+        let (tx, rx) = mpsc::channel();
+        self.model_loading = Some(rx);
+        let spawned = std::thread::Builder::new()
+            .name("karukan-model-load".to_string())
+            .spawn(move || {
+                match load_converters(
+                    strategy,
+                    model.as_deref(),
+                    light_model.as_deref(),
+                    n_threads,
+                ) {
+                    // A dead receiver just means the engine was dropped.
+                    Ok(loaded) => drop(tx.send(loaded)),
+                    Err(e) => {
+                        tracing::error!("model loading failed, continuing without model: {e:#}");
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            tracing::error!("failed to spawn model loading thread: {e}");
+            self.model_loading = None;
+        }
+    }
+
+    /// Install converters the background loader has finished. Non-blocking;
+    /// called at the top of `process_key`. A disconnected channel means the
+    /// loader failed (already logged) — clear it so `model_name` stops
+    /// reporting "loading".
+    pub(super) fn poll_loaded_models(&mut self) {
+        let Some(rx) = &self.model_loading else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(loaded) => {
+                self.converters.kanji = loaded.kanji;
+                self.converters.light_kanji = loaded.light_kanji;
+                self.model_loading = None;
+                tracing::info!("Karukan init complete: {}", self.model_name());
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.model_loading = None;
+            }
+        }
     }
 
     /// Initialize the kanji converter (call this early to avoid latency)
