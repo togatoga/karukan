@@ -36,10 +36,12 @@ sudo cmake --install build
 fcitx5 -r
 ```
 
-> [!TIP]
-> ビルドしたマシンでしか使わないなら、ビルド前に `export RUSTFLAGS="-C target-cpu=native"` を
-> 設定するとCPU固有の命令が有効になり、変換が約5%速くなります(AJIMEE-Bench 200問で実測)。
-> 他のCPUでは動かないバイナリになるため、配布する場合は設定しないでください。
+> [!NOTE]
+> 既定でビルドマシンのCPU固有命令を使ってビルドします(`-C target-cpu=native`、変換が約5%速くなります)。
+> ビルドしたマシンでしか動かないバイナリになるため、配布用にビルドする場合は
+> `cmake -B build -DKARUKAN_NATIVE=OFF ...` を指定してください。自前の `RUSTFLAGS` を
+> 設定している場合はそちらが優先されます。手元で `cargo build --release` を直接叩くと
+> フラグの差でリビルドが走る点だけ注意してください。
 
 ### Build & Install (ユーザーローカル)
 

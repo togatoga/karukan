@@ -28,8 +28,18 @@ set(KARUKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
 # Build Rust library as a custom target
 find_program(CARGO cargo REQUIRED)
+
+# The addon is normally built on the machine it runs on, so optimize for its
+# CPU by default (measured ~5% faster conversion). Turn OFF when building a
+# binary for distribution; an externally set RUSTFLAGS always wins.
+option(KARUKAN_NATIVE "Optimize for the build machine's CPU (-C target-cpu=native)" ON)
+set(KARUKAN_CARGO_ENV "")
+if(KARUKAN_NATIVE AND NOT DEFINED ENV{RUSTFLAGS})
+    set(KARUKAN_CARGO_ENV ${CMAKE_COMMAND} -E env "RUSTFLAGS=-C target-cpu=native")
+endif()
+
 add_custom_target(karukan_rust_lib ALL
-    COMMAND ${CARGO} build --release -p karukan-fcitx5
+    COMMAND ${KARUKAN_CARGO_ENV} ${CARGO} build --release -p karukan-fcitx5
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
     COMMENT "Building karukan-fcitx5 Rust library"
     BYPRODUCTS "${KARUKAN_RUST_LIB}"
