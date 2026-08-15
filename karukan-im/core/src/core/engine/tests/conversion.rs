@@ -77,11 +77,9 @@ fn test_stray_keys_are_consumed_during_conversion() {
     let cursor = engine.candidates().unwrap().cursor();
 
     for key in [
-        press_ctrl(Keysym(0x0065)), // Ctrl+e (unbound)
+        press_ctrl(Keysym(0x0067)), // Ctrl+g (unbound)
         press_ctrl(Keysym(0x0077)), // Ctrl+w (unbound; closes a browser tab)
-        press_key(Keysym::HOME),
-        press_key(Keysym::END),
-        press_key(Keysym(0xffc2)), // F5
+        press_key(Keysym(0xffc2)),  // F5
     ] {
         let result = engine.process_key(&key);
         assert!(result.consumed, "key must not leak to the application");
@@ -212,4 +210,58 @@ fn test_emoji_digit_selection_does_not_pollute_learning() {
         learned.lookup(":smile").is_empty(),
         "emoji query must not enter the learning cache"
     );
+}
+
+#[test]
+fn test_arrow_in_conversion_returns_to_composing_and_moves_caret() {
+    // Matching live conversion: a caret key dissolves the conversion and
+    // moves the caret in the raw composition.
+    let mut engine = InputMethodEngine::new();
+    for ch in "kyou".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.input_buf.cursor(), 3); // き ょ う
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    let result = engine.process_key(&press_key(Keysym::LEFT));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.cursor(), 2, "caret must move left");
+
+    engine.process_key(&press_key(Keysym::END));
+    assert_eq!(engine.input_buf.cursor(), 3);
+}
+
+#[test]
+fn test_arrow_in_source_view_dissolves_the_filter() {
+    // From the Ctrl+I model view: the caret key exits to editing and the
+    // filter dies with the conversion state.
+    let mut engine = InputMethodEngine::new();
+    for ch in "kyou".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_ctrl(Keysym::KEY_I));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    let result = engine.process_key(&press_key(Keysym::LEFT));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.cursor(), 2);
+    assert!(engine.state().filter().is_none());
+}
+
+#[test]
+fn test_ctrl_b_in_conversion_moves_caret_like_left() {
+    let mut engine = InputMethodEngine::new();
+    for ch in "kyou".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_B));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.cursor(), 2);
 }

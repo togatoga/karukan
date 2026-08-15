@@ -548,6 +548,14 @@ impl InputMethodEngine {
             }
             // Backspace cancels back to the composition, like Escape.
             Keysym::BACKSPACE => self.cancel_conversion(),
+            // Caret keys drop back to editing, the same way a caret move
+            // ends the live-conversion display while composing: the
+            // conversion (and its source filter) dissolves and the raw
+            // reading gets the caret. Delegated to the composing handler so
+            // the two states cannot drift apart.
+            Keysym::LEFT | Keysym::RIGHT | Keysym::HOME | Keysym::END => {
+                self.in_composing(false, |e| e.process_key_composing(key, shift_active))
+            }
             _ => {
                 // Ctrl+N / Ctrl+P: emacs-style candidate navigation
                 if key.modifiers.control_key {
@@ -567,6 +575,21 @@ impl InputMethodEngine {
                         // alternatives cover only the text after the break.
                         Keysym::KEY_J | Keysym::KEY_J_UPPER => {
                             return self.rebreak_conversion();
+                        }
+                        // Ctrl+A/B/E/F: the same caret moves as while
+                        // composing, dropping back to editing like the
+                        // arrow keys above.
+                        Keysym::KEY_A
+                        | Keysym::KEY_A_UPPER
+                        | Keysym::KEY_B
+                        | Keysym::KEY_B_UPPER
+                        | Keysym::KEY_E
+                        | Keysym::KEY_E_UPPER
+                        | Keysym::KEY_F
+                        | Keysym::KEY_F_UPPER => {
+                            return self.in_composing(false, |e| {
+                                e.process_key_composing(key, shift_active)
+                            });
                         }
                         _ => {}
                     }
