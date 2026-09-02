@@ -358,6 +358,12 @@ impl InputMethodEngine {
         // A suggestion always carries its reading; fall back to the buffer
         // so a candidate built without one still records under a key.
         let reading = reading.or_else(|| Some(self.input_buf.reading()));
+        // A tail means the session isn't over: the digit selection commits
+        // the converted range and resumes the composition with the rest,
+        // exactly as Enter does.
+        if let Some(tail) = self.conversion_tail.take() {
+            return self.commit_and_resume_tail(&text, &reading, tail);
+        }
         // Segments already confirmed by segment navigation ride along in the
         // commit text, so a digit selection commits the whole sentence.
         let commit_text = self.finish_conversion(&text, &reading);
@@ -666,8 +672,14 @@ impl InputMethodEngine {
                 let (text, reading) = self
                     .selected_conversion_info()
                     .expect("state is Conversion");
-                self.finish_conversion(&text, &reading);
-                text
+                // Everything on screen has to be committed here: the
+                // confirmed segments ride along in `finish_conversion`'s
+                // return value, and the unconverted tail — which that call
+                // clears — is appended after them.
+                let tail = self.conversion_tail.clone().unwrap_or_default();
+                let mut committed = self.finish_conversion(&text, &reading);
+                committed.push_str(&tail);
+                committed
             }
         };
         self.surrounding_context = None;

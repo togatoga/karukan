@@ -267,7 +267,7 @@ pub(in crate::core) struct ComposingChunk {
 /// conversion): the display text the user chose and the reading it was
 /// converted from. The reading is what gets recorded in the learning cache
 /// when the segment is finally committed.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::core) struct ConvertedSegment {
     /// Converted display text (e.g. `藍`).
     pub text: String,

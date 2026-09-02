@@ -626,3 +626,26 @@ fn test_live_conversion_segment_selection_full_flow() {
     assert_eq!(live_commit_text_of(&result).as_deref(), Some("藍ウエオ"));
     assert!(matches!(engine.state(), InputState::Empty));
 }
+
+#[test]
+fn test_live_conversion_shift_left_shrinks_in_one_press() {
+    // Shift+Left means "move the range boundary" once a conversion is open,
+    // so from live conversion it must do that in the same keypress instead
+    // of only entering segment selection.
+    let mut engine = make_live_conversion_engine_with_learned();
+
+    for ch in ['a', 'i', 'u', 'e', 'o'] {
+        engine.process_key(&press(ch));
+    }
+    set_live_text(&mut engine, "愛上尾");
+
+    engine.process_key(&press_shift_key(Keysym::LEFT));
+
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(
+        engine.state().reading(),
+        Some("あいうえ"),
+        "the range must be one character shorter than the live text's reading"
+    );
+    assert_eq!(engine.conversion_tail.as_deref(), Some("お"));
+}

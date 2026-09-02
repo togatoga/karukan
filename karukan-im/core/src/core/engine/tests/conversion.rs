@@ -905,3 +905,127 @@ fn test_live_conversion_entry_keeps_displayed_text_selected() {
         "the text displayed during live conversion must stay selected"
     );
 }
+
+#[test]
+fn test_ctrl_digit_on_a_partial_conversion_resumes_the_tail() {
+    // Ctrl+digit is a commit like Enter, so a partial conversion must leave
+    // the unconverted tail composing instead of dropping it: what is on
+    // screen (藍うえお) has to survive the selection.
+    let mut engine = engine_in_partial_conversion_with_kanji();
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえお"));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_1));
+
+    assert_eq!(commit_text_of(&result).as_deref(), Some("藍"));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.display(), "うえお");
+    assert!(engine.conversion_tail.is_none());
+}
+
+#[test]
+fn test_focus_out_commit_carries_segments_and_tail() {
+    // `commit()` is the focus-out / deactivate path: whatever the preedit
+    // shows must reach the application in one go, confirmed segments and
+    // unconverted tail included.
+    let mut engine = engine_in_partial_conversion_with_kanji();
+    assert_eq!(engine.preedit().unwrap().text(), "藍うえお");
+    assert_eq!(engine.commit(), "藍うえお");
+
+    let mut engine = engine_in_partial_conversion_with_kanji();
+    engine.process_key(&press_key(Keysym::RIGHT));
+    assert_eq!(engine.preedit().unwrap().text(), "藍ウエオ");
+    assert_eq!(engine.commit(), "藍ウエオ");
+}
+
+#[test]
+fn test_partial_conversion_with_no_candidates_keeps_the_tail_visible() {
+    // An emoji query with no match falls back to composing. The caret split
+    // already shortened the buffer, so the reading has to be put back
+    // together — otherwise the tail is in a field nothing displays.
+    let mut engine = InputMethodEngine::new();
+    for ch in ":zqxqz".chars() {
+        engine.process_key(&press(ch));
+    }
+    assert_eq!(engine.preedit().unwrap().text(), ":zqxqz");
+    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press_key(Keysym::LEFT));
+
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert!(engine.conversion_tail.is_none());
+    assert_eq!(engine.preedit().unwrap().text(), ":zqxqz");
+}
+
+#[test]
+fn test_resuming_a_tail_drops_the_previous_chunk_breaks() {
+    // A chunk break is a position into the reading it was set in. The tail
+    // is a shorter, fresh composition, so the old positions cannot carry
+    // over — they would land on different characters.
+    let mut engine = InputMethodEngine::new();
+    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    for ch in ['a', 'i', 'u', 'e', 'o', 'k', 'a'] {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    assert!(!engine.chunk_breaks.is_empty());
+
+    for _ in 0..4 {
+        engine.process_key(&press_key(Keysym::HOME));
+    }
+    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえおか"));
+
+    engine.process_key(&press_key(Keysym::RETURN));
+
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.display(), "うえおか");
+    assert!(
+        engine.chunk_breaks.is_empty(),
+        "chunk breaks of the committed reading must not survive into the tail"
+    );
+}
+
+#[test]
+fn test_deleting_a_learning_candidate_keeps_unrelated_predictions() {
+    // Ctrl+Backspace removes the selected row and its prefix twins, then
+    // rebuilds the list. A prediction under a different surface is still in
+    // the cache, so it must still be offered.
+    let mut engine = InputMethodEngine::new();
+    let mut cache = LearningCache::new(LearningConfig::default());
+    cache.record("あい", "藍");
+    cache.record("あいさつ", "挨拶");
+    engine.learning = Some(cache);
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    let before: Vec<String> = engine
+        .candidates()
+        .unwrap()
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert!(before.contains(&"挨拶".to_string()));
+
+    engine.process_key(&press_ctrl(Keysym::BACKSPACE));
+
+    let after: Vec<String> = engine
+        .candidates()
+        .expect("still converting")
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert!(
+        !after.contains(&"藍".to_string()),
+        "the deleted row must be gone, got {after:?}"
+    );
+    assert!(
+        after.contains(&"挨拶".to_string()),
+        "an unrelated prediction must survive the delete, got {after:?}"
+    );
+}

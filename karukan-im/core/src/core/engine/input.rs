@@ -285,7 +285,7 @@ impl InputMethodEngine {
             // reading is still reachable via Escape (returns to hiragana) or
             // Home/End/Ctrl+A/B/E/F.
             Keysym::LEFT | Keysym::RIGHT if self.live.shown && !self.live_text().is_empty() => {
-                self.start_conversion_keep_display()
+                self.start_segment_selection_from_live(key)
             }
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
