@@ -878,3 +878,30 @@ fn test_refining_after_confirming_a_segment_keeps_the_confirmed_text() {
     assert!(engine.conversion_tail.is_none());
     assert_eq!(engine.input_buf.display(), "あいうえおか");
 }
+
+#[test]
+fn test_live_conversion_entry_keeps_displayed_text_selected() {
+    // Entering conversion from live conversion (Left arrow) must keep the
+    // displayed live text selected even when it is already present in the
+    // rebuilt candidate list (deduplicated instead of re-inserted at the
+    // top) and a predictive learning candidate outranks it.
+    let mut engine = InputMethodEngine::new();
+    engine.live.enabled = true;
+    let mut cache = LearningCache::new(LearningConfig::default());
+    cache.record("あいさつ", "挨拶");
+    engine.learning = Some(cache);
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    // "アイ" is also produced as a katakana fallback candidate, so the live
+    // text gets deduplicated against the list instead of inserted at index 0.
+    set_live_text(&mut engine, "アイ");
+
+    engine.process_key(&press_key(Keysym::LEFT));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(
+        engine.candidates().and_then(|c| c.selected_text()),
+        Some("アイ"),
+        "the text displayed during live conversion must stay selected"
+    );
+}

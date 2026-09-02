@@ -160,6 +160,27 @@ impl InputMethodEngine {
     /// result is preserved as the first model candidate so the user sees the
     /// same text they had been looking at during input.
     pub(super) fn start_conversion(&mut self, lookup: LearningLookup) -> EngineResult {
+        self.start_conversion_impl(lookup, false)
+    }
+
+    /// Like [`Self::start_conversion`], but keeps the text live conversion is
+    /// currently displaying selected. Used when the arrow keys turn an active
+    /// live conversion into segment selection: the user is acting on what they
+    /// see, so entering the conversion must not visibly swap the preedit to a
+    /// different candidate.
+    ///
+    /// The lookup is [`LearningLookup::Exact`] for the same reason the display
+    /// is kept: a predictive candidate would spell a longer reading than the
+    /// one on screen.
+    pub(super) fn start_conversion_keep_display(&mut self) -> EngineResult {
+        self.start_conversion_impl(LearningLookup::Exact, true)
+    }
+
+    fn start_conversion_impl(
+        &mut self,
+        lookup: LearningLookup,
+        keep_display: bool,
+    ) -> EngineResult {
         let ConversionRange {
             reading,
             base,
@@ -195,14 +216,18 @@ impl InputMethodEngine {
             lookup,
         );
 
-        let seen: HashSet<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
-        if !prev_suggest_text.is_empty()
-            && prev_suggest_text != reading
-            && !seen.contains(prev_suggest_text.as_str())
+        // If the previous auto-suggest result is not in the new candidates,
+        // insert it at the top so it doesn't disappear when the conversion
+        // strategy changes. With `keep_display` it is additionally selected
+        // below, even when deduplicated into the middle of the list.
+        let prev_suggest = (!prev_suggest_text.is_empty() && prev_suggest_text != reading)
+            .then_some(prev_suggest_text);
+        if let Some(prev) = &prev_suggest
+            && !candidates.iter().any(|c| c.text == *prev)
         {
             candidates.insert(
                 0,
-                AnnotatedCandidate::new(prev_suggest_text, CandidateSource::Model),
+                AnnotatedCandidate::new(prev.clone(), CandidateSource::Model),
             );
         }
 
@@ -213,7 +238,16 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
+        let mut candidate_list = self.to_conversion_candidate_list(candidates, &reading);
+        if keep_display
+            && let Some(prev) = &prev_suggest
+            && let Some(idx) = candidate_list
+                .candidates()
+                .iter()
+                .position(|c| c.text == *prev)
+        {
+            candidate_list.select(idx);
+        }
         self.enter_conversion_state(&reading, candidate_list)
     }
 

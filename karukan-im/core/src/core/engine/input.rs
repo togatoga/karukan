@@ -277,6 +277,16 @@ impl InputMethodEngine {
             // different conversion path — PredictAndConvert — in the same spirit).
             Keysym::TAB => self.start_conversion(LearningLookup::Skip),
             Keysym::SPACE | Keysym::DOWN => self.start_conversion(LearningLookup::Use),
+            // While live conversion is displaying converted text, the arrow
+            // keys start segment selection over that conversion (matching
+            // macOS live conversion) instead of dropping the preedit back to
+            // raw hiragana. The displayed text stays selected, so the preedit
+            // doesn't change until the user acts. Caret editing over the raw
+            // reading is still reachable via Escape (returns to hiragana) or
+            // Home/End/Ctrl+A/B/E/F.
+            Keysym::LEFT | Keysym::RIGHT if self.live.shown && !self.live_text().is_empty() => {
+                self.start_conversion_keep_display()
+            }
             Keysym::LEFT => self.move_caret_left(),
             Keysym::RIGHT => self.move_caret_right(),
             Keysym::HOME => self.move_caret_home(),
