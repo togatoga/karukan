@@ -51,7 +51,9 @@ struct LlamaCppModelInfo {
 
 #[derive(Clone)]
 struct AppState {
-    converter: Arc<RwLock<RomajiConverter>>,
+    converter: Arc<RomajiConverter>,
+    /// Accumulated raw input for incremental conversion
+    romaji_input: Arc<RwLock<String>>,
     /// llama.cpp models (keyed by model id, e.g., "llamacpp-jawiki-unigram-12k-q5")
     llamacpp_models: Arc<RwLock<HashMap<String, LlamaCppModelInfo>>>,
     /// Debug mode enabled (--debug flag)
@@ -256,7 +258,8 @@ async fn main() {
     }
 
     let state = AppState {
-        converter: Arc::new(RwLock::new(RomajiConverter::new())),
+        converter: Arc::new(RomajiConverter::new()),
+        romaji_input: Arc::new(RwLock::new(String::new())),
         llamacpp_models: Arc::new(RwLock::new(llamacpp_models)),
         debug_mode: args.debug,
     };
@@ -303,29 +306,25 @@ async fn convert_handler(
     State(state): State<AppState>,
     Json(req): Json<ConvertRequest>,
 ) -> Result<Json<ConvertResponse>, StatusCode> {
-    let mut converter = state.converter.write().expect("lock poisoned");
+    let mut raw = state.romaji_input.write().expect("lock poisoned");
 
     if !req.incremental {
-        // Reset and convert from scratch
-        converter.reset();
+        // Convert from scratch
+        raw.clear();
     }
+    raw.push_str(&req.input);
 
-    // Process each character
-    for ch in req.input.chars() {
-        converter.push(ch);
-    }
-
+    let converted = state.converter.convert(&raw);
     let response = ConvertResponse {
-        output: converter.output().to_string(),
-        buffer: converter.buffer().to_string(),
+        output: converted.text,
+        buffer: converted.pending,
     };
 
     Ok(Json(response))
 }
 
 async fn reset_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let mut converter = state.converter.write().expect("lock poisoned");
-    converter.reset();
+    state.romaji_input.write().expect("lock poisoned").clear();
     StatusCode::OK
 }
 

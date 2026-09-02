@@ -9,7 +9,8 @@
 //! Inputs must be pure decimal digits — mixed text like `20世紀` is left
 //! alone.
 
-use super::{RewriteOutput, Rewriter, is_pure_digit, to_fullwidth, to_halfwidth};
+use super::{RewriteOutput, Rewriter, is_pure_digit};
+use crate::width::{to_full_width, to_half_width};
 
 // ---------- tables ----------
 //
@@ -160,8 +161,8 @@ impl Rewriter for NumberRewriter {
         if !is_pure_digit(candidate) {
             return Vec::new();
         }
-        let half = to_halfwidth(candidate);
-        let full = to_fullwidth(candidate);
+        let half = to_half_width(candidate);
+        let full = to_full_width(candidate);
         let n = half.parse::<u64>().ok();
 
         let mut out: Vec<RewriteOutput> = Vec::new();

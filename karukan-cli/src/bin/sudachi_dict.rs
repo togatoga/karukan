@@ -30,8 +30,8 @@ struct Cli {
     #[arg(required = true)]
     csv_files: Vec<PathBuf>,
 
-    /// Model variant id (e.g. jinen-v1-xsmall-q5) or path to GGUF file
-    #[arg(long, default_value = "jinen-v1-xsmall-q5")]
+    /// Model variant id (e.g. jinen-v2-xsmall-q5) or path to GGUF file
+    #[arg(long, default_value = "jinen-v2-xsmall-q5")]
     model: String,
 
     /// Path to tokenizer.json (required when --model is a GGUF file path)

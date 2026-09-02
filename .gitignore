@@ -43,5 +43,5 @@ data/
 
 .fake
 # macOS IME (karukan-macos)
-karukan-macos/.build/
-karukan-macos/out/
+karukan-im/macos/.build/
+karukan-im/macos/out/

@@ -29,7 +29,7 @@ llama-cpp-2 = "0.1"
 yada = "0.7"
 
 # HuggingFace model download
-hf-hub = "0.5"
+hf-hub = { version = "1.0", features = ["blocking"] }
 
 # Unicode normalization (NFKC) for models whose tokenizer doesn't support full-width ASCII
 unicode-normalization = "0.1"

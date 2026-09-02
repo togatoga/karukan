@@ -69,6 +69,27 @@ mod llamacpp_tests {
     }
 
     #[test]
+    fn test_decode_keeps_byte_fallback_chars() {
+        // Characters outside the vocab tokenize to byte-fallback tokens, one
+        // <0xNN> token per UTF-8 byte (Ψ → <0xCE><0xA8>). tokenizer.json
+        // marks those as special, so a naive skip_special_tokens decode would
+        // drop them (「斉木楠雄のΨ難」→「斉木楠雄の難」). decode(_, true)
+        // must keep them, whatever the byte length of the character.
+        let model = load_model().expect("Failed to load");
+        let cases = [
+            "斉木楠雄のΨ難", // Ψ: 2-byte fallback
+            "€100",          // €: 3-byte fallback
+            "🍣を食べる",    // 🍣: 4-byte fallback
+            "ΨとΩと🍣",      // multiple fallback runs in one string
+        ];
+        for text in cases {
+            let tokens = model.tokenize(text).expect("Tokenize failed");
+            let decoded = model.decode(&tokens, true).expect("Decode failed");
+            assert_eq!(decoded, text);
+        }
+    }
+
+    #[test]
     fn test_generation() {
         let model = load_model().expect("Failed to load");
         let prompt = build_prompt("ワセダ");
@@ -93,7 +114,7 @@ mod llamacpp_tests {
         let test_cases = [
             ("ワセダ", "早稲田"),
             ("トウキョウ", "東京"),
-            ("ニホン", "日本"),
+            ("ニホンゴ", "日本語"),
         ];
 
         for (input, expected) in test_cases {

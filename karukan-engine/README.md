@@ -6,7 +6,7 @@
 
 karukan-engineは、karukanプロジェクトのコアライブラリです。以下の機能を提供します：
 
-- **ニューラルかな漢字変換** — llama.cppによるGGUF形式のGPT-2モデル
+- **ニューラルかな漢字変換** — llama.cppによるGGUF形式のモデル（GPT-2 / Qwen3ベース）
 - **辞書検索** — Double-array trieによる高速な前方一致・完全一致検索
 - **変換学習** — ユーザーの変換履歴を記憶し、完全一致・前方一致（予測変換）で候補を優先表示。TSV形式で永続化
 
@@ -32,13 +32,12 @@ cargo test -p karukan-engine -- --ignored
 ```rust
 use karukan_engine::RomajiConverter;
 
-let mut converter = RomajiConverter::new();
+let converter = RomajiConverter::new();
 // "nn" は常に「ん」なので、「こんにちは」には n が3つ必要:
 // ko→こ, nn→ん, ni→に, chi→ち, ha→は
-for ch in "konnnichiha".chars() {
-    converter.push(ch);
-}
-assert_eq!(converter.output(), "こんにちは");
+let result = converter.convert("konnnichiha");
+assert_eq!(result.text, "こんにちは");
+assert_eq!(result.pending, ""); // まだ確定していないローマ字末尾（`k` など）はこちらに残る
 ```
 
 ### Kana-Kanji Conversion
@@ -47,7 +46,7 @@ assert_eq!(converter.output(), "こんにちは");
 use karukan_engine::{Backend, KanaKanjiConverter};
 
 // モデルの読み込み（初回使用時にHuggingFaceからダウンロード）
-let backend = Backend::from_variant_id("jinen-v1-small-q5")?;
+let backend = Backend::from_variant_id("jinen-v2-small-q5")?;
 let converter = KanaKanjiConverter::new(backend)?;
 
 let candidates = converter.convert("かんじ", "", 3)?;
@@ -57,11 +56,11 @@ let candidates = converter.convert("かんじ", "", 3)?;
 ### Learning Cache
 
 ```rust
-use karukan_engine::LearningCache;
+use karukan_engine::{LearningCache, LearningConfig};
 use std::path::Path;
 
-// 新規作成（最大エントリ数: 10,000）
-let mut cache = LearningCache::new(10_000);
+// 新規作成（デフォルト: 最大10,000エントリ）
+let mut cache = LearningCache::new(LearningConfig::default());
 
 // 変換結果を記録
 cache.record("わせだだいがく", "早稲田大学");
@@ -77,7 +76,7 @@ let results = cache.prefix_lookup("わせだ");
 
 // TSVファイルに保存・読み込み
 cache.save(Path::new("learning.tsv"))?;
-let cache = LearningCache::load(Path::new("learning.tsv"), 10_000)?;
+let cache = LearningCache::load(Path::new("learning.tsv"), LearningConfig::default())?;
 ```
 
 ### Dictionary
@@ -103,10 +102,15 @@ let results = dict.common_prefix_search("きょうと");
 
 モデルは`models.toml`で定義されています。`Backend::from_variant_id()`で指定すると自動的にダウンロードされます。
 
-| バリアントID | パラメータ数 | 量子化 | デフォルト |
-|------------|-----------|--------------|---------|
-| `jinen-v1-xsmall-q5` | 26M | Q5_K_M | |
-| `jinen-v1-small-q5` | 90M | Q5_K_M | Yes |
+| バリアントID | ベースモデル | パラメータ数 | 量子化 | Accuracy@1 (NFKC) | デフォルト |
+|------------|-----------|-----------|--------------|------:|---------|
+| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | Yes |
+| [`jinen-v2-xsmall-q5`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | Q5_K_M | 79.0% | |
+| [`jinen-v1.1-beta-q5`](https://huggingface.co/togatogah/jinen-v1.1-beta.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | |
+| [`jinen-v1-small-q5`](https://huggingface.co/togatogah/jinen-v1-small.gguf) | GPT-2 | 90M | Q5_K_M | 76.5% | |
+| [`jinen-v1-xsmall-q5`](https://huggingface.co/togatogah/jinen-v1-xsmall.gguf) | GPT-2 | 26M | Q5_K_M | 71.0% | |
+
+IMEで使うモデルは設定ファイルの `model` / `light_model` で切り替えられます（[docs/configuration.md](../docs/configuration.md) 参照）。
 
 ### jinen Format
 

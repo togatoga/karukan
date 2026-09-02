@@ -266,12 +266,8 @@ mod tests {
     use super::*;
     use crate::rewriter::test_util::{desc, texts};
 
-    fn rewriter() -> EmojiRewriter {
-        EmojiRewriter::new()
-    }
-
     fn assert_surfaces(query: &str, emoji: &str) {
-        let out = texts(&rewriter().rewrite(query));
+        let out = texts(&EmojiRewriter::new().rewrite(query));
         assert!(
             out.contains(&emoji.to_string()),
             "expected {} from `{}`, got {:?}",
@@ -282,7 +278,7 @@ mod tests {
     }
 
     fn assert_does_not_surface(query: &str, emoji: &str) {
-        let out = texts(&rewriter().rewrite(query));
+        let out = texts(&EmojiRewriter::new().rewrite(query));
         assert!(
             !out.contains(&emoji.to_string()),
             "did NOT expect {} from `{}`, got {:?}",
@@ -334,7 +330,7 @@ mod tests {
     fn trigger_uppercase_rejects() {
         // All triggers are ASCII lowercase, so `:SMILE` simply has
         // no subseq match anywhere — no special-case needed.
-        let out = rewriter().rewrite(":SMILE");
+        let out = EmojiRewriter::new().rewrite(":SMILE");
         assert!(
             out.is_empty(),
             "expected no match for :SMILE, got {:?}",
@@ -352,7 +348,7 @@ mod tests {
 
     #[test]
     fn trigger_description_carries_matched_trigger_and_label() {
-        let out = rewriter().rewrite(":smile");
+        let out = EmojiRewriter::new().rewrite(":smile");
         let d = desc(&out, "😄").expect("😄 should have a description");
         assert!(
             d.contains(":smile") && d.contains(EMOJI_LABEL),
@@ -366,7 +362,7 @@ mod tests {
         // `:pie` matches the romaji trigger `pien`; the description
         // shows the full `:pien` so the user sees what they're
         // completing to.
-        let out = rewriter().rewrite(":pie");
+        let out = EmojiRewriter::new().rewrite(":pie");
         let d = desc(&out, "🥺").expect("🥺 should have a description");
         assert!(
             d.contains(":pien"),
@@ -385,7 +381,7 @@ mod tests {
 
     #[test]
     fn hiragana_unrelated_reading_rejects() {
-        let out = rewriter().rewrite("きょうとし");
+        let out = EmojiRewriter::new().rewrite("きょうとし");
         assert!(out.is_empty(), "expected no match, got {:?}", texts(&out));
     }
 
@@ -396,7 +392,7 @@ mod tests {
         // Direct romaji of a Mozc reading reaches the emoji because
         // the porter emitted it into the trigger table.
         assert_surfaces(":pien", "🥺");
-        let out = texts(&rewriter().rewrite(":warai"));
+        let out = texts(&EmojiRewriter::new().rewrite(":warai"));
         assert!(
             out.contains(&"😁".to_string()) || out.contains(&"😂".to_string()),
             "expected 😁 or 😂 from :warai, got {:?}",
@@ -417,17 +413,17 @@ mod tests {
 
     #[test]
     fn empty_input_returns_empty() {
-        assert!(rewriter().rewrite("").is_empty());
+        assert!(EmojiRewriter::new().rewrite("").is_empty());
     }
 
     #[test]
     fn colon_alone_returns_empty() {
-        assert!(rewriter().rewrite(":").is_empty());
+        assert!(EmojiRewriter::new().rewrite(":").is_empty());
     }
 
     #[test]
     fn unmatched_trigger_query_returns_empty() {
-        let out = rewriter().rewrite(":xyzqq");
+        let out = EmojiRewriter::new().rewrite(":xyzqq");
         assert!(
             out.is_empty(),
             "expected no match for :xyzqq, got {:?}",
@@ -440,7 +436,7 @@ mod tests {
         // 😄 carries multiple triggers (`smile`, `happy`,
         // `grinning_face_with_smiling_eyes`); even when several
         // match, the emoji surfaces only once.
-        let out = texts(&rewriter().rewrite(":smile"));
+        let out = texts(&EmojiRewriter::new().rewrite(":smile"));
         let count = out.iter().filter(|t| *t == "😄").count();
         assert_eq!(count, 1, "😄 should appear once, got {:?}", out);
     }
