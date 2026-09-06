@@ -1,6 +1,6 @@
 # 日付・時刻の変換
 
-「きょう」「あした」「いま」などを変換すると、その日付・時刻の候補が出ます。フレーズと出力形式は `config.toml` の `[date.phrase]` で自由に登録できます。
+「きょう」「あした」「いま」などを変換すると、その日付・時刻の候補が出ます。フレーズと出力形式は `config.toml` の `[date]` で自由に登録できます。
 
 ```
 きょう → 2026/09/06・2026-09-06・2026年9月6日・令和8年9月6日・9月6日・9月6日(日)・日曜日
@@ -61,17 +61,19 @@ phrases = [
 | `:bare` | `{MONTH:bare}月` | 9月 |
 | `:kanji` | `{MONTH:kanji}月` | 九月 |
 
-`:kanji` は年だけ桁ごと（`{YEAR:kanji}` → 二〇二六）、それ以外は読み下し（`{DATE:kanji}` → 十六）で出ます。`{ERA_YEAR:kanji}` の1年は「元」になり、`{ERA}{ERA_YEAR:kanji}年` が「令和元年」になります。
+`:kanji` は年だけ桁ごと（`{YEAR:kanji}` → 二〇二六）、それ以外は読み下し（`{DATE:kanji}` → 十六）で出ます。`{ERA_YEAR:kanji}` の1年は「元」になり、`{ERA}{ERA_YEAR:kanji}年` が「令和元年」になります。もともとゼロ埋めのないトークン（`{HOUR12}` `{ERA_YEAR}`）では `:bare` は無指定と同じです。
 
 ```toml
-[date.phrase."きょう"]
-formats = [
-    "{YEAR:kanji}年{MONTH:kanji}月{DATE:kanji}日",   # 二〇二六年九月六日
-    "{ERA}{ERA_YEAR:kanji}年{MONTH:kanji}月{DATE:kanji}日",  # 令和八年九月六日
+[date]
+phrases = [
+    { reading = "きょう", formats = [
+        "{YEAR:kanji}年{MONTH:kanji}月{DATE:kanji}日",           # 二〇二六年九月六日
+        "{ERA}{ERA_YEAR:kanji}年{MONTH:kanji}月{DATE:kanji}日",  # 令和八年九月六日
+    ] },
 ]
 ```
 
-存在しないトークンやスタイルを含む形式は、壊れた文字列を出す代わりにその候補ごとスキップされます（`{ERA}` を含む形式は明治より前の日付でもスキップ）。
+存在しないトークンやスタイルを含む形式は、壊れた文字列を出す代わりにその候補ごとスキップされます（`{ERA}` や `{YEAR}` を含む形式は明治より前・西暦1年より前の日付でもスキップ）。
 
 ## 設定の反映
 

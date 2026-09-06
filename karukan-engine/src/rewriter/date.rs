@@ -65,12 +65,15 @@ fn era(date: NaiveDate) -> Option<(&'static str, i32)> {
 /// (unknown token/style, or no era for the date).
 fn render_token(token: &str, style: Option<&str>, at: NaiveDateTime) -> Option<String> {
     let kanji = |n: u32| to_kanji(&n.to_string(), false);
-    // A BC year (reachable via a huge negative offset_days) has no
-    // rendering; the sign would also break to_kanji_digits.
-    let year = || u32::try_from(at.year()).ok();
+    // Chrono years are astronomical (0 = 1 BCE): before year 1 there is no
+    // rendering, and the sign would break to_kanji_digits.
+    let year = || u32::try_from(at.year()).ok().filter(|y| *y > 0);
     match (token, style) {
         ("YEAR", None) => Some(format!("{:04}", year()?)),
-        ("YEAR", Some("kanji")) => Some(to_kanji_digits(&format!("{:04}", year()?))),
+        ("YEAR", Some("bare")) => Some(year()?.to_string()),
+        // Unpadded: zero-padding is an ASCII display convention (0800),
+        // not something kanji years ever carry (八〇〇, not 〇八〇〇).
+        ("YEAR", Some("kanji")) => Some(to_kanji_digits(&year()?.to_string())),
         ("MONTH", None) => Some(format!("{:02}", at.month())),
         ("MONTH", Some("bare")) => Some(at.month().to_string()),
         ("MONTH", Some("kanji")) => kanji(at.month()),
@@ -83,11 +86,13 @@ fn render_token(token: &str, style: Option<&str>, at: NaiveDateTime) -> Option<S
         ("MINUTE", None) => Some(format!("{:02}", at.minute())),
         ("MINUTE", Some("bare")) => Some(at.minute().to_string()),
         ("MINUTE", Some("kanji")) => kanji(at.minute()),
-        ("HOUR12", None) => Some((at.hour() % 12).to_string()),
+        // Already unpadded, so `:bare` is a no-op — accepted anyway to keep
+        // the contract uniform: every numeric token takes :bare and :kanji.
+        ("HOUR12", None | Some("bare")) => Some((at.hour() % 12).to_string()),
         ("HOUR12", Some("kanji")) => kanji(at.hour() % 12),
         ("AMPM", None) => Some(if at.hour() < 12 { "午前" } else { "午後" }.to_string()),
         ("ERA", None) => Some(era(at.date())?.0.to_string()),
-        ("ERA_YEAR", None) => Some(era(at.date())?.1.to_string()),
+        ("ERA_YEAR", None | Some("bare")) => Some(era(at.date())?.1.to_string()),
         ("ERA_YEAR", Some("kanji")) => match era(at.date())?.1 {
             1 => Some("元".to_string()),
             y => to_kanji(&y.to_string(), false),
@@ -168,7 +173,8 @@ impl DateRewriter {
             .unwrap_or(&self.config.formats)
             .iter()
             .filter_map(|format| {
-                let rendered = render(format, at);
+                // An empty rendering would show as a blank candidate row.
+                let rendered = render(format, at).filter(|(text, _)| !text.is_empty());
                 if rendered.is_none() {
                     debug!("date format skipped: {format:?}");
                 }
@@ -234,6 +240,21 @@ mod tests {
         let r = rewriter("きょう", 0, &["{MONTH:kanji}月{DATE:kanji}日"]);
         let out = r.candidates_at("きょう", at(2026, 12, 16, 0, 0));
         assert_eq!(texts(&out), vec!["十二月十六日"]);
+    }
+
+    #[test]
+    fn kanji_year_is_not_zero_padded() {
+        // 0800 is an ASCII convention; the kanji year is 八〇〇.
+        let r = rewriter("きょう", 0, &["{YEAR}", "{YEAR:kanji}"]);
+        let out = r.candidates_at("きょう", at(800, 1, 1, 0, 0));
+        assert_eq!(texts(&out), vec!["0800", "八〇〇"]);
+    }
+
+    #[test]
+    fn empty_rendering_is_skipped() {
+        let r = rewriter("きょう", 0, &["", "{YEAR}"]);
+        let out = r.candidates_at("きょう", at(2026, 9, 6, 0, 0));
+        assert_eq!(texts(&out), vec!["2026"]);
     }
 
     #[test]
@@ -309,7 +330,7 @@ mod tests {
         let r = rewriter(
             "きょう",
             0,
-            &["{FOO}", "{YEAR:bare}", "{YEAR", "{YEAR}/{MONTH}/{DATE}"],
+            &["{FOO}", "{YEAR:foo}", "{YEAR", "{YEAR}/{MONTH}/{DATE}"],
         );
         let out = r.candidates_at("きょう", at(2026, 9, 6, 0, 0));
         assert_eq!(texts(&out), vec!["2026/09/06"]);
@@ -372,15 +393,32 @@ mod tests {
 
     #[test]
     fn bc_year_skips_year_formats() {
-        // A negative offset_days can land in a proleptic BC year; the year
-        // formats are skipped (kanji digits would panic on the sign) while
-        // year-free formats still render.
+        // A negative offset_days can land before year 1 (chrono's year 0 is
+        // 1 BCE); the year formats are skipped (kanji digits would panic on
+        // the sign) while year-free formats still render.
         let r = rewriter(
             "きょう",
             0,
             &["{YEAR}/{MONTH}/{DATE}", "{YEAR:kanji}年", "{MONTH:bare}月"],
         );
-        let out = r.candidates_at("きょう", at(-1, 1, 2, 0, 0));
-        assert_eq!(texts(&out), vec!["1月"]);
+        for y in [-1, 0] {
+            let out = r.candidates_at("きょう", at(y, 1, 2, 0, 0));
+            assert_eq!(texts(&out), vec!["1月"], "year {y}");
+        }
+    }
+
+    #[test]
+    fn bare_accepted_on_every_numeric_token() {
+        let r = rewriter(
+            "きょう",
+            0,
+            &[
+                "{YEAR:bare}/{MONTH:bare}/{DATE:bare} {HOUR:bare}:{MINUTE:bare}",
+                "{ERA}{ERA_YEAR:bare}年",
+                "{AMPM}{HOUR12:bare}時",
+            ],
+        );
+        let out = r.candidates_at("きょう", at(2026, 9, 6, 5, 8));
+        assert_eq!(texts(&out), vec!["2026/9/6 5:8", "令和8年", "午前5時"]);
     }
 }

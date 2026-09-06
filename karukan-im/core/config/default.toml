@@ -99,7 +99,7 @@ digit = "half"
 # formats で描画した候補が出る（候補一覧の後方と Ctrl+R のビュー）。
 # 確定しても学習履歴には残らない。詳細は docs/date.md を参照。
 #
-# フォーマットは {YEAR} {MONTH} {DATE} {HOUR} {MINUTE}（ゼロ埋め2桁）、
+# フォーマットは {YEAR}（4桁）、{MONTH} {DATE} {HOUR} {MINUTE}（2桁ゼロ埋め）、
 # {ERA}（令和）{ERA_YEAR}（8）{WEEKDAY}（土）{HOUR12}{AMPM}（午後3）、
 # {{} はリテラルの「{」。数値トークンは :bare でゼロ埋めなし（9月）、
 # :kanji で漢数字（九月、二〇二六）。
