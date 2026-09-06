@@ -19,12 +19,14 @@
 //! for deduplication and ordering.
 
 mod alphabet;
+mod date;
 mod emoji;
 mod half_katakana;
 mod number;
 mod symbol;
 
 pub use alphabet::AlphabetRewriter;
+pub use date::{DateConfig, DatePhrase, DateRewriter};
 pub use emoji::EmojiRewriter;
 pub use half_katakana::HalfWidthKatakanaRewriter;
 pub use number::NumberRewriter;

@@ -11,6 +11,7 @@ mod candidates;
 mod chunks;
 mod conversion;
 mod cursor;
+mod date;
 mod emoji;
 mod katakana;
 mod learning;

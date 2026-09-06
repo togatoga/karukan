@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use directories::ProjectDirs;
-use karukan_engine::{BracketStyle, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules};
+use karukan_engine::{
+    BracketStyle, DateConfig, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -28,6 +30,8 @@ pub struct Settings {
     pub symbol: SymbolSettings,
     /// The width kana input comes out at, per character group
     pub width: WidthRules,
+    /// Date/time phrases and their formats
+    pub date: DateConfig,
 }
 
 /// The space the Space key inputs while typing kana. Alphabet and emoji
@@ -385,6 +389,38 @@ max_surface_chars = 10
         assert_eq!(settings.learning.max_surface_chars, 10);
         assert!(settings.learning.enabled);
         assert_eq!(settings.learning.max_entries, 10000);
+    }
+
+    #[test]
+    fn test_date_phrases_replace_the_shipped_list() {
+        // phrases is an array: writing one replaces the shipped list
+        // wholesale (extend by copying default.toml's list). offset_days
+        // defaults to 0, and the shared [date] formats stay untouched.
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[date]
+phrases = [
+    {{ reading = "らいしゅう", offset_days = 7 }},
+    {{ reading = "きょう", formats = ["{{YEAR}}年"] }},
+]
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        let phrases = &settings.date.phrases;
+        assert_eq!(phrases.len(), 2);
+        assert_eq!(phrases[0].reading, "らいしゅう");
+        assert_eq!(phrases[0].offset_days, 7);
+        assert!(phrases[0].formats.is_none());
+        assert_eq!(phrases[1].offset_days, 0);
+        assert_eq!(
+            phrases[1].formats.as_deref(),
+            Some(["{YEAR}年".to_string()].as_slice())
+        );
+        assert!(!settings.date.formats.is_empty());
     }
 
     #[test]

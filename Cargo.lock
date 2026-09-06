@@ -1699,6 +1699,7 @@ name = "karukan-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "criterion",
  "hf-hub",
  "llama-cpp-2",

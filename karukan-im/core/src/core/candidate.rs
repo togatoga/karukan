@@ -18,6 +18,8 @@ pub enum CandidateSource {
     Dictionary,
     /// Rewriter-generated variant (half-width katakana, symbol)
     Rewriter,
+    /// Date/time candidate rendered from the clock (`[date]` phrases)
+    Date,
     /// Hiragana/katakana fallback
     Fallback,
 }
@@ -32,6 +34,7 @@ impl CandidateSource {
             CandidateSource::Model => "\u{1F916} AI",                  // 🤖 AI
             CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
             CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
+            CandidateSource::Date => "\u{1F4C5} \u{65E5}\u{4ED8}",     // 📅 日付
             CandidateSource::Fallback => "",
         }
     }
@@ -46,6 +49,7 @@ impl CandidateSource {
             CandidateSource::Model => "\u{1F916}",          // 🤖
             CandidateSource::Dictionary => "\u{1F4DA}",     // 📚
             CandidateSource::Rewriter => "\u{1F504}",       // 🔄
+            CandidateSource::Date => "\u{1F4C5}",           // 📅
             CandidateSource::Fallback => "",
         }
     }
@@ -54,6 +58,13 @@ impl CandidateSource {
     /// history with Ctrl+Backspace / Ctrl+Delete.
     pub fn is_deletable(&self) -> bool {
         matches!(self, CandidateSource::Learning)
+    }
+
+    /// Whether committing a candidate from this source is recorded in the
+    /// learning cache. Date/time candidates are rendered from the clock, so
+    /// a recorded one would resurface later as a stale date.
+    pub fn is_learnable(&self) -> bool {
+        !matches!(self, CandidateSource::Date)
     }
 }
 
