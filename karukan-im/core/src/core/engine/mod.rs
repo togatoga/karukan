@@ -172,11 +172,11 @@ pub struct InputMethodEngine {
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
     learning: Option<LearningCache>,
-    /// Receiver for the background model-loading thread: model resolution
-    /// can block on the network, so it never runs on the key-event thread.
-    /// Drained by `poll_loaded_models` at the top of `process_key`; until
-    /// then (or if loading failed) the engine runs dictionary/kana-only.
-    model_loading: Option<std::sync::mpsc::Receiver<init::LoadedConverters>>,
+    /// Background model-loading state: model resolution can block on the
+    /// network, so it never runs on the key-event thread. Driven by
+    /// `poll_loaded_models` at the top of `process_key`; until a load
+    /// succeeds the engine runs dictionary/kana-only.
+    model_loading: init::ModelLoading,
 }
 
 impl InputMethodEngine {
@@ -203,7 +203,7 @@ impl InputMethodEngine {
             shown_suggestions: CandidateList::default(),
             dicts: Dictionaries::default(),
             learning: None,
-            model_loading: None,
+            model_loading: init::ModelLoading::Idle,
         }
     }
 
@@ -249,7 +249,9 @@ impl InputMethodEngine {
         match (main, sub) {
             (Some(m), Some(s)) => format!("{}+{}", m, s),
             (Some(m), None) => m.to_string(),
-            _ if self.model_loading.is_some() => "loading".to_string(),
+            _ if matches!(self.model_loading, init::ModelLoading::Loading { .. }) => {
+                "loading".to_string()
+            }
             _ => "unknown".to_string(),
         }
     }

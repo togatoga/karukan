@@ -16,6 +16,7 @@ mod katakana;
 mod learning;
 mod live_conversion;
 mod mode_toggle;
+mod model_loading;
 mod passthrough;
 mod pending_romaji;
 mod predictive;

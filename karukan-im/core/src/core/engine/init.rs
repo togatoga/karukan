@@ -1,6 +1,7 @@
 //! Engine initialization (model loading, dictionary setup)
 
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tracing::debug;
@@ -14,6 +15,68 @@ use super::*;
 pub(super) struct LoadedConverters {
     pub kanji: KanaKanjiConverter,
     pub light_kanji: Option<KanaKanjiConverter>,
+}
+
+/// What a model load needs from settings, kept so a failed attempt can be
+/// retried without them.
+#[derive(Clone)]
+pub(super) struct ModelLoadSpec {
+    pub(super) strategy: StrategyMode,
+    pub(super) model: Option<String>,
+    pub(super) light_model: Option<String>,
+    pub(super) n_threads: u32,
+}
+
+/// Why a load attempt failed, as far as retrying is concerned.
+pub(super) enum LoadFailure {
+    /// Config or model-file errors a retry cannot fix (unknown variant,
+    /// broken GGUF): give up for the session.
+    Permanent,
+    /// Download errors: the network may come back, so retry with backoff.
+    Transient,
+}
+
+/// Background model-loading state, driven by `poll_loaded_models`.
+pub(super) enum ModelLoading {
+    /// Nothing in flight: models installed, never requested, or given up.
+    Idle,
+    /// A loader thread is running.
+    Loading {
+        rx: mpsc::Receiver<Result<LoadedConverters, LoadFailure>>,
+        spec: ModelLoadSpec,
+        attempts: u32,
+    },
+    /// The last attempt failed on the network; the first key event at or
+    /// after `retry_at` retries, so a session that started offline picks
+    /// the model up once connectivity returns.
+    Failed {
+        spec: ModelLoadSpec,
+        attempts: u32,
+        retry_at: Instant,
+    },
+}
+
+/// Delay before retry number `attempts + 1`: 30s doubling up to 10 min.
+/// Retries piggyback on key events, so this is a floor, not a schedule.
+fn retry_backoff(attempts: u32) -> Duration {
+    const BASE: Duration = Duration::from_secs(30);
+    const MAX: Duration = Duration::from_secs(600);
+    (BASE * (1 << (attempts.saturating_sub(1)).min(5))).min(MAX)
+}
+
+/// Transient iff the chain contains a `KanjiError::Download`.
+fn classify_failure(e: &anyhow::Error) -> LoadFailure {
+    let is_download = e.chain().any(|c| {
+        matches!(
+            c.downcast_ref::<karukan_engine::kanji::KanjiError>(),
+            Some(karukan_engine::kanji::KanjiError::Download(_))
+        )
+    });
+    if is_download {
+        LoadFailure::Transient
+    } else {
+        LoadFailure::Permanent
+    }
 }
 
 /// Create a KanaKanjiConverter from a variant id, optionally setting thread count.
@@ -30,13 +93,10 @@ fn create_converter(variant_id: &str, n_threads: u32) -> Result<KanaKanjiConvert
 /// loading thread — it may block on a model download, which must stay off
 /// the key-event thread. In `Adaptive` mode a light-model failure is
 /// non-fatal (beam search is simply unavailable).
-fn load_converters(
-    strategy: StrategyMode,
-    model: Option<&str>,
-    light_model: Option<&str>,
-    n_threads: u32,
-) -> Result<LoadedConverters> {
-    let (kanji, light_kanji) = match strategy {
+fn load_converters(spec: &ModelLoadSpec) -> Result<LoadedConverters> {
+    let (model, light_model) = (spec.model.as_deref(), spec.light_model.as_deref());
+    let n_threads = spec.n_threads;
+    let (kanji, light_kanji) = match spec.strategy {
         StrategyMode::Light => {
             let variant =
                 resolve_variant_id(light_model).context("invalid light_model settings")?;
@@ -122,63 +182,94 @@ impl InputMethodEngine {
     }
 
     /// Load the conversion models on a background thread; never blocks.
-    ///
-    /// The result arrives through the `model_loading` channel and is
-    /// installed by `poll_loaded_models` on the next key event. A failure is
-    /// logged on the loader thread and surfaces here only as a disconnected
-    /// channel: the engine keeps running without a model.
     fn spawn_model_loading(&mut self, settings: &Settings) {
-        if self.converters.kanji.is_some() || self.model_loading.is_some() {
+        if self.converters.kanji.is_some() || !matches!(self.model_loading, ModelLoading::Idle) {
             return;
         }
+        self.spawn_load(
+            ModelLoadSpec {
+                strategy: settings.conversion.strategy,
+                model: settings.conversion.model.clone(),
+                light_model: settings.conversion.light_model.clone(),
+                n_threads: settings.conversion.n_threads,
+            },
+            0,
+        );
+    }
 
-        let strategy = settings.conversion.strategy;
-        let model = settings.conversion.model.clone();
-        let light_model = settings.conversion.light_model.clone();
-        let n_threads = settings.conversion.n_threads;
-
+    /// Start a loader thread for `spec`; `attempts` counts failures so far.
+    fn spawn_load(&mut self, spec: ModelLoadSpec, attempts: u32) {
         let (tx, rx) = mpsc::channel();
-        self.model_loading = Some(rx);
+        let thread_spec = spec.clone();
         let spawned = std::thread::Builder::new()
             .name("karukan-model-load".to_string())
             .spawn(move || {
-                match load_converters(
-                    strategy,
-                    model.as_deref(),
-                    light_model.as_deref(),
-                    n_threads,
-                ) {
-                    // A dead receiver just means the engine was dropped.
-                    Ok(loaded) => drop(tx.send(loaded)),
-                    Err(e) => {
-                        tracing::error!("model loading failed, continuing without model: {e:#}");
+                let result = load_converters(&thread_spec).map_err(|e| {
+                    let failure = classify_failure(&e);
+                    match failure {
+                        LoadFailure::Transient => {
+                            tracing::warn!("model loading failed, will retry: {e:#}")
+                        }
+                        LoadFailure::Permanent => {
+                            tracing::error!("model loading failed, continuing without model: {e:#}")
+                        }
                     }
-                }
+                    failure
+                });
+                // A dead receiver just means the engine was dropped.
+                drop(tx.send(result));
             });
-        if let Err(e) = spawned {
-            tracing::error!("failed to spawn model loading thread: {e}");
-            self.model_loading = None;
+        match spawned {
+            Ok(_) => self.model_loading = ModelLoading::Loading { rx, spec, attempts },
+            Err(e) => {
+                tracing::error!("failed to spawn model loading thread: {e}");
+                self.model_loading = ModelLoading::Idle;
+            }
         }
     }
 
-    /// Install converters the background loader has finished. Non-blocking;
-    /// called at the top of `process_key`. A disconnected channel means the
-    /// loader failed (already logged) — clear it so `model_name` stops
-    /// reporting "loading".
+    /// Drive the background loading state; non-blocking, called at the top
+    /// of `process_key`. Failures were already logged by the loader thread.
     pub(super) fn poll_loaded_models(&mut self) {
-        let Some(rx) = &self.model_loading else {
-            return;
-        };
-        match rx.try_recv() {
-            Ok(loaded) => {
-                self.converters.kanji = Some(loaded.kanji);
-                self.converters.light_kanji = loaded.light_kanji;
-                self.model_loading = None;
-                tracing::info!("Karukan init complete: {}", self.model_name());
-            }
-            Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => {
-                self.model_loading = None;
+        match std::mem::replace(&mut self.model_loading, ModelLoading::Idle) {
+            ModelLoading::Idle => {}
+            ModelLoading::Loading { rx, spec, attempts } => match rx.try_recv() {
+                Ok(Ok(loaded)) => {
+                    self.converters.kanji = Some(loaded.kanji);
+                    self.converters.light_kanji = loaded.light_kanji;
+                    tracing::info!("Karukan init complete: {}", self.model_name());
+                }
+                Ok(Err(LoadFailure::Transient)) => {
+                    let attempts = attempts + 1;
+                    self.model_loading = ModelLoading::Failed {
+                        spec,
+                        attempts,
+                        retry_at: Instant::now() + retry_backoff(attempts),
+                    };
+                }
+                Ok(Err(LoadFailure::Permanent)) => {}
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.model_loading = ModelLoading::Loading { rx, spec, attempts };
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    tracing::warn!("model loader thread died; continuing without model");
+                }
+            },
+            ModelLoading::Failed {
+                spec,
+                attempts,
+                retry_at,
+            } => {
+                if retry_at <= Instant::now() {
+                    tracing::info!("retrying model load (attempt {})", attempts + 1);
+                    self.spawn_load(spec, attempts);
+                } else {
+                    self.model_loading = ModelLoading::Failed {
+                        spec,
+                        attempts,
+                        retry_at,
+                    };
+                }
             }
         }
     }
@@ -330,5 +421,34 @@ impl InputMethodEngine {
                 debug!("Failed to merge user dictionaries: {}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backoff_doubles_and_caps() {
+        assert_eq!(retry_backoff(1), Duration::from_secs(30));
+        assert_eq!(retry_backoff(2), Duration::from_secs(60));
+        assert_eq!(retry_backoff(5), Duration::from_secs(480));
+        assert_eq!(retry_backoff(6), Duration::from_secs(600));
+        assert_eq!(retry_backoff(100), Duration::from_secs(600));
+    }
+
+    #[test]
+    fn download_failures_are_transient_others_permanent() {
+        let download = anyhow::Error::from(karukan_engine::kanji::KanjiError::Download(
+            "connection refused".into(),
+        ))
+        .context("failed to initialize main model");
+        assert!(matches!(
+            classify_failure(&download),
+            LoadFailure::Transient
+        ));
+
+        let unknown = anyhow::anyhow!("unknown model variant: foo");
+        assert!(matches!(classify_failure(&unknown), LoadFailure::Permanent));
     }
 }
