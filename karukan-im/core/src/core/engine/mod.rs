@@ -189,6 +189,7 @@ impl InputMethodEngine {
                 kanji: None,
                 light_kanji: None,
                 rewriters: RewriterChain::default_chain(),
+                date: DateRewriter::new(karukan_engine::DateConfig::default()),
             },
             surrounding_context: None,
             config: EngineConfig::default(),
@@ -218,12 +219,7 @@ impl InputMethodEngine {
         // width rules too: a keystroke settles at the width in force when
         // it was typed.
         engine.converters.romaji = RomajiConverter::with_rules(config.symbol, config.width);
-        // The date rewriter is the only one carrying config, so it joins
-        // the chain here instead of in default_chain().
-        engine
-            .converters
-            .rewriters
-            .add(Box::new(DateRewriter::new(config.date.clone())));
+        engine.converters.date = DateRewriter::new(config.date.clone());
         engine.config = config;
         engine
     }
@@ -337,13 +333,19 @@ impl InputMethodEngine {
         };
         let text = selected.text.clone();
         let reading = selected.reading.clone();
+        let source = selected.source;
         if text.is_empty() {
             return EngineResult::consumed();
         }
 
         // A suggestion always carries its reading; fall back to the buffer
-        // so a candidate built without one still records under a key.
-        let reading = reading.or_else(|| Some(self.input_buf.reading()));
+        // so a candidate built without one still records under a key. A
+        // non-learnable source (a date is stale tomorrow) records nothing.
+        let reading = if source.is_none_or(|s| s.is_learnable()) {
+            reading.or_else(|| Some(self.input_buf.reading()))
+        } else {
+            None
+        };
         self.finish_conversion(&text, &reading);
 
         EngineResult::consumed()

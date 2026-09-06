@@ -364,6 +364,14 @@ impl InputMethodEngine {
             builder.push(AnnotatedCandidate::new(hiragana, CandidateSource::Fallback));
             builder.push(AnnotatedCandidate::new(katakana, CandidateSource::Fallback));
         }
+        // Date/time candidates sit above the width/kana variants; like the
+        // rewriters they derive from the typed reading alone.
+        for (variant, description) in self.date_variants(reading) {
+            builder.push(
+                AnnotatedCandidate::new(variant, CandidateSource::Date)
+                    .with_description(description),
+            );
+        }
         // Rewriters run on the typed reading only; running them on other
         // sources' candidates would emit variants nobody asked for.
         for (variant, description) in self.rewriter_variants(reading) {
@@ -493,18 +501,36 @@ impl InputMethodEngine {
             .rewrite_all(&[reading.to_string()])
     }
 
+    /// Date/time candidates for `reading` (`[date]` phrases). None in emoji
+    /// mode — the picker shows emojis only.
+    pub(super) fn date_variants(&self, reading: &str) -> Vec<RewriteOutput> {
+        if self.mode.current() == InputMode::Emoji {
+            return Vec::new();
+        }
+        self.converters.date.rewrite(reading)
+    }
+
     /// Build rule-based rewriter variants for the reading itself (e.g. for
-    /// symbol input `「` → `『`, `【`, `（`, ...). Used in the auto-suggest path
-    /// so users see mozc-style symbol variants without pressing Space first.
+    /// symbol input `「` → `『`, `【`, `（`, ...), date/time candidates first.
+    /// Used in the auto-suggest path so users see mozc-style symbol variants
+    /// without pressing Space first, and as the body of the Ctrl+R view.
     pub(super) fn lookup_rewriter_variants(&self, reading: &str) -> Vec<Candidate> {
-        self.rewriter_variants(reading)
-            .into_iter()
-            .map(|(text, description)| Candidate {
+        let as_candidate = |source: CandidateSource| {
+            move |(text, description): RewriteOutput| Candidate {
                 text,
                 reading: Some(reading.to_string()),
-                source: Some(CandidateSource::Rewriter),
+                source: Some(source),
                 description,
-            })
+            }
+        };
+        self.date_variants(reading)
+            .into_iter()
+            .map(as_candidate(CandidateSource::Date))
+            .chain(
+                self.rewriter_variants(reading)
+                    .into_iter()
+                    .map(as_candidate(CandidateSource::Rewriter)),
+            )
             .collect()
     }
 
@@ -678,7 +704,13 @@ impl InputMethodEngine {
                 // as its preedit, so that is what committing produces —
                 // never an empty commit that would eat the composition.
                 let text = candidates.selected_text().unwrap_or(reading).to_string();
-                let reading = candidates.selected().and_then(|c| c.reading.clone());
+                // The reading rides along solely for the learning record;
+                // a non-learnable source (a date is stale tomorrow) yields
+                // None so nothing is recorded.
+                let reading = candidates
+                    .selected()
+                    .filter(|c| c.source.is_none_or(|s| s.is_learnable()))
+                    .and_then(|c| c.reading.clone());
                 Some((text, reading))
             }
             _ => None,

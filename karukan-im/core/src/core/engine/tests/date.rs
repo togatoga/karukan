@@ -1,6 +1,7 @@
 //! Integration tests for the date rewriter: config.toml phrases surface as
-//! Rewriter candidates. The clock is real here, so assertions check shape
-//! (`2026/09/06`-like), not exact dates.
+//! `CandidateSource::Date` candidates and stay out of the learning cache.
+//! The clock is real here, so assertions check shape (`2026/09/06`-like),
+//! not exact dates.
 
 use karukan_engine::{DateConfig, DatePhrase};
 
@@ -52,7 +53,7 @@ fn registered_phrase_surfaces_date_candidates() {
         engine.build_conversion_candidates("きょう", "きょう", "", 9, LearningLookup::Use);
     let date = candidates
         .iter()
-        .find(|c| c.source == CandidateSource::Rewriter && slash_date(&c.text))
+        .find(|c| c.source == CandidateSource::Date && slash_date(&c.text))
         .unwrap_or_else(|| panic!("no date candidate: {:?}", candidates));
     assert_eq!(date.description.as_deref(), Some("日付"));
 }
@@ -85,7 +86,7 @@ fn default_settings_carry_the_shipped_phrases() {
     assert!(
         candidates
             .iter()
-            .any(|c| c.source == CandidateSource::Rewriter && slash_date(&c.text)),
+            .any(|c| c.source == CandidateSource::Date && slash_date(&c.text)),
         "no date candidate from default config: {candidates:?}"
     );
 }
@@ -97,9 +98,47 @@ fn unregistered_reading_gets_no_date_candidates() {
     let candidates =
         engine.build_conversion_candidates("こんにちは", "こんにちは", "", 9, LearningLookup::Use);
     assert!(
-        !candidates
-            .iter()
-            .any(|c| c.source == CandidateSource::Rewriter && slash_date(&c.text)),
+        !candidates.iter().any(|c| c.source == CandidateSource::Date),
         "date candidate leaked for a plain word: {candidates:?}"
+    );
+}
+
+#[test]
+fn committing_a_date_candidate_records_no_learning() {
+    // A recorded date would resurface later as a stale date at learning
+    // priority, so Enter on a date candidate must record nothing.
+    let settings = Settings::default();
+    let mut engine = date_engine(settings.date.clone(), "きょう");
+    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    let date = engine
+        .lookup_rewriter_variants("きょう")
+        .into_iter()
+        .find(|c| c.source == Some(CandidateSource::Date))
+        .expect("date candidate");
+    let surface = date.text.clone();
+    engine.state = InputState::Conversion {
+        preedit: Preedit::new(),
+        candidates: CandidateList::new(vec![date]),
+        reading: "きょう".to_string(),
+        filter: None,
+    };
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if *t == surface)),
+        "date candidate did not commit: {result:?}"
+    );
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("きょう")
+            .is_empty(),
+        "date commit leaked into the learning cache"
     );
 }

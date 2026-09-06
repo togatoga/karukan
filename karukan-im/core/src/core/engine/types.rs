@@ -1,8 +1,8 @@
 //! Type definitions for the IME engine
 
 use karukan_engine::{
-    DateConfig, Dictionary, KanaKanjiConverter, RewriterChain, RomajiConverter, SymbolStyle,
-    WidthRules,
+    DateConfig, DateRewriter, Dictionary, KanaKanjiConverter, RewriterChain, RomajiConverter,
+    SymbolStyle, WidthRules,
 };
 
 use crate::config::settings::{SpaceStyle, StrategyMode};
@@ -176,6 +176,10 @@ pub(in crate::core) struct Converters {
     pub light_kanji: Option<KanaKanjiConverter>,
     /// Candidate rewriters (half-width katakana, symbol variants)
     pub rewriters: RewriterChain,
+    /// Date/time phrase rewriter. Held beside the chain, not in it, so its
+    /// candidates keep their own source (`CandidateSource::Date`) and stay
+    /// out of the learning cache.
+    pub date: DateRewriter,
 }
 
 /// Input mode for the IME engine

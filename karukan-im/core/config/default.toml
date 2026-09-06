@@ -96,8 +96,8 @@ digit = "half"
 # 全角の英字は候補一覧の ＡＢＣ（[全]英大文字）から選べます。
 
 # 日付・時刻の変換。フレーズの読みを変換すると、今日±offset_days の日時を
-# formats で描画した候補が出る（候補一覧の末尾と Ctrl+R のビュー）。
-# 詳細は docs/date.md を参照。
+# formats で描画した候補が出る（候補一覧の後方と Ctrl+R のビュー）。
+# 確定しても学習履歴には残らない。詳細は docs/date.md を参照。
 #
 # フォーマットは {YEAR} {MONTH} {DATE} {HOUR} {MINUTE}（ゼロ埋め2桁）、
 # {ERA}（令和）{ERA_YEAR}（8）{WEEKDAY}（土）{HOUR12}{AMPM}（午後3）、
