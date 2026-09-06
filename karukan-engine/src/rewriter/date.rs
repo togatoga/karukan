@@ -64,9 +64,12 @@ fn era(date: NaiveDate) -> Option<(&'static str, i32)> {
 /// (unknown token/style, or no era for the date).
 fn render_token(token: &str, style: Option<&str>, at: NaiveDateTime) -> Option<String> {
     let kanji = |n: u32| to_kanji(&n.to_string(), false);
+    // A BC year (reachable via a huge negative offset_days) has no
+    // rendering; the sign would also break to_kanji_digits.
+    let year = || u32::try_from(at.year()).ok();
     match (token, style) {
-        ("YEAR", None) => Some(format!("{:04}", at.year())),
-        ("YEAR", Some("kanji")) => Some(to_kanji_digits(&format!("{:04}", at.year()))),
+        ("YEAR", None) => Some(format!("{:04}", year()?)),
+        ("YEAR", Some("kanji")) => Some(to_kanji_digits(&format!("{:04}", year()?))),
         ("MONTH", None) => Some(format!("{:02}", at.month())),
         ("MONTH", Some("bare")) => Some(at.month().to_string()),
         ("MONTH", Some("kanji")) => kanji(at.month()),
@@ -376,5 +379,19 @@ mod tests {
     fn absurd_offset_is_dropped() {
         let r = rewriter("きょう", i64::MAX, &["{YEAR}"]);
         assert!(r.candidates_at("きょう", at(2026, 9, 6, 0, 0)).is_empty());
+    }
+
+    #[test]
+    fn bc_year_skips_year_formats() {
+        // A negative offset_days can land in a proleptic BC year; the year
+        // formats are skipped (kanji digits would panic on the sign) while
+        // year-free formats still render.
+        let r = rewriter(
+            "きょう",
+            0,
+            &["{YEAR}/{MONTH}/{DATE}", "{YEAR:kanji}年", "{MONTH:bare}月"],
+        );
+        let out = r.candidates_at("きょう", at(-1, 1, 2, 0, 0));
+        assert_eq!(texts(&out), vec!["1月"]);
     }
 }
