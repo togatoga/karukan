@@ -34,6 +34,62 @@ pub extern "C" fn karukan_engine_get_preedit_caret(engine: *const KarukanEngine)
     engine.preedit.caret_bytes as c_uint
 }
 
+/// Get the number of preedit formatting attributes (underline/highlight
+/// spans). See `KarukanPreeditAttrType` in `karukan.h`.
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_get_preedit_attr_count(engine: *const KarukanEngine) -> c_uint {
+    let engine = ffi_ref!(engine, 0);
+    engine.preedit.attrs.len() as c_uint
+}
+
+/// Get a preedit attribute's type by index (see `KarukanPreeditAttrType`).
+/// Returns 0 (underline) if the index is out of range.
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_get_preedit_attr_type(
+    engine: *const KarukanEngine,
+    index: c_uint,
+) -> c_uint {
+    let engine = ffi_ref!(engine, 0);
+    engine
+        .preedit
+        .attrs
+        .get(index as usize)
+        .map(|a| a.attr_type)
+        .unwrap_or(0) as c_uint
+}
+
+/// Get a preedit attribute's start offset in bytes by index.
+/// Returns 0 if the index is out of range.
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_get_preedit_attr_start(
+    engine: *const KarukanEngine,
+    index: c_uint,
+) -> c_uint {
+    let engine = ffi_ref!(engine, 0);
+    engine
+        .preedit
+        .attrs
+        .get(index as usize)
+        .map(|a| a.start_bytes)
+        .unwrap_or(0) as c_uint
+}
+
+/// Get a preedit attribute's end offset in bytes (exclusive) by index.
+/// Returns 0 if the index is out of range.
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_get_preedit_attr_end(
+    engine: *const KarukanEngine,
+    index: c_uint,
+) -> c_uint {
+    let engine = ffi_ref!(engine, 0);
+    engine
+        .preedit
+        .attrs
+        .get(index as usize)
+        .map(|a| a.end_bytes)
+        .unwrap_or(0) as c_uint
+}
+
 /// Check if there's a commit pending
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_has_commit(engine: *const KarukanEngine) -> c_int {

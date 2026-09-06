@@ -278,6 +278,17 @@ impl CandidateList {
         }
     }
 
+    /// Select a candidate by absolute index. Used by segment navigation to
+    /// re-select a previously chosen candidate when re-entering a segment.
+    pub fn select(&mut self, index: usize) -> Option<&Candidate> {
+        if index < self.candidates.len() {
+            self.cursor = index;
+            self.selected()
+        } else {
+            None
+        }
+    }
+
     /// Move the cursor to `cursor`, clamped into the list (0 when empty).
     pub fn set_cursor(&mut self, cursor: usize) {
         self.cursor = cursor.min(self.candidates.len().saturating_sub(1));

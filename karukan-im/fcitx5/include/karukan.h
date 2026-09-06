@@ -18,6 +18,21 @@ extern "C" {
 typedef struct KarukanEngine KarukanEngine;
 
 /*
+ * Preedit formatting attribute types.
+ * Values match the numbering emitted by the Rust FFI layer.
+ */
+typedef enum {
+    /* Normal underline for uncommitted preedit text */
+    KARUKAN_PREEDIT_ATTR_UNDERLINE = 0,
+    /* Double underline for the currently selected segment */
+    KARUKAN_PREEDIT_ATTR_UNDERLINE_DOUBLE = 1,
+    /* Highlight for the segment being converted */
+    KARUKAN_PREEDIT_ATTR_HIGHLIGHT = 2,
+    /* Reverse video for the selected candidate */
+    KARUKAN_PREEDIT_ATTR_REVERSE = 3
+} KarukanPreeditAttrType;
+
+/*
  * Create a new Karukan engine instance.
  * Returns a pointer to the engine, or NULL on failure.
  * The caller is responsible for freeing the engine with karukan_engine_free().
@@ -103,6 +118,31 @@ uint32_t karukan_engine_get_preedit_len(const KarukanEngine* engine);
  * This indicates where the cursor should be displayed within the preedit text.
  */
 uint32_t karukan_engine_get_preedit_caret(const KarukanEngine* engine);
+
+/*
+ * Get the number of preedit formatting attributes (underline/highlight
+ * spans). Segment conversion emits one attribute per segment so the
+ * frontend can render the currently selected segment highlighted.
+ */
+uint32_t karukan_engine_get_preedit_attr_count(const KarukanEngine* engine);
+
+/*
+ * Get a preedit attribute's type by index (a KarukanPreeditAttrType value).
+ * Returns KARUKAN_PREEDIT_ATTR_UNDERLINE if the index is out of range.
+ */
+uint32_t karukan_engine_get_preedit_attr_type(const KarukanEngine* engine, uint32_t index);
+
+/*
+ * Get a preedit attribute's start offset in bytes by index.
+ * Returns 0 if the index is out of range.
+ */
+uint32_t karukan_engine_get_preedit_attr_start(const KarukanEngine* engine, uint32_t index);
+
+/*
+ * Get a preedit attribute's end offset in bytes (exclusive) by index.
+ * Returns 0 if the index is out of range.
+ */
+uint32_t karukan_engine_get_preedit_attr_end(const KarukanEngine* engine, uint32_t index);
 
 /* --- Commit text --- */
 

@@ -507,3 +507,51 @@ fn test_ffi_standalone_shift_does_not_toggle_mode() {
         "After standalone Shift, 'a' should still produce hiragana"
     );
 }
+
+#[test]
+fn test_preedit_attrs_are_byte_addressed() {
+    // The engine emits char-indexed attributes; the FFI must expose them
+    // byte-addressed. Feed a synthetic segmented preedit (all multibyte
+    // chars) through apply_actions and read it back via the C API.
+    use karukan_im::core::preedit::{Preedit, PreeditSegment};
+
+    let e = TestEngine::new();
+    let engine = unsafe { &mut *e.ptr() };
+
+    // 藍 (underlined) | うえお (highlighted) | かき (underlined), caret
+    // after the highlighted segment: 2 chars = 6 bytes into the text.
+    let preedit = Preedit::from_segments(
+        vec![
+            PreeditSegment::underlined("藍"),
+            PreeditSegment::highlighted("うえお"),
+            PreeditSegment::underlined("かき"),
+        ],
+        4,
+    );
+    engine.apply_actions(vec![EngineAction::UpdatePreedit(preedit)]);
+
+    let ptr = e.ptr();
+    assert_eq!(karukan_engine_get_preedit_attr_count(ptr), 3);
+
+    // 藍: bytes [0, 3), underline (type 0)
+    assert_eq!(karukan_engine_get_preedit_attr_type(ptr, 0), 0);
+    assert_eq!(karukan_engine_get_preedit_attr_start(ptr, 0), 0);
+    assert_eq!(karukan_engine_get_preedit_attr_end(ptr, 0), 3);
+
+    // うえお: bytes [3, 12), highlight (type 2)
+    assert_eq!(karukan_engine_get_preedit_attr_type(ptr, 1), 2);
+    assert_eq!(karukan_engine_get_preedit_attr_start(ptr, 1), 3);
+    assert_eq!(karukan_engine_get_preedit_attr_end(ptr, 1), 12);
+
+    // かき: bytes [12, 18), underline (type 0)
+    assert_eq!(karukan_engine_get_preedit_attr_type(ptr, 2), 0);
+    assert_eq!(karukan_engine_get_preedit_attr_start(ptr, 2), 12);
+    assert_eq!(karukan_engine_get_preedit_attr_end(ptr, 2), 18);
+
+    // Caret: 4 chars = 12 bytes.
+    assert_eq!(karukan_engine_get_preedit_caret(ptr), 12);
+
+    // Out-of-range index falls back to 0.
+    assert_eq!(karukan_engine_get_preedit_attr_type(ptr, 99), 0);
+    assert_eq!(karukan_engine_get_preedit_attr_end(ptr, 99), 0);
+}

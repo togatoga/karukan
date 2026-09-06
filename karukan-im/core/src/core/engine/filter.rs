@@ -94,14 +94,18 @@ impl InputMethodEngine {
     /// no mixed list is built (the view re-queries its source), so no model
     /// inference runs here. Returns false when there is nothing to convert.
     fn enter_conversion_for_filter(&mut self) -> bool {
-        let reading = self.input_buf.settled_reading(&self.converters.romaji);
-        if reading.is_empty() {
+        // Same split as Space: the caret bounds what a conversion covers,
+        // whichever key opened it.
+        let range = self.split_composition_at_caret();
+        if range.reading.is_empty() {
+            // Nothing to convert, so leave no half-prepared conversion behind.
+            self.conversion_tail = None;
             return false;
         }
         // Left shown, the stale live chunks would survive the commit and
         // render as the next composition's preedit.
         self.live.shown = false;
-        self.enter_conversion_state(&reading, CandidateList::new(Vec::new()));
+        self.enter_conversion_state(&range.reading, CandidateList::new(Vec::new()));
         true
     }
 
@@ -114,7 +118,9 @@ impl InputMethodEngine {
         let view = self.source_view(next, &reading);
         let list = self.settle_candidates(view);
         let selected = list.selected_text().unwrap_or(&reading).to_string();
-        let preedit = Preedit::with_text_highlighted(&selected);
+        // Built like the mixed list's preedit so a partial conversion keeps
+        // showing its unconverted tail while the view is narrowed.
+        let preedit = self.build_conversion_preedit(&selected);
         // The aux leads with what the user typed, tail included — typing
         // refines the view in place, and the selected candidate's own
         // reading would otherwise be the only thing on the line, leaving no

@@ -35,7 +35,7 @@ use tracing::{debug, trace};
 
 use super::candidate::{Candidate, CandidateList, CandidateSource};
 use super::keycode::{KeyEvent, Keysym};
-use super::preedit::Preedit;
+use super::preedit::{Preedit, PreeditSegment};
 use super::state::InputState;
 use crate::config::settings::{Settings, SpaceStyle};
 
@@ -172,6 +172,20 @@ pub struct InputMethodEngine {
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
     learning: Option<LearningCache>,
+    /// Unconverted tail reading remaining after a partial conversion
+    /// (e.g. user placed cursor mid-buffer before pressing Space, or
+    /// shrank the conversion range with Shift+Left). Committed back to
+    /// Composing after the conversion is confirmed.
+    conversion_tail: Option<String>,
+    /// Segments confirmed by Right arrow during partial conversion but not
+    /// yet committed to the application. Left arrow pops the last entry
+    /// to go back.
+    confirmed_segments: Vec<ConvertedSegment>,
+    /// Already-converted segments to the RIGHT of the current one, created
+    /// when Left arrow steps back over them, ordered left to right. Right
+    /// arrow pops the front entry to re-enter it with its previous selection
+    /// intact, so stepping back doesn't revert converted segments to raw kana.
+    upcoming_segments: Vec<ConvertedSegment>,
     /// Receiver for the background model-loading thread: model resolution
     /// can block on the network, so it never runs on the key-event thread.
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
@@ -203,6 +217,9 @@ impl InputMethodEngine {
             shown_suggestions: CandidateList::default(),
             dicts: Dictionaries::default(),
             learning: None,
+            conversion_tail: None,
+            confirmed_segments: Vec::new(),
+            upcoming_segments: Vec::new(),
             model_loading: None,
         }
     }
@@ -289,6 +306,9 @@ impl InputMethodEngine {
         self.input_buf.clear();
         self.live.shown = false;
         self.chunks.clear();
+        self.conversion_tail = None;
+        self.confirmed_segments.clear();
+        self.upcoming_segments.clear();
         self.chunk_breaks.clear();
         self.shown_suggestions = CandidateList::default();
     }
@@ -338,10 +358,18 @@ impl InputMethodEngine {
         // A suggestion always carries its reading; fall back to the buffer
         // so a candidate built without one still records under a key.
         let reading = reading.or_else(|| Some(self.input_buf.reading()));
-        self.finish_conversion(&text, &reading);
+        // A tail means the session isn't over: the digit selection commits
+        // the converted range and resumes the composition with the rest,
+        // exactly as Enter does.
+        if let Some(tail) = self.conversion_tail.take() {
+            return self.commit_and_resume_tail(&text, &reading, tail);
+        }
+        // Segments already confirmed by segment navigation ride along in the
+        // commit text, so a digit selection commits the whole sentence.
+        let commit_text = self.finish_conversion(&text, &reading);
 
         EngineResult::consumed()
-            .with_action(EngineAction::Commit(text))
+            .with_action(EngineAction::Commit(commit_text))
             .with_action(EngineAction::HideCandidates)
             .with_action(EngineAction::HideAuxText)
     }
@@ -658,8 +686,14 @@ impl InputMethodEngine {
                 let (text, reading) = self
                     .selected_conversion_info()
                     .expect("state is Conversion");
-                self.finish_conversion(&text, &reading);
-                text
+                // Everything on screen has to be committed here: the
+                // confirmed segments ride along in `finish_conversion`'s
+                // return value, and the unconverted tail — which that call
+                // clears — is appended after them.
+                let tail = self.conversion_tail.clone().unwrap_or_default();
+                let mut committed = self.finish_conversion(&text, &reading);
+                committed.push_str(&tail);
+                committed
             }
         };
         self.surrounding_context = None;

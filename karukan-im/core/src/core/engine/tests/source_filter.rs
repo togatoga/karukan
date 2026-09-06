@@ -771,6 +771,9 @@ fn test_mid_caret_typing_does_not_tail_predict() {
     // settles to あkい, so the narrowed view must not offer あい + か…
     // predictions whose commit would replace the composition with the
     // wrong reading.
+    //
+    // The caret also bounds the conversion itself, the same as Space: what
+    // is right of it stays composing and is committed by a second Enter.
     let mut engine = engine_with_learned("あいか", "愛香");
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -787,12 +790,26 @@ fn test_mid_caret_typing_does_not_tail_predict() {
         "aux was: {aux}"
     );
 
+    // Enter commits the converted range only — あk, everything left of the
+    // caret — and returns to composing with the tail.
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert!(
         result
             .actions
             .iter()
-            .any(|a| matches!(a, EngineAction::Commit(text) if text == "あkい"))
+            .any(|a| matches!(a, EngineAction::Commit(text) if text == "あk"))
+    );
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.display(), "い");
+
+    // The tail is ordinary composition again: a second Enter commits it, so
+    // the text that reaches the application is still あkい.
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(text) if text == "い"))
     );
 }
 
@@ -1195,4 +1212,112 @@ fn test_filtered_view_aux_shows_what_is_being_typed() {
         aux.contains("[変換:📚] わせだだ → わせだだいがく"),
         "aux was: {aux}"
     );
+}
+
+/// Composition `あいうえお` with the caret after `あい`, and `あい` seeded in
+/// the learning cache so the narrowed 📝 view has a deterministic candidate.
+fn engine_with_caret_after_ai() -> InputMethodEngine {
+    let mut engine = engine_with_learned("あい", "藍");
+    for ch in ['a', 'i', 'u', 'e', 'o'] {
+        engine.process_key(&press(ch));
+    }
+    for _ in 0..3 {
+        engine.process_key(&press_key(Keysym::LEFT));
+    }
+    assert_eq!(engine.input_buf.display(), "あいうえお");
+    assert_eq!(engine.input_buf.cursor(), 2);
+    engine
+}
+
+#[test]
+fn ctrl_i_mid_buffer_converts_only_up_to_the_caret() {
+    // The caret bounds every conversion, whichever key opens it: Ctrl+I
+    // must cover あい and leave うえお as the unconverted tail, exactly as
+    // Space does.
+    let mut engine = engine_with_caret_after_ai();
+
+    engine.process_key(&press_ctrl(Keysym::KEY_I));
+
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(engine.state().reading(), Some("あい"));
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえお"));
+}
+
+#[test]
+fn ctrl_t_mid_buffer_converts_only_up_to_the_caret() {
+    // Same for the cycle entry point.
+    let mut engine = engine_with_caret_after_ai();
+
+    engine.process_key(&press_ctrl(Keysym::KEY_T));
+
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(engine.state().filter(), Some(CandidateSource::Learning));
+    assert_eq!(engine.state().reading(), Some("あい"));
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえお"));
+}
+
+#[test]
+fn filtered_partial_conversion_shows_the_tail_in_the_preedit() {
+    // The narrowed view renders the tail like the mixed list does —
+    // without it the characters right of the caret would look deleted.
+    let mut engine = engine_with_caret_after_ai();
+
+    engine.process_key(&press_ctrl(Keysym::KEY_T));
+
+    assert_eq!(shown_texts(&engine), vec!["藍"]);
+    assert_eq!(engine.preedit().unwrap().text(), "藍うえお");
+}
+
+#[test]
+fn committing_a_filtered_partial_conversion_resumes_with_the_tail() {
+    // Enter commits the converted range and returns to composing with the
+    // tail, the same two-step commit Space's partial conversion has.
+    let mut engine = engine_with_caret_after_ai();
+    engine.process_key(&press_ctrl(Keysym::KEY_T));
+
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(text) if text == "藍"))
+    );
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.display(), "うえお");
+}
+
+#[test]
+fn returning_to_editing_puts_the_caret_at_the_conversion_boundary() {
+    // Typing during a partial conversion drops back to the composition.
+    // The caret belongs at the boundary that was being converted, not at
+    // the end of the reassembled reading — the tail was never part of it.
+    let mut engine = engine_with_caret_after_ai();
+    engine.process_key(&press_ctrl(Keysym::KEY_T));
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえお"));
+
+    engine.process_key(&press('n'));
+
+    // Typing refines the narrowed view, so the engine is back in a
+    // conversion — over あいn, not あいうえおn. That reading is the proof
+    // the caret came back to the boundary instead of the end.
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(engine.state().reading(), Some("あいn"));
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえお"));
+}
+
+#[test]
+fn returning_to_editing_from_a_plain_partial_conversion_keeps_the_caret() {
+    // The same caret restore on the path with no filter: typing lands back
+    // in the composition, where the whole reading is visible again with
+    // the caret still at the boundary.
+    let mut engine = engine_with_caret_after_ai();
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(engine.conversion_tail.as_deref(), Some("うえお"));
+
+    engine.process_key(&press('n'));
+
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.display(), "あいnうえお");
+    assert_eq!(engine.input_buf.cursor(), 3);
 }

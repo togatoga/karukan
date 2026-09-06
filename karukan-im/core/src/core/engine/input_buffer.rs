@@ -103,6 +103,18 @@ impl InputBuffer {
         self.cursor += 1;
     }
 
+    /// Replace the whole composition with settled `text`, caret at the end.
+    ///
+    /// Used where a reading is rebuilt from scratch rather than typed:
+    /// resuming the unconverted tail of a partial conversion, and segment
+    /// navigation, where the keystrokes behind the reading were consumed by
+    /// the conversion that just happened.
+    pub fn set_text(&mut self, text: &str) {
+        self.clear();
+        self.elements.extend(text.chars().map(Element::Converted));
+        self.cursor = self.elements.len();
+    }
+
     /// Record settled text at the caret. Test setup only — production
     /// code always goes through the typed-key paths.
     #[cfg(test)]
@@ -189,24 +201,16 @@ impl InputBuffer {
     /// counterpart of [`Self::settle_romaji`] — used when the composition
     /// must stay editable (starting a conversion that Escape can undo).
     pub fn settled_reading(&self, romaji: &RomajiConverter) -> String {
-        let mut reading = String::new();
-        let mut run = String::new();
-        for element in &self.elements {
-            match element {
-                Element::Romaji(ch) => run.push(*ch),
-                Element::Converted(ch) => {
-                    if !run.is_empty() {
-                        reading.push_str(&romaji.convert_flush(&run));
-                        run.clear();
-                    }
-                    reading.push(*ch);
-                }
-            }
-        }
-        if !run.is_empty() {
-            reading.push_str(&romaji.convert_flush(&run));
-        }
-        reading
+        settle_slice(&self.elements, romaji)
+    }
+
+    /// The caret's position within [`Self::settled_reading`]: the settled
+    /// length of everything left of it. Romaji runs shrink when they settle
+    /// (`kya` → きゃ), so this is not the element index.
+    pub fn settled_cursor(&self, romaji: &RomajiConverter) -> usize {
+        settle_slice(&self.elements[..self.cursor], romaji)
+            .chars()
+            .count()
     }
 
     /// Settle all Romaji keystrokes in place (`ltu` → っ; unmatched
@@ -306,6 +310,29 @@ impl InputBuffer {
     pub fn reading_cursor(&self) -> usize {
         self.cursor - self.active_run().len()
     }
+}
+
+/// Settle `elements` into the text they would commit as: Romaji runs
+/// force-converted in place, everything else as displayed.
+fn settle_slice(elements: &[Element], romaji: &RomajiConverter) -> String {
+    let mut out = String::new();
+    let mut run = String::new();
+    for element in elements {
+        match element {
+            Element::Romaji(ch) => run.push(*ch),
+            Element::Converted(ch) => {
+                if !run.is_empty() {
+                    out.push_str(&romaji.convert_flush(&run));
+                    run.clear();
+                }
+                out.push(*ch);
+            }
+        }
+    }
+    if !run.is_empty() {
+        out.push_str(&romaji.convert_flush(&run));
+    }
+    out
 }
 
 /// Settle one Romaji run into `out` and clear it.

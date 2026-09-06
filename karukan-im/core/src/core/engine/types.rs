@@ -263,6 +263,18 @@ pub(in crate::core) struct ComposingChunk {
     pub converted: String,
 }
 
+/// One already-converted segment held during segment navigation (partial
+/// conversion): the display text the user chose and the reading it was
+/// converted from. The reading is what gets recorded in the learning cache
+/// when the segment is finally committed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::core) struct ConvertedSegment {
+    /// Converted display text (e.g. `藍`).
+    pub text: String,
+    /// Hiragana reading `text` was converted from (e.g. `あい`).
+    pub reading: String,
+}
+
 /// Live conversion state. The displayed text itself is not stored: it is
 /// derived from the current chunks (`live_text`), so it can never go stale
 /// against them.
@@ -318,11 +330,19 @@ pub(in crate::core) enum FilterDirection {
     Backward,
 }
 
-/// Whether a conversion consults the learning cache. Tab asks for
+/// Which learning-cache entries a conversion consults. Tab asks for
 /// [`Self::Skip`] so a noisy history can be escaped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::core) enum LearningLookup {
+    /// Exact-match entries plus prefix (predictive) matches — surfaces whose
+    /// recorded reading extends beyond what was typed.
     Use,
+    /// Exact-match entries only. Asked for wherever the conversion covers a
+    /// range the user chose (a caret split, a segment): a predictive match's
+    /// surface spells a *longer* reading, so selecting it by default would
+    /// commit characters that are still ahead of the boundary.
+    Exact,
+    /// No learning candidates at all.
     Skip,
 }
 

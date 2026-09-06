@@ -18,6 +18,23 @@ constexpr uint32_t kControlMask = 4;  // ControlMask
 constexpr uint32_t kAltMask = 8;      // Mod1Mask
 constexpr uint32_t kSuperMask = 64;   // Mod4Mask
 
+// Map a KarukanPreeditAttrType to the closest fcitx5 text format. fcitx5 has
+// no double-underline flag, so UnderlineDouble falls back to Underline;
+// Highlight/Reverse both map to HighLight (rendered as the selection color),
+// which is how the currently selected segment stands out during segment
+// conversion.
+static TextFormatFlags formatForPreeditAttr(uint32_t attrType) {
+    switch (attrType) {
+        case KARUKAN_PREEDIT_ATTR_HIGHLIGHT:
+        case KARUKAN_PREEDIT_ATTR_REVERSE:
+            return TextFormatFlag::HighLight;
+        case KARUKAN_PREEDIT_ATTR_UNDERLINE:
+        case KARUKAN_PREEDIT_ATTR_UNDERLINE_DOUBLE:
+        default:
+            return TextFormatFlag::Underline;
+    }
+}
+
 // --- KarukanCandidateWord ---
 
 KarukanCandidateWord::KarukanCandidateWord(KarukanEngine* engine, Text text, int index,
@@ -203,7 +220,30 @@ void KarukanState::updateUI() {
 
         Text preedit;
         if (preeditText && preeditLen > 0) {
-            preedit.append(std::string(preeditText, preeditLen), TextFormatFlag::Underline);
+            // Render per-attribute spans (e.g. the selected segment
+            // highlighted during segment conversion). Malformed or
+            // overlapping spans are skipped, and bytes no attribute covers
+            // fall back to a plain underline — an attribute-less preedit
+            // renders as one underlined run.
+            std::string text(preeditText, preeditLen);
+            uint32_t attrCount = karukan_engine_get_preedit_attr_count(rustEngine_);
+            uint32_t pos = 0;
+            for (uint32_t i = 0; i < attrCount; i++) {
+                uint32_t start = karukan_engine_get_preedit_attr_start(rustEngine_, i);
+                uint32_t end = karukan_engine_get_preedit_attr_end(rustEngine_, i);
+                uint32_t type = karukan_engine_get_preedit_attr_type(rustEngine_, i);
+                if (start < pos || start >= end || end > preeditLen) {
+                    continue;
+                }
+                if (start > pos) {
+                    preedit.append(text.substr(pos, start - pos), TextFormatFlag::Underline);
+                }
+                preedit.append(text.substr(start, end - start), formatForPreeditAttr(type));
+                pos = end;
+            }
+            if (pos < preeditLen) {
+                preedit.append(text.substr(pos), TextFormatFlag::Underline);
+            }
             preedit.setCursor(static_cast<int>(preeditCaret));
         }
 

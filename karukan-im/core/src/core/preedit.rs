@@ -62,6 +62,10 @@ impl PreeditSegment {
     pub fn highlighted(text: impl Into<String>) -> Self {
         Self::new(text, AttributeType::Highlight)
     }
+
+    pub fn underlined(text: impl Into<String>) -> Self {
+        Self::new(text, AttributeType::Underline)
+    }
 }
 
 /// Preedit string with cursor position and attributes

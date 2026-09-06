@@ -46,6 +46,7 @@ pub(crate) use ffi_ref;
 
 use karukan_im::config::Settings;
 use karukan_im::core::engine::{EngineAction, EngineConfig, InputMethodEngine};
+use karukan_im::core::preedit::AttributeType;
 
 static INIT_LOGGING: Once = Once::new();
 
@@ -61,11 +62,22 @@ fn init_logging() {
     });
 }
 
+/// One preedit formatting attribute, byte-addressed for C consumption.
+/// `attr_type` values match `KarukanPreeditAttrType` in `karukan.h`.
+struct PreeditAttrCache {
+    attr_type: u32,
+    start_bytes: u32,
+    end_bytes: u32,
+}
+
 /// Cached preedit text and caret position for FFI consumption.
 #[derive(Default)]
 struct PreeditCache {
     text: CString,
     caret_bytes: u32,
+    /// Formatting attributes (underline/highlight spans) in preedit order,
+    /// letting the addon render the selected segment highlighted.
+    attrs: Vec<PreeditAttrCache>,
     dirty: bool,
 }
 
@@ -115,9 +127,8 @@ impl KarukanEngine {
     fn new() -> Self {
         let settings = Settings::load().unwrap_or_default();
         let config = EngineConfig::from_settings(&settings);
-        let engine = InputMethodEngine::with_config(config);
         Self {
-            engine,
+            engine: InputMethodEngine::with_config(config),
             settings,
             preedit: PreeditCache::default(),
             candidates: CandidateCache::default(),
@@ -147,15 +158,31 @@ impl KarukanEngine {
         for action in actions {
             match action {
                 EngineAction::UpdatePreedit(preedit) => {
-                    let caret_chars = preedit.caret();
-                    let caret_bytes = preedit
-                        .text()
-                        .char_indices()
-                        .nth(caret_chars)
-                        .map(|(i, _)| i)
-                        .unwrap_or(preedit.text().len());
-                    self.preedit.caret_bytes = caret_bytes as u32;
-                    self.preedit.text = CString::new(preedit.text()).unwrap_or_default();
+                    let text = preedit.text();
+                    // The engine addresses caret and attributes in characters;
+                    // the C side works in bytes. Map both through char_indices.
+                    let byte_at = |char_pos: usize| {
+                        text.char_indices()
+                            .nth(char_pos)
+                            .map(|(i, _)| i)
+                            .unwrap_or(text.len())
+                    };
+                    self.preedit.caret_bytes = byte_at(preedit.caret()) as u32;
+                    self.preedit.attrs = preedit
+                        .attributes()
+                        .iter()
+                        .map(|attr| PreeditAttrCache {
+                            attr_type: match attr.attr_type {
+                                AttributeType::Underline => 0,
+                                AttributeType::UnderlineDouble => 1,
+                                AttributeType::Highlight => 2,
+                                AttributeType::Reverse => 3,
+                            },
+                            start_bytes: byte_at(attr.start) as u32,
+                            end_bytes: byte_at(attr.end) as u32,
+                        })
+                        .collect();
+                    self.preedit.text = CString::new(text).unwrap_or_default();
                     self.preedit.dirty = true;
                 }
                 EngineAction::ShowCandidates(candidates) => {
