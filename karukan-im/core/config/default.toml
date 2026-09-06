@@ -111,6 +111,7 @@ formats = [
     "{YEAR}年{MONTH:bare}月{DATE:bare}日",
     "{ERA}{ERA_YEAR}年{MONTH:bare}月{DATE:bare}日",
     "{MONTH:bare}月{DATE:bare}日",
+    "{MONTH:bare}月{DATE:bare}日({WEEKDAY})",
     "{WEEKDAY}曜日",
 ]
 
