@@ -115,15 +115,18 @@ formats = [
     "{WEEKDAY}曜日",
 ]
 
-# フレーズは読み単位で追加・上書きでき、既定の他フレーズは残る。
-# formats を書いたフレーズはそれだけを使う。formats = [] で無効化。
-[date.phrase]
-"きょう" = { offset_days = 0 }
-"きのう" = { offset_days = -1 }
-"おととい" = { offset_days = -2 }
-"あした" = { offset_days = 1 }
-"あす" = { offset_days = 1 }
-"あさって" = { offset_days = 2 }
-"しあさって" = { offset_days = 3 }
-"いま" = { formats = ["{HOUR}:{MINUTE}", "{HOUR:bare}時{MINUTE:bare}分", "{AMPM}{HOUR12}時{MINUTE:bare}分"] }
-"にちじ" = { formats = ["{YEAR}/{MONTH}/{DATE} {HOUR}:{MINUTE}", "{YEAR}年{MONTH:bare}月{DATE:bare}日{HOUR:bare}時{MINUTE:bare}分"] }
+# フレーズ一覧。formats を書いたフレーズはそれだけを使い、書かないフレーズは
+# 上の共有フォーマットを使う（offset_days は省略すると 0）。
+# ユーザー設定に phrases を書くとこの一覧は丸ごと置き換わるので、
+# 増やしたいときはこの一覧をコピーして編集する。
+phrases = [
+    { reading = "きょう", offset_days = 0 },
+    { reading = "きのう", offset_days = -1 },
+    { reading = "おととい", offset_days = -2 },
+    { reading = "あした", offset_days = 1 },
+    { reading = "あす", offset_days = 1 },
+    { reading = "あさって", offset_days = 2 },
+    { reading = "しあさって", offset_days = 3 },
+    { reading = "いま", formats = ["{HOUR}:{MINUTE}", "{HOUR:bare}時{MINUTE:bare}分", "{AMPM}{HOUR12}時{MINUTE:bare}分"] },
+    { reading = "にちじ", formats = ["{YEAR}/{MONTH}/{DATE} {HOUR}:{MINUTE}", "{YEAR}年{MONTH:bare}月{DATE:bare}日{HOUR:bare}時{MINUTE:bare}分"] },
+]

@@ -392,39 +392,34 @@ max_surface_chars = 10
     }
 
     #[test]
-    fn test_date_phrase_override_keeps_other_defaults() {
-        // Phrases merge per-reading: きょう takes the user's formats, every
-        // other shipped phrase survives untouched. A one-line phrase rides
-        // the shared [date] formats, and formats = [] disables a phrase.
+    fn test_date_phrases_replace_the_shipped_list() {
+        // phrases is an array: writing one replaces the shipped list
+        // wholesale (extend by copying default.toml's list). offset_days
+        // defaults to 0, and the shared [date] formats stay untouched.
         let mut file = NamedTempFile::new().unwrap();
         writeln!(
             file,
             r#"
-[date.phrase]
-"きょう" = {{ formats = ["{{YEAR}}年"] }}
-"らいしゅう" = {{ offset_days = 7 }}
-"にちじ" = {{ formats = [] }}
+[date]
+phrases = [
+    {{ reading = "らいしゅう", offset_days = 7 }},
+    {{ reading = "きょう", formats = ["{{YEAR}}年"] }},
+]
 "#
         )
         .unwrap();
 
         let settings = Settings::load_from(file.path()).unwrap();
-        let kyou = &settings.date.phrase["きょう"];
+        let phrases = &settings.date.phrases;
+        assert_eq!(phrases.len(), 2);
+        assert_eq!(phrases[0].reading, "らいしゅう");
+        assert_eq!(phrases[0].offset_days, 7);
+        assert!(phrases[0].formats.is_none());
+        assert_eq!(phrases[1].offset_days, 0);
         assert_eq!(
-            kyou.formats.as_deref(),
+            phrases[1].formats.as_deref(),
             Some(["{YEAR}年".to_string()].as_slice())
         );
-        assert_eq!(kyou.offset_days, 0);
-        let raishuu = &settings.date.phrase["らいしゅう"];
-        assert_eq!(raishuu.offset_days, 7);
-        assert!(raishuu.formats.is_none());
-        assert_eq!(
-            settings.date.phrase["にちじ"].formats.as_deref(),
-            Some([].as_slice())
-        );
-        // Untouched shipped phrases and the shared formats stay.
-        assert_eq!(settings.date.phrase["あした"].offset_days, 1);
-        assert!(settings.date.phrase.contains_key("いま"));
         assert!(!settings.date.formats.is_empty());
     }
 

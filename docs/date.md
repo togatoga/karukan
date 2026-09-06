@@ -13,7 +13,7 @@
 
 ## フレーズの登録（`[date]`）
 
-フレーズは読みをキーに、**今日から±何日か**（`offset_days`）と**出力形式**（`formats`、複数可）を持ちます。`formats` を書かないフレーズは共有の `[date] formats` を使うので、日付フレーズは1行で済みます。
+フレーズは**読み**（`reading`）、**今日から±何日か**（`offset_days`、省略時は 0）、**出力形式**（`formats`、複数可）を持ちます。`formats` を書かないフレーズは共有の `[date] formats` を使うので、日付フレーズは1行で済みます。
 
 ```toml
 [date]
@@ -21,29 +21,17 @@ formats = [               # formats を持たないフレーズが共通で使�
     "{YEAR}/{MONTH}/{DATE}",
     "{YEAR}年{MONTH:bare}月{DATE:bare}日",
 ]
-
-[date.phrase]
-"きょう" = { offset_days = 0 }
-"あした" = { offset_days = 1 }
-"いま" = { formats = ["{HOUR}:{MINUTE}"] }   # 自前の formats を持つフレーズ
+phrases = [
+    { reading = "きょう", offset_days = 0 },
+    { reading = "あした", offset_days = 1 },
+    { reading = "らいしゅう", offset_days = 7 },
+    { reading = "いま", formats = ["{HOUR}:{MINUTE}"] },   # 自前の formats を持つフレーズ
+]
 ```
 
 既定で きょう・きのう・おととい・あした・あす・あさって・しあさって（日付）、いま（時刻）、にちじ（日時）が登録されています（正確な既定値は [`config/default.toml`](../karukan-im/core/config/default.toml) 参照）。
 
-フレーズは読み単位でマージされます。1フレーズだけ書き足したり上書きしたりしても、他の既定フレーズはそのまま残ります。
-
-```toml
-[date.phrase]
-"らいしゅう" = { offset_days = 7 }          # 独自フレーズの追加（offset_days 省略時は 0）
-"しあさって" = { formats = [] }             # 既定フレーズの無効化
-```
-
-長い formats を持つフレーズはセクション形式でも書けます（同じ意味です）。
-
-```toml
-[date.phrase."いま"]
-formats = ["{HOUR}:{MINUTE}", "{HOUR:bare}時{MINUTE:bare}分"]
-```
+`phrases` を書くと既定の一覧は**丸ごと置き換わります**。フレーズを増やしたり一部だけ変えたりするときは、default.toml の一覧をコピーして編集してください。使わないフレーズは行ごと消せば無効になります。
 
 ## 出力形式（フォーマット）
 

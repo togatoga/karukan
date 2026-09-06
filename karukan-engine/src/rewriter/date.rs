@@ -9,8 +9,6 @@
 //! referencing an unknown token, or an era before the table starts, is
 //! skipped rather than shown broken. User-facing doc: `docs/date.md`.
 
-use std::collections::BTreeMap;
-
 use chrono::{Datelike, NaiveDate, NaiveDateTime, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -22,18 +20,21 @@ use super::{RewriteOutput, Rewriter};
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DateConfig {
     /// Formats shared by every phrase that doesn't bring its own, so the
-    /// date phrases are one `offset_days` line each.
+    /// date phrases are one line each.
     #[serde(default)]
     pub formats: Vec<String>,
-    /// Phrases keyed by reading (`[date.phrase."きょう"]`).
+    /// The phrase list. An array, so a user config writing `phrases`
+    /// replaces the shipped list wholesale; the first entry wins on a
+    /// duplicated reading.
     #[serde(default)]
-    pub phrase: BTreeMap<String, DatePhrase>,
+    pub phrases: Vec<DatePhrase>,
 }
 
-/// One phrase: a day offset from today, and optionally its own formats
-/// (omitted → the shared `[date]` list; `[]` disables the phrase).
+/// One phrase: a reading, a day offset from today, and optionally its own
+/// formats (omitted → the shared `[date]` list).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatePhrase {
+    pub reading: String,
     /// Days added to today; negative for the past.
     #[serde(default)]
     pub offset_days: i64,
@@ -153,7 +154,7 @@ impl DateRewriter {
     /// Candidates for `reading` as of `now`; the clock is a parameter so
     /// tests can pin it.
     fn candidates_at(&self, reading: &str, now: NaiveDateTime) -> Vec<RewriteOutput> {
-        let Some(phrase) = self.config.phrase.get(reading) else {
+        let Some(phrase) = self.config.phrases.iter().find(|p| p.reading == reading) else {
             return Vec::new();
         };
         let Some(at) =
@@ -200,17 +201,13 @@ mod tests {
     }
 
     fn rewriter(reading: &str, offset_days: i64, formats: &[&str]) -> DateRewriter {
-        let mut phrase = BTreeMap::new();
-        phrase.insert(
-            reading.to_string(),
-            DatePhrase {
-                offset_days,
-                formats: Some(formats.iter().map(|f| f.to_string()).collect()),
-            },
-        );
         DateRewriter::new(DateConfig {
             formats: Vec::new(),
-            phrase,
+            phrases: vec![DatePhrase {
+                reading: reading.to_string(),
+                offset_days,
+                formats: Some(formats.iter().map(|f| f.to_string()).collect()),
+            }],
         })
     }
 
@@ -345,32 +342,24 @@ mod tests {
 
     #[test]
     fn phrase_without_formats_uses_the_shared_list() {
-        let mut phrase = BTreeMap::new();
-        phrase.insert(
-            "あした".to_string(),
-            DatePhrase {
-                offset_days: 1,
-                formats: None,
-            },
-        );
         let r = DateRewriter::new(DateConfig {
             formats: vec!["{YEAR}/{MONTH}/{DATE}".to_string()],
-            phrase,
+            phrases: vec![DatePhrase {
+                reading: "あした".to_string(),
+                offset_days: 1,
+                formats: None,
+            }],
         });
         let out = r.candidates_at("あした", at(2026, 9, 5, 0, 0));
         assert_eq!(texts(&out), vec!["2026/09/06"]);
-        // An explicit empty list disables the phrase instead of falling back.
-        let mut phrase = BTreeMap::new();
-        phrase.insert(
-            "あした".to_string(),
-            DatePhrase {
-                offset_days: 1,
-                formats: Some(Vec::new()),
-            },
-        );
+        // An explicit empty list renders nothing instead of falling back.
         let r = DateRewriter::new(DateConfig {
             formats: vec!["{YEAR}".to_string()],
-            phrase,
+            phrases: vec![DatePhrase {
+                reading: "あした".to_string(),
+                offset_days: 1,
+                formats: Some(Vec::new()),
+            }],
         });
         assert!(r.candidates_at("あした", at(2026, 9, 5, 0, 0)).is_empty());
     }

@@ -34,18 +34,14 @@ fn slash_date(text: &str) -> bool {
 
 #[test]
 fn registered_phrase_surfaces_date_candidates() {
-    let mut phrase = std::collections::BTreeMap::new();
-    phrase.insert(
-        "きょう".to_string(),
-        DatePhrase {
-            offset_days: 0,
-            formats: Some(vec!["{YEAR}/{MONTH}/{DATE}".to_string()]),
-        },
-    );
     let mut engine = date_engine(
         DateConfig {
             formats: Vec::new(),
-            phrase,
+            phrases: vec![DatePhrase {
+                reading: "きょう".to_string(),
+                offset_days: 0,
+                formats: Some(vec!["{YEAR}/{MONTH}/{DATE}".to_string()]),
+            }],
         },
         "きょう",
     );
@@ -73,7 +69,7 @@ fn default_settings_carry_the_shipped_phrases() {
         "にちじ",
     ] {
         assert!(
-            settings.date.phrase.contains_key(reading),
+            settings.date.phrases.iter().any(|p| p.reading == reading),
             "default.toml lacks date phrase {reading}"
         );
     }
