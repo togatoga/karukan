@@ -3,12 +3,15 @@
 //! Manages user-configurable settings for the IME.
 //! Default values are defined in `config/default.toml`.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use directories::ProjectDirs;
-use karukan_engine::{BracketStyle, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules};
+use karukan_engine::{
+    BracketStyle, ModelSource, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -28,6 +31,34 @@ pub struct Settings {
     pub symbol: SymbolSettings,
     /// The width kana input comes out at, per character group
     pub width: WidthRules,
+    /// Conversion models, keyed by the name `model` / `light_model` refer to
+    pub models: BTreeMap<String, ModelDef>,
+}
+
+/// One `[models.<key>]` entry: a HuggingFace file (`repo` + `filename`) or a
+/// local GGUF (`path`), exactly one of the two.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelDef {
+    pub repo: Option<String>,
+    pub filename: Option<String>,
+    pub path: Option<String>,
+}
+
+impl ModelDef {
+    fn source(&self) -> Result<ModelSource> {
+        match (&self.repo, &self.filename, &self.path) {
+            (Some(repo), Some(filename), None) => Ok(ModelSource::Hf {
+                repo: repo.clone(),
+                filename: filename.clone(),
+            }),
+            (None, None, Some(path)) => Ok(ModelSource::Path(PathBuf::from(path))),
+            (None, None, None) => anyhow::bail!("set either repo + filename or path"),
+            (Some(_), None, None) | (None, Some(_), None) => {
+                anyhow::bail!("repo and filename must be set together")
+            }
+            _ => anyhow::bail!("repo + filename and path are mutually exclusive"),
+        }
+    }
 }
 
 /// The space the Space key inputs while typing kana. Alphabet and emoji
@@ -126,10 +157,10 @@ pub struct ConversionSettings {
     pub chunk_alphabets: usize,
     /// Path to dictionary binary file (optional, defaults to data_dir/dict.bin)
     pub dict_path: Option<String>,
-    /// Model variant id (optional, defaults to registry default)
-    pub model: Option<String>,
-    /// Beam search model variant id (used on Space conversion, default model if unset)
-    pub light_model: Option<String>,
+    /// Main model: a key in `[models]`
+    pub model: String,
+    /// Beam search model (Space conversion, adaptive downgrade): a key in `[models]`
+    pub light_model: String,
     /// Chars the beam covers, snapped to chunk boundaries: the trailing
     /// Japanese chunks fitting this budget, always at least the last one.
     /// A digit/symbol chunk and a manual break both stop the span.
@@ -183,9 +214,21 @@ fn merge_toml(base: &mut toml::Value, overlay: &toml::Value) {
 }
 
 /// Parse user TOML content merged on top of default.toml.
+///
+/// `[models]` merges per key, but each entry replaces whole: a user entry
+/// with only `path` must not inherit `repo`/`filename` from the default
+/// entry under the same key.
 fn parse_with_defaults(user_content: &str) -> Result<Settings> {
     let mut base: toml::Value = toml::from_str(DEFAULT_CONFIG_TOML)?;
-    let user: toml::Value = toml::from_str(user_content)?;
+    let mut user: toml::Value = toml::from_str(user_content)?;
+    if let (toml::Value::Table(base_table), toml::Value::Table(user_table)) = (&mut base, &mut user)
+        && let Some(toml::Value::Table(user_models)) = user_table.remove("models")
+        && let Some(toml::Value::Table(base_models)) = base_table.get_mut("models")
+    {
+        for (key, value) in user_models {
+            base_models.insert(key, value);
+        }
+    }
     merge_toml(&mut base, &user);
     let settings: Settings = base.try_into()?;
     Ok(settings)
@@ -197,6 +240,19 @@ fn project_dirs() -> Option<ProjectDirs> {
 }
 
 impl Settings {
+    /// Resolve a `[models]` key into a [`ModelSource`].
+    pub fn model_source(&self, key: &str) -> Result<ModelSource> {
+        let def = self.models.get(key).ok_or_else(|| {
+            let known: Vec<&str> = self.models.keys().map(String::as_str).collect();
+            anyhow::anyhow!(
+                "model '{}' is not defined in [models] (defined: {})",
+                key,
+                known.join(", ")
+            )
+        })?;
+        def.source().with_context(|| format!("[models.{key}]"))
+    }
+
     /// Get the data directory path
     pub fn data_dir() -> Option<PathBuf> {
         project_dirs().map(|dirs| dirs.data_dir().to_path_buf())
@@ -444,6 +500,99 @@ num_candidates = 3
         // Should use default for unspecified values
         assert!(settings.conversion.use_context);
         assert_eq!(settings.conversion.context_chars, 10);
+    }
+
+    #[test]
+    fn test_default_models_resolve() {
+        let settings = Settings::default();
+        assert_eq!(settings.conversion.model, "jinen-v2-small-q5");
+        assert_eq!(settings.conversion.light_model, "jinen-v2-xsmall-q5");
+        let source = settings.model_source(&settings.conversion.model).unwrap();
+        assert_eq!(
+            source,
+            ModelSource::Hf {
+                repo: "togatogah/jinen-v2-small.gguf".to_string(),
+                filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
+            }
+        );
+        for key in settings.models.keys() {
+            settings.model_source(key).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_user_model_entry_extends_defaults() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[conversion]
+model = "my-model"
+
+[models.my-model]
+path = "/home/user/models/my.gguf"
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(
+            settings.model_source("my-model").unwrap(),
+            ModelSource::Path(PathBuf::from("/home/user/models/my.gguf"))
+        );
+        // The default entries survive next to the user's.
+        settings.model_source("jinen-v2-xsmall-q5").unwrap();
+    }
+
+    #[test]
+    fn test_user_model_entry_replaces_default_whole() {
+        // Overriding a default key with a path-only entry must not inherit
+        // the default's repo/filename (that would fail validation).
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[models.jinen-v2-small-q5]
+path = "/home/user/models/my.gguf"
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(
+            settings.model_source("jinen-v2-small-q5").unwrap(),
+            ModelSource::Path(PathBuf::from("/home/user/models/my.gguf"))
+        );
+    }
+
+    #[test]
+    fn test_unknown_model_key_lists_defined_keys() {
+        let settings = Settings::default();
+        let err = settings.model_source("nope").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("'nope'"), "{msg}");
+        assert!(msg.contains("jinen-v2-small-q5"), "{msg}");
+    }
+
+    #[test]
+    fn test_model_entry_requires_exactly_one_source() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[models.both]
+repo = "owner/repo"
+filename = "m.gguf"
+path = "/tmp/m.gguf"
+
+[models.neither]
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert!(settings.model_source("both").is_err());
+        assert!(settings.model_source("neither").is_err());
     }
 
     #[test]

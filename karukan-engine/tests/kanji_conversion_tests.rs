@@ -46,14 +46,14 @@ mod unit_tests {
 
 mod llamacpp_tests {
     use super::*;
-    use karukan_engine::kanji::{
-        LlamaCppModel, build_jinen_prompt, get_path_by_id, get_tokenizer_path_by_id, registry,
-    };
+    use karukan_engine::kanji::{LlamaCppModel, ModelSource, build_jinen_prompt};
 
     fn load_model() -> Option<LlamaCppModel> {
-        let reg = registry();
-        let path = get_path_by_id(&reg.default_model).ok()?;
-        let tok_path = get_tokenizer_path_by_id(&reg.default_model).ok()?;
+        let source = ModelSource::Hf {
+            repo: "togatogah/jinen-v2-small.gguf".to_string(),
+            filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
+        };
+        let (path, tok_path) = source.resolve().ok()?;
         LlamaCppModel::from_file(&path, &tok_path).ok()
     }
 

@@ -1,10 +1,15 @@
 //! Error types for kanji conversion
 
+use std::path::PathBuf;
+
 /// Errors that can occur during kanji conversion operations.
 #[derive(Debug, thiserror::Error)]
 pub enum KanjiError {
-    #[error("unknown model variant: '{0}'")]
-    UnknownVariant(String),
+    #[error("model file not found: {0}")]
+    ModelNotFound(PathBuf),
+
+    #[error("tokenizer.json not found: place tokenizer.json next to the GGUF (expected {0})")]
+    TokenizerNotFound(PathBuf),
 
     #[error("download failed")]
     Download(#[source] Box<dyn std::error::Error + Send + Sync>),

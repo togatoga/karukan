@@ -89,25 +89,6 @@ impl AnnotatedCandidate {
     }
 }
 
-/// Resolve a model variant id from settings.
-///
-/// - `model` is None or empty → default variant from registry
-/// - `model` matches a known variant id → that variant
-/// - otherwise → error (unknown variant)
-pub fn resolve_variant_id(model: Option<&str>) -> anyhow::Result<String> {
-    let reg = karukan_engine::kanji::registry();
-    match model {
-        Some(id) if !id.is_empty() => {
-            if reg.find_variant(id).is_some() {
-                Ok(id.to_string())
-            } else {
-                anyhow::bail!("unknown model variant: {}", id)
-            }
-        }
-        _ => Ok(reg.default_model.clone()),
-    }
-}
-
 /// Keep at most the last `n` characters of `s`.
 fn keep_last_chars(s: &str, n: usize) -> String {
     let char_count = s.chars().count();

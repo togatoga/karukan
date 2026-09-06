@@ -9,6 +9,7 @@ homepage.workspace = true
 
 [dependencies]
 karukan-engine.workspace = true
+karukan-im.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

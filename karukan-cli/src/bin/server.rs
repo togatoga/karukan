@@ -8,10 +8,8 @@ use axum::{
 use clap::Parser;
 use karukan_engine::RomajiConverter;
 use karukan_engine::kana::hiragana_to_katakana;
-use karukan_engine::kanji::{
-    LlamaCppModel, LlamaToken, build_jinen_prompt, clean_model_output, get_tokenizer_path,
-    get_variant_path, registry,
-};
+use karukan_engine::kanji::{LlamaCppModel, LlamaToken, build_jinen_prompt, clean_model_output};
+use karukan_im::config::Settings;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -54,8 +52,10 @@ struct AppState {
     converter: Arc<RomajiConverter>,
     /// Accumulated raw input for incremental conversion
     romaji_input: Arc<RwLock<String>>,
-    /// llama.cpp models (keyed by model id, e.g., "llamacpp-jawiki-unigram-12k-q5")
+    /// llama.cpp models keyed by `[models]` key (e.g. "jinen-v2-small-q5")
     llamacpp_models: Arc<RwLock<HashMap<String, LlamaCppModelInfo>>>,
+    /// The config's `[conversion] model` key, preferred as the default
+    default_model: Arc<String>,
     /// Debug mode enabled (--debug flag)
     debug_mode: bool,
 }
@@ -177,70 +177,47 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Try to load llama.cpp models from HuggingFace (driven by models.toml)
+    // Load every model defined in the config's [models] table.
+    let settings = Settings::load().expect("failed to load config.toml");
     let mut llamacpp_models = HashMap::new();
-    let reg = registry();
 
-    for (family, variant) in reg.iter_variants() {
-        let model_id = &variant.id;
-        let display_name = &variant.display_name;
-
-        tracing::info!(
-            "Downloading llama.cpp model '{}' from HuggingFace...",
-            model_id,
-        );
-        match get_variant_path(family, variant) {
-            Ok(path) => {
-                let path_str = path.to_string_lossy().to_string();
+    for model_key in settings.models.keys() {
+        let source = match settings.model_source(model_key) {
+            Ok(source) => source,
+            Err(e) => {
+                tracing::warn!("Skipping model '{}': {:#}", model_key, e);
+                continue;
+            }
+        };
+        tracing::info!("Resolving llama.cpp model '{}'...", model_key);
+        match source.resolve() {
+            Ok((path, tok_path)) => {
                 tracing::info!(
-                    "Loading llama.cpp model '{}' from {}...",
-                    model_id,
-                    path_str
-                );
-                let tok_path = match get_tokenizer_path(family) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        tracing::warn!("Failed to download tokenizer for '{}': {}", model_id, e);
-                        continue;
-                    }
-                };
-                tracing::info!(
-                    "Using external tokenizer for '{}': {}",
-                    model_id,
+                    "Loading llama.cpp model '{}' from {} (tokenizer: {})...",
+                    model_key,
+                    path.display(),
                     tok_path.display()
                 );
-                let load_result = if let Some(ref pre_tok) = family.pre_tokenizer_override {
-                    tracing::info!(
-                        "Model '{}' requires pre-tokenizer override: '{}'",
-                        model_id,
-                        pre_tok
-                    );
-                    LlamaCppModel::from_file_with_pre_tokenizer_override(
-                        &path_str, &tok_path, pre_tok,
-                    )
-                } else {
-                    LlamaCppModel::from_file(&path_str, &tok_path)
-                };
-                match load_result {
+                match LlamaCppModel::from_file(&path, &tok_path) {
                     Ok(model) => {
-                        tracing::info!("llama.cpp model '{}' loaded successfully", model_id);
+                        tracing::info!("llama.cpp model '{}' loaded successfully", model_key);
                         llamacpp_models.insert(
-                            model_id.to_string(),
+                            model_key.clone(),
                             LlamaCppModelInfo {
                                 model: Arc::new(model),
-                                display_name: display_name.to_string(),
+                                display_name: source.display_name(),
                             },
                         );
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to load llama.cpp model '{}': {}", model_id, e);
+                        tracing::warn!("Failed to load llama.cpp model '{}': {}", model_key, e);
                     }
                 }
             }
             Err(e) => {
                 tracing::warn!(
-                    "Failed to download llama.cpp model '{}': {}. Set HF_TOKEN for private repos.",
-                    model_id,
+                    "Failed to resolve llama.cpp model '{}': {}. Set HF_TOKEN for private repos.",
+                    model_key,
                     e
                 );
             }
@@ -261,6 +238,7 @@ async fn main() {
         converter: Arc::new(RomajiConverter::new()),
         romaji_input: Arc::new(RwLock::new(String::new())),
         llamacpp_models: Arc::new(RwLock::new(llamacpp_models)),
+        default_model: Arc::new(settings.conversion.model.clone()),
         debug_mode: args.debug,
     };
 
@@ -337,11 +315,14 @@ async fn health_handler() -> impl IntoResponse {
 
 /// Resolve the default model id from the loaded models.
 ///
-/// Prefers the registry default if loaded, otherwise falls back to any loaded model.
-fn resolve_default_model_id(models: &HashMap<String, LlamaCppModelInfo>) -> String {
-    let default_id = &registry().default_model;
+/// Prefers the config's `[conversion] model` if loaded, otherwise falls
+/// back to any loaded model.
+fn resolve_default_model_id(
+    models: &HashMap<String, LlamaCppModelInfo>,
+    default_id: &str,
+) -> String {
     if models.contains_key(default_id) {
-        default_id.clone()
+        default_id.to_string()
     } else {
         models.keys().next().cloned().unwrap_or_default()
     }
@@ -362,7 +343,7 @@ async fn models_handler(State(state): State<AppState>) -> impl IntoResponse {
     // Sort models by name
     models.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let default_model = resolve_default_model_id(&llamacpp_models);
+    let default_model = resolve_default_model_id(&llamacpp_models, &state.default_model);
 
     Json(ModelsResponse {
         models,
@@ -381,7 +362,7 @@ async fn kanji_convert_handler(
         model_str.clone()
     } else {
         let llamacpp_models = state.llamacpp_models.read().expect("lock poisoned");
-        let default_id = resolve_default_model_id(&llamacpp_models);
+        let default_id = resolve_default_model_id(&llamacpp_models, &state.default_model);
         if default_id.is_empty() {
             return Err((
                 StatusCode::SERVICE_UNAVAILABLE,

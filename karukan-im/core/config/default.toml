@@ -37,15 +37,45 @@ beam_chars = 30
 beam_width = 3
 # メインモデルの推論がこの時間(ms)を超えたらlight_modelに自動切替(0で無効)
 max_latency_ms = 100
-# Model variant id or GGUF path (uses registry default if unset)
+# メインモデル（[models] で定義したキーを指定する）
 model = "jinen-v2-small-q5"
-# Beam search model for Space conversion (uses default model only if unset)
+# 軽量モデル（ビームサーチ・自動切替用。[models] のキーを指定する）
 light_model = "jinen-v2-xsmall-q5"
 # 推論スレッド数（0 = 全コア使用）
 n_threads = 4
 # 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
 live_conversion = true
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
+
+# 変換モデルの定義。model / light_model はここのキーを参照する。
+# 各エントリは repo + filename（Hugging Face。初回起動時に自動ダウンロード）か
+# path（ローカルの GGUF ファイル）のどちらか一方を指定する。
+# tokenizer.json は repo なら同じリポジトリから、path なら GGUF と同じ
+# ディレクトリから読み込む。
+#
+# 自作モデルの追加例:
+# [models.my-model]
+# path = "/home/user/models/my-model.gguf"
+
+[models.jinen-v2-small-q5]
+repo = "togatogah/jinen-v2-small.gguf"
+filename = "jinen-v2-small-Q5_K_M.gguf"
+
+[models.jinen-v2-xsmall-q5]
+repo = "togatogah/jinen-v2-xsmall.gguf"
+filename = "jinen-v2-xsmall-Q5_K_M.gguf"
+
+[models."jinen-v1.1-beta-q5"]
+repo = "togatogah/jinen-v1.1-beta.gguf"
+filename = "jinen-v1.1-beta-Q5_K_M.gguf"
+
+[models.jinen-v1-small-q5]
+repo = "togatogah/jinen-v1-small.gguf"
+filename = "jinen-v1-small-Q5_K_M.gguf"
+
+[models.jinen-v1-xsmall-q5]
+repo = "togatogah/jinen-v1-xsmall.gguf"
+filename = "jinen-v1-xsmall-Q5_K_M.gguf"
 
 [learning]
 # 変換学習を有効にする

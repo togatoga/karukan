@@ -48,20 +48,6 @@ const KV_HEADROOM_CELLS: usize = 64;
 /// Spare batch slots beyond the computed prompt / sequence rows.
 const BATCH_HEADROOM: usize = 8;
 
-/// Pack `s` into the fixed-size buffer llama.cpp reads override values out
-/// of: a NUL-terminated C string in a 128-byte array (`val_str` in
-/// `llama_model_kv_override`). The array starts zeroed, so the bytes left
-/// after `s` are the terminator; input longer than the buffer is truncated
-/// one byte short so the terminator always survives.
-fn kv_override_str(s: &str) -> [std::os::raw::c_char; 128] {
-    let mut buf = [0; 128];
-    let writable = buf.len() - 1;
-    for (dst, &byte) in buf.iter_mut().zip(s.as_bytes()).take(writable) {
-        *dst = byte as std::os::raw::c_char;
-    }
-    buf
-}
-
 /// Wrap any llama.cpp error as [`KanjiError::Inference`].
 fn inference_err(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> KanjiError {
     KanjiError::Inference(e.into())
@@ -137,37 +123,6 @@ impl LlamaCppModel {
     /// GPT-2 models use CPU only (Metal has issues with GPT-2).
     pub fn from_file<P: AsRef<Path>, T: AsRef<Path>>(path: P, tokenizer_json: T) -> Result<Self> {
         Self::from_file_with_n_ctx(path, tokenizer_json, 256)
-    }
-
-    /// Load a GGUF model with a pre-tokenizer type override.
-    ///
-    /// Some models use custom pre-tokenizer types (e.g., `gpt2-small-japanese-char`)
-    /// that llama.cpp doesn't recognize. This method overrides the `tokenizer.ggml.pre`
-    /// metadata key to a compatible type before loading.
-    pub fn from_file_with_pre_tokenizer_override<P: AsRef<Path>, T: AsRef<Path>>(
-        path: P,
-        tokenizer_json: T,
-        pre_tokenizer: &str,
-    ) -> Result<Self> {
-        use llama_cpp_2::model::params::kv_overrides::ParamOverrideValue;
-        use std::ffi::CString;
-        use std::pin::pin;
-
-        ensure_model_file_exists(path.as_ref())?;
-        let backend = get_backend()?;
-
-        let mut params = pin!(LlamaModelParams::default().with_n_gpu_layers(0));
-
-        let key =
-            CString::new("tokenizer.ggml.pre").map_err(|e| KanjiError::ModelLoad(e.into()))?;
-        params.as_mut().append_kv_override(
-            &key,
-            ParamOverrideValue::Str(kv_override_str(pre_tokenizer)),
-        );
-
-        let model = LlamaModel::load_from_file(backend, path.as_ref(), &params)
-            .map_err(|e| KanjiError::ModelLoad(e.into()))?;
-        Self::finish(model, tokenizer_json, 256)
     }
 
     /// Load a GGUF model with explicit context window size
@@ -970,16 +925,16 @@ mod byte_fallback_token_tests {
 #[cfg(test)]
 mod beam_search_tests {
     use super::*;
-    use crate::kanji::build_jinen_prompt;
-    use crate::kanji::hf_download::{get_path_by_id, get_tokenizer_path_by_id};
-    use crate::kanji::model_config::registry;
+    use crate::kanji::{ModelSource, build_jinen_prompt};
 
-    /// Load the default registry model, or `None` when it isn't available
-    /// locally (the tests are skipped rather than failing offline).
+    /// Load a real model, or `None` when it isn't available locally (the
+    /// tests are skipped rather than failing offline).
     fn load_model() -> Option<LlamaCppModel> {
-        let reg = registry();
-        let path = get_path_by_id(&reg.default_model).ok()?;
-        let tok_path = get_tokenizer_path_by_id(&reg.default_model).ok()?;
+        let source = ModelSource::Hf {
+            repo: "togatogah/jinen-v2-small.gguf".to_string(),
+            filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
+        };
+        let (path, tok_path) = source.resolve().ok()?;
         LlamaCppModel::from_file(&path, &tok_path).ok()
     }
 
@@ -1065,24 +1020,5 @@ mod beam_search_tests {
                 .expect("oversized beam must be clamped, not abort")
                 .is_empty()
         );
-    }
-}
-
-#[cfg(test)]
-mod kv_override_tests {
-    use super::kv_override_str;
-
-    #[test]
-    fn packs_a_short_name_and_leaves_the_rest_zeroed() {
-        let buf = kv_override_str("gpt2");
-        assert_eq!(&buf[..4], b"gpt2".map(|b| b as std::os::raw::c_char));
-        assert!(buf[4..].iter().all(|&b| b == 0), "must stay NUL-filled");
-    }
-
-    #[test]
-    fn truncation_keeps_the_terminator() {
-        let buf = kv_override_str(&"x".repeat(200));
-        assert_eq!(buf[126], b'x' as std::os::raw::c_char);
-        assert_eq!(buf[127], 0, "last byte must remain the NUL terminator");
     }
 }

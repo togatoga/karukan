@@ -43,10 +43,14 @@ assert_eq!(result.pending, ""); // まだ確定していないローマ字末尾
 ### Kana-Kanji Conversion
 
 ```rust
-use karukan_engine::{Backend, KanaKanjiConverter};
+use karukan_engine::{Backend, KanaKanjiConverter, ModelSource};
 
 // モデルの読み込み（初回使用時にHuggingFaceからダウンロード）
-let backend = Backend::from_variant_id("jinen-v2-small-q5")?;
+let source = ModelSource::Hf {
+    repo: "togatogah/jinen-v2-small.gguf".to_string(),
+    filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
+};
+let backend = Backend::from_source(&source)?;
 let converter = KanaKanjiConverter::new(backend)?;
 
 let candidates = converter.convert("かんじ", "", 3)?;
@@ -100,9 +104,9 @@ let results = dict.common_prefix_search("きょうと");
 
 ## Models
 
-モデルは`models.toml`で定義されています。`Backend::from_variant_id()`で指定すると自動的にダウンロードされます。
+karukan-engine 自体はモデルの一覧を持ちません。`ModelSource`（HuggingFace の repo + filename、またはローカルの GGUF パス）を `Backend::from_source()` に渡すと自動的にダウンロード・読み込みされます。IME としての既定モデルは [`karukan-im/core/config/default.toml`](../karukan-im/core/config/default.toml) の `[models]` に定義されています。
 
-| バリアントID | ベースモデル | パラメータ数 | 量子化 | Accuracy@1 (NFKC) | デフォルト |
+| モデルキー | ベースモデル | パラメータ数 | 量子化 | Accuracy@1 (NFKC) | デフォルト |
 |------------|-----------|-----------|--------------|------:|---------|
 | [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | Yes |
 | [`jinen-v2-xsmall-q5`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | Q5_K_M | 79.0% | |

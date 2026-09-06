@@ -1,17 +1,20 @@
 //! Shared helpers for the karukan-cli binaries.
 
 use anyhow::{Context, Result};
-use karukan_engine::kanji::{LlamaCppModel, get_path_by_id, get_tokenizer_path_by_id};
+use karukan_engine::kanji::LlamaCppModel;
+use karukan_im::config::Settings;
 use std::path::Path;
 
-/// Load a model from a direct GGUF file path or by registry variant id.
+/// Load a model from a direct GGUF file path or by `[models]` key from the
+/// user's config.toml (falling back to the built-in defaults).
 ///
 /// When `gguf` is `Some`, loads that file directly (`tokenizer_json` is
-/// required); otherwise downloads/loads the registry variant `model_id`.
+/// required); otherwise resolves `model_key` through the config's `[models]`
+/// table.
 pub fn load_llama_model(
     gguf: Option<&Path>,
     tokenizer_json: Option<&Path>,
-    model_id: &str,
+    model_key: &str,
     n_ctx: u32,
 ) -> Result<LlamaCppModel> {
     if let Some(gguf_path) = gguf {
@@ -23,9 +26,9 @@ pub fn load_llama_model(
             .with_context(|| format!("Failed to load GGUF from {}", gguf_path.display()));
     }
 
-    eprintln!("Downloading/loading model variant: {} ...", model_id);
-    let gguf_path = get_path_by_id(model_id)?;
-    let tok_path = get_tokenizer_path_by_id(model_id)?;
+    eprintln!("Resolving model '{}'...", model_key);
+    let source = Settings::load()?.model_source(model_key)?;
+    let (gguf_path, tok_path) = source.resolve()?;
     eprintln!("Model path: {}", gguf_path.display());
     eprintln!("Tokenizer: {}", tok_path.display());
     Ok(LlamaCppModel::from_file_with_n_ctx(

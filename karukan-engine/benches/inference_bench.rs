@@ -5,9 +5,7 @@
 //! Note: These benchmarks require downloading models from HuggingFace.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use karukan_engine::kanji::{
-    LlamaCppModel, build_jinen_prompt, get_path_by_id, get_tokenizer_path_by_id, registry,
-};
+use karukan_engine::kanji::{LlamaCppModel, ModelSource, build_jinen_prompt};
 use std::hint::black_box;
 
 // ============================================================================
@@ -15,20 +13,15 @@ use std::hint::black_box;
 // ============================================================================
 
 fn bench_llamacpp(c: &mut Criterion) {
-    let reg = registry();
-    let default_id = &reg.default_model;
-    let (_family, _) = match reg.default_variant() {
-        Some(v) => v,
-        None => {
-            eprintln!("Skipping llama.cpp benchmarks: no default model configured");
-            return;
-        }
+    let source = ModelSource::Hf {
+        repo: "togatogah/jinen-v2-small.gguf".to_string(),
+        filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
     };
-
-    let model = match get_path_by_id(default_id).ok().and_then(|p| {
-        let tok = get_tokenizer_path_by_id(default_id).ok()?;
-        LlamaCppModel::from_file(&p, &tok).ok()
-    }) {
+    let model = match source
+        .resolve()
+        .ok()
+        .and_then(|(gguf, tok)| LlamaCppModel::from_file(&gguf, &tok).ok())
+    {
         Some(m) => m,
         None => {
             eprintln!("Skipping llama.cpp benchmarks: model not available");

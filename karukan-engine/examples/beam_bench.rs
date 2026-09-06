@@ -6,7 +6,7 @@
 //!
 //! Usage: cargo run --release -p karukan-engine --example beam_bench
 
-use karukan_engine::{Backend, KanaKanjiConverter};
+use karukan_engine::{Backend, KanaKanjiConverter, ModelSource};
 use std::time::Instant;
 
 fn median(mut v: Vec<u128>) -> u128 {
@@ -35,11 +35,23 @@ fn main() {
     let short = "きょうはいいてんき";
     let iters = 10;
 
-    for (variant, label) in [
-        ("jinen-v2-xsmall-q5", "light(xsmall)"),
-        ("jinen-v2-small-q5", "main(small)"),
+    for (repo, filename, label) in [
+        (
+            "togatogah/jinen-v2-xsmall.gguf",
+            "jinen-v2-xsmall-Q5_K_M.gguf",
+            "light(xsmall)",
+        ),
+        (
+            "togatogah/jinen-v2-small.gguf",
+            "jinen-v2-small-Q5_K_M.gguf",
+            "main(small)",
+        ),
     ] {
-        let backend = Backend::from_variant_id(variant).expect("model load");
+        let source = ModelSource::Hf {
+            repo: repo.to_string(),
+            filename: filename.to_string(),
+        };
+        let backend = Backend::from_source(&source).expect("model load");
         let mut conv = KanaKanjiConverter::new(backend).expect("converter");
         println!("== {label} ==");
         for n_threads in [0u32, 1, 2, 4, 8, 16] {

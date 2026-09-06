@@ -311,12 +311,16 @@ fn test_zenninn() {
 
 #[test]
 fn test_zenninn_kanji_conversion() {
-    use karukan_engine::{Backend, KanaKanjiConverter};
+    use karukan_engine::{Backend, KanaKanjiConverter, ModelSource};
     let hiragana = text("zenninn");
     println!("Hiragana: {}", hiragana);
 
     // Now try kanji conversion
-    let backend = Backend::from_variant_id("jinen-v2-small-q5").expect("Failed to load backend");
+    let source = ModelSource::Hf {
+        repo: "togatogah/jinen-v2-small.gguf".to_string(),
+        filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
+    };
+    let backend = Backend::from_source(&source).expect("Failed to load backend");
     let kanji_conv = KanaKanjiConverter::new(backend).expect("Failed to create converter");
     let result = kanji_conv.convert(&hiragana, "", 1);
     println!("Kanji result: {:?}", result);

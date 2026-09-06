@@ -17,7 +17,7 @@ struct Cli {
     /// Path to evaluation_items.json
     bench_path: PathBuf,
 
-    /// Model variant id (e.g. jinen-v2-xsmall-q5, jinen-v2-small-q5)
+    /// Model key in the config's [models] table (e.g. jinen-v2-xsmall-q5)
     #[arg(long, default_value = "jinen-v2-xsmall-q5")]
     model: String,
 

@@ -6,13 +6,45 @@
 //! frontend should close the child's stdin (or send `save_learning`) before
 //! terminating it.
 //!
-//! `--prefetch-models` downloads every conversion model listed in
-//! `models.toml` into the HuggingFace cache and exits (used by `make install`
-//! to avoid a multi-minute download on first launch).
+//! `--prefetch-models` downloads every conversion model defined in the
+//! config's `[models]` table into the HuggingFace cache and exits (used by
+//! `make install` to avoid a multi-minute download on first launch).
 
 use std::io::{BufRead, Write};
 
+use karukan_im::config::Settings;
 use karukan_im::server::ImServer;
+
+/// Warm the HF cache for every `[models]` entry; local-path entries are
+/// only checked for existence.
+fn prefetch_models() -> i32 {
+    let settings = match Settings::load() {
+        Ok(settings) => settings,
+        Err(e) => {
+            tracing::error!("failed to load settings: {e:#}");
+            return 1;
+        }
+    };
+    let mut failed = false;
+    for key in settings.models.keys() {
+        let resolved = settings
+            .model_source(key)
+            .and_then(|source| source.resolve().map_err(anyhow::Error::from));
+        match resolved {
+            Ok((gguf, tokenizer)) => tracing::info!(
+                "Model '{}' ready: {} (tokenizer: {})",
+                key,
+                gguf.display(),
+                tokenizer.display()
+            ),
+            Err(e) => {
+                tracing::error!("model '{}' prefetch failed: {e:#}", key);
+                failed = true;
+            }
+        }
+    }
+    i32::from(failed)
+}
 
 fn main() {
     tracing_subscriber::fmt()
@@ -24,11 +56,7 @@ fn main() {
         .init();
 
     if std::env::args().any(|arg| arg == "--prefetch-models") {
-        if let Err(e) = karukan_engine::kanji::hf_download::prefetch_all_models() {
-            tracing::error!("model prefetch failed: {e}");
-            std::process::exit(1);
-        }
-        return;
+        std::process::exit(prefetch_models());
     }
 
     let mut server = ImServer::new();

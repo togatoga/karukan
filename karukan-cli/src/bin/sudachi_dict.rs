@@ -30,7 +30,7 @@ struct Cli {
     #[arg(required = true)]
     csv_files: Vec<PathBuf>,
 
-    /// Model variant id (e.g. jinen-v2-xsmall-q5) or path to GGUF file
+    /// Model key in the config's [models] table (e.g. jinen-v2-xsmall-q5) or path to GGUF file
     #[arg(long, default_value = "jinen-v2-xsmall-q5")]
     model: String,
 
@@ -250,7 +250,7 @@ fn score_with_model(
     Ok(json_entries)
 }
 
-/// Load a model by variant id or GGUF file path.
+/// Load a model by `[models]` key or GGUF file path.
 fn load_model(
     model_spec: &str,
     tokenizer_json: Option<&Path>,
