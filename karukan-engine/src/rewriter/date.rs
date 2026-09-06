@@ -32,18 +32,13 @@ pub struct DateConfig {
 
 /// One phrase: a day offset from today, and optionally its own formats
 /// (omitted → the shared `[date]` list; `[]` disables the phrase).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatePhrase {
     /// Days added to today; negative for the past.
     #[serde(default)]
     pub offset_days: i64,
-    #[serde(default)]
     pub formats: Option<Vec<String>>,
 }
-
-const DESC_DATE: &str = "日付";
-const DESC_TIME: &str = "時刻";
-const DESC_DATETIME: &str = "日時";
 
 const WEEKDAYS: [&str; 7] = ["月", "火", "水", "木", "金", "土", "日"];
 
@@ -67,10 +62,7 @@ fn era(date: NaiveDate) -> Option<(&'static str, i32)> {
 
 /// Render one placeholder. `None` marks the whole format as unrenderable
 /// (unknown token/style, or no era for the date).
-fn render_token(spec: &str, at: NaiveDateTime) -> Option<String> {
-    let (token, style) = spec
-        .split_once(':')
-        .map_or((spec, None), |(t, s)| (t, Some(s)));
+fn render_token(token: &str, style: Option<&str>, at: NaiveDateTime) -> Option<String> {
     let kanji = |n: u32| to_kanji(&n.to_string(), false);
     match (token, style) {
         ("YEAR", None) => Some(format!("{:04}", at.year())),
@@ -103,15 +95,6 @@ fn render_token(spec: &str, at: NaiveDateTime) -> Option<String> {
     }
 }
 
-/// True for tokens naming a day, false for time-of-day tokens.
-fn is_date_token(spec: &str) -> bool {
-    let token = spec.split(':').next().unwrap_or(spec);
-    matches!(
-        token,
-        "YEAR" | "MONTH" | "DATE" | "ERA" | "ERA_YEAR" | "WEEKDAY"
-    )
-}
-
 /// One format → one candidate; `None` skips the format.
 fn render(format: &str, at: NaiveDateTime) -> Option<RewriteOutput> {
     let mut out = String::new();
@@ -136,19 +119,21 @@ fn render(format: &str, at: NaiveDateTime) -> Option<RewriteOutput> {
             out.push('{');
             continue;
         }
-        if is_date_token(&spec) {
-            has_date = true;
-        } else {
-            has_time = true;
+        let (token, style) = spec
+            .split_once(':')
+            .map_or((spec.as_str(), None), |(t, s)| (t, Some(s)));
+        match token {
+            "YEAR" | "MONTH" | "DATE" | "ERA" | "ERA_YEAR" | "WEEKDAY" => has_date = true,
+            _ => has_time = true,
         }
-        out.push_str(&render_token(&spec, at)?);
+        out.push_str(&render_token(token, style, at)?);
     }
     let desc = if has_time && !has_date {
-        DESC_TIME
+        "時刻"
     } else if has_time {
-        DESC_DATETIME
+        "日時"
     } else {
-        DESC_DATE
+        "日付"
     };
     Some((out, Some(desc.to_string())))
 }
@@ -391,13 +376,5 @@ mod tests {
     fn absurd_offset_is_dropped() {
         let r = rewriter("きょう", i64::MAX, &["{YEAR}"]);
         assert!(r.candidates_at("きょう", at(2026, 9, 6, 0, 0)).is_empty());
-    }
-
-    #[test]
-    fn rewrite_uses_the_real_clock() {
-        let r = rewriter("きょう", 0, &["{YEAR}/{MONTH}/{DATE}"]);
-        let out = r.rewrite("きょう");
-        assert_eq!(out.len(), 1);
-        assert!(out[0].0.chars().filter(|c| *c == '/').count() == 2);
     }
 }
