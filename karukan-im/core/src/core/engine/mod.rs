@@ -452,13 +452,17 @@ impl InputMethodEngine {
         if key.keysym == Keysym::HENKAN && key.modifiers.any() {
             return None;
         }
-        // While a conversion is in flight (candidate window open) the
-        // toggle is inert: switching modes here would katakana-bake the
-        // conversion *reading* (not the preedit) and defeat the Emoji-mode
-        // learning guard — the commit path checks the current mode to
-        // decide whether the reading is safe to record in the kana-keyed
-        // learning cache. Resolve the conversion first, then toggle.
-        if matches!(self.state, InputState::Conversion { .. }) {
+        // While a conversion is in flight (candidate window open) the kana
+        // modes cannot toggle: switching would katakana-bake the conversion
+        // *reading* (not the preedit) and defeat the Emoji-mode learning
+        // guard — the commit path checks the current mode to decide whether
+        // the reading is safe to record in the kana-keyed learning cache.
+        // Alphabet is exempt: it only says how the next keystroke is read,
+        // and Shift+letter can enter it here (typing refines the reading
+        // instead of committing), so this is the only way back out.
+        if matches!(self.state, InputState::Conversion { .. })
+            && self.mode.current() != InputMode::Alphabet
+        {
             return Some(EngineResult::not_consumed());
         }
         // Only consume the key when actually switching; otherwise pass through
@@ -473,7 +477,17 @@ impl InputMethodEngine {
                 self.bake_katakana();
             }
             self.mode.set(InputMode::Hiragana);
-            let aux = self.format_aux_composing();
+            // An open candidate window keeps its own line, mode indicator
+            // included: a composing line here would hide the source-filter
+            // header mid-view.
+            let aux = match &self.state {
+                InputState::Conversion {
+                    reading,
+                    candidates,
+                    ..
+                } => self.format_aux_conversion(reading, candidates),
+                _ => self.format_aux_composing(),
+            };
             if matches!(self.state, InputState::Composing { .. }) {
                 let preedit = self.set_composing_state();
                 return Some(

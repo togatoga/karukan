@@ -50,7 +50,7 @@ fn cycle_expecting_dictionary_view(engine: &mut InputMethodEngine, forward: bool
     };
     let result = engine.process_key(&press_ctrl(key));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📚]"), "aux was: {aux}");
     assert!(
         engine
             .candidates()
@@ -74,7 +74,7 @@ fn cycle_expecting_rewriter_view(engine: &mut InputMethodEngine, forward: bool) 
     };
     let result = engine.process_key(&press_ctrl(key));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:🔄]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:🔄]"), "aux was: {aux}");
     let candidates = engine.candidates().unwrap().candidates().to_vec();
     let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
     assert!(
@@ -117,7 +117,7 @@ fn cycle_expecting_empty(engine: &mut InputMethodEngine, forward: bool, source: 
     let aux = last_aux_text(&result).expect("aux text action");
     let header = format!("[変換:{}]", source.emoji());
     assert!(
-        aux.starts_with(&header) && aux.contains("候補なし"),
+        aux.contains(&header) && aux.contains("候補なし"),
         "aux was: {aux}"
     );
 }
@@ -127,7 +127,7 @@ fn cycle_expecting_empty(engine: &mut InputMethodEngine, forward: bool, source: 
 fn open_model_view(engine: &mut InputMethodEngine) {
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:🤖]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:🤖]"), "aux was: {aux}");
 }
 
 /// Press Ctrl+R (or Ctrl+Shift+R) and assert the window narrowed to
@@ -145,7 +145,7 @@ fn cycle_expecting(engine: &mut InputMethodEngine, forward: bool, source: Candid
     );
     let aux = last_aux_text(&result).expect("aux text action");
     let header = format!("[変換:{}]", source.emoji());
-    assert!(aux.starts_with(&header), "aux was: {aux}");
+    assert!(aux.contains(&header), "aux was: {aux}");
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn test_ctrl_t_from_composing_opens_filtered_conversion() {
     let result = engine.process_key(&press_ctrl(Keysym::KEY_T));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📝]"), "aux was: {aux}");
     assert!(
         shown_sources(&engine)
             .iter()
@@ -193,7 +193,7 @@ fn test_ctrl_r_from_composing_opens_reverse_filtered_conversion() {
     let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:🔄]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:🔄]"), "aux was: {aux}");
     assert!(shown_sources(&engine).iter().all(|s| matches!(
         s,
         Some(CandidateSource::Rewriter | CandidateSource::Fallback)
@@ -217,7 +217,7 @@ fn test_uppercase_ctrl_t_without_shift_cycles_forward() {
             .all(|s| *s == Some(CandidateSource::Learning))
     );
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📝]"), "aux was: {aux}");
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn test_dictionary_view_prefix_matches_from_one_char() {
     engine.process_key(&press_ctrl(Keysym::KEY_T)); // 学習（候補なし）
     let result = engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚辞書
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📚]"), "aux was: {aux}");
     let candidates = engine.candidates().unwrap().candidates().to_vec();
     let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
     assert!(
@@ -320,24 +320,20 @@ fn test_typing_narrows_within_the_filtered_view() {
     engine.process_key(&press_key(Keysym::SPACE));
     engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝（候補なし）
     let result = engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚
-    assert!(
-        last_aux_text(&result)
-            .expect("aux")
-            .starts_with("[変換:📚]")
-    );
+    assert!(last_aux_text(&result).expect("aux").contains("[変換:📚]"));
     assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
 
     // Typing narrows the SAME view: reading grows to あい, only 藍 stays.
     let result = engine.process_key(&press('i'));
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📚]"), "aux was: {aux}");
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(shown_texts(&engine), vec!["藍"]);
 
     // A pending consonant keeps the view too (tail-aware narrowing).
     let result = engine.process_key(&press('k'));
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📚]"), "aux was: {aux}");
 }
 
 #[test]
@@ -361,7 +357,7 @@ fn test_backspace_widens_within_the_filtered_view() {
 
     let result = engine.process_key(&press_key(Keysym::BACKSPACE));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📚]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📚]"), "aux was: {aux}");
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
 
@@ -406,7 +402,7 @@ fn test_learning_delete_keeps_the_filter() {
 
     let result = engine.process_key(&press_ctrl(Keysym::DELETE));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📝]"), "aux was: {aux}");
     assert_eq!(engine.candidates().unwrap().len(), 1);
     assert!(
         shown_sources(&engine)
@@ -419,7 +415,7 @@ fn test_learning_delete_keeps_the_filter() {
     let result = engine.process_key(&press_ctrl(Keysym::DELETE));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(
-        aux.starts_with("[変換:📝]") && aux.contains("候補なし"),
+        aux.contains("[変換:📝]") && aux.contains("候補なし"),
         "aux was: {aux}"
     );
     assert_eq!(engine.candidates().unwrap().len(), 0);
@@ -461,7 +457,7 @@ fn test_typing_on_empty_view_keeps_view_and_refines() {
     );
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📝]"), "aux was: {aux}");
     assert_eq!(engine.input_buf.display(), "あいk");
 }
 
@@ -508,7 +504,7 @@ fn test_filter_resets_on_new_conversion() {
     engine.process_key(&press_key(Keysym::ESCAPE));
     let result = engine.process_key(&press_key(Keysym::SPACE));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換]"), "aux was: {aux}");
+    assert!(aux.contains("[変換]"), "aux was: {aux}");
     assert!(
         shown_sources(&engine)
             .iter()
@@ -532,7 +528,7 @@ fn test_pending_tail_narrows_the_learning_view() {
 
     let result = engine.process_key(&press('k'));
     let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.starts_with("[変換:📝]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📝]"), "aux was: {aux}");
     assert_eq!(shown_texts(&engine), vec!["愛香"]);
 
     // Enter commits the prediction under its full reading — the typed
@@ -560,7 +556,7 @@ fn test_stale_learning_candidate_cannot_swallow_the_tail() {
     let result = engine.process_key(&press('k'));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(
-        aux.starts_with("[変換:📝]") && aux.contains("候補なし"),
+        aux.contains("[変換:📝]") && aux.contains("候補なし"),
         "aux was: {aux}"
     );
     assert_eq!(engine.candidates().unwrap().len(), 0);
@@ -787,7 +783,7 @@ fn test_mid_caret_typing_does_not_tail_predict() {
     let result = engine.process_key(&press('k'));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(
-        aux.starts_with("[変換:📝]") && aux.contains("候補なし"),
+        aux.contains("[変換:📝]") && aux.contains("候補なし"),
         "aux was: {aux}"
     );
 
@@ -881,17 +877,103 @@ fn test_conversion_aux_shows_the_beamed_chunk() {
 
 #[test]
 fn test_aux_is_quiet_by_default() {
-    // The debug details are opt-in: a default engine shows the state, the
-    // reading and the selected candidate's source, nothing else.
+    // The debug details are opt-in: a default engine shows the quiet line
+    // composing shows plus the conversion's own fields, nothing else.
     let mut engine = InputMethodEngine::new();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     let result = engine.process_key(&press_key(Keysym::SPACE));
     let aux = last_aux_text(&result).expect("aux");
     assert!(aux.contains("あい"), "aux was: {aux}");
-    for noise in ["ms", "/30", "🎯", "jinen"] {
+    for noise in ["ms", "🎯", "jinen"] {
         assert!(!aux.contains(noise), "`{noise}` must be opt-in: {aux}");
     }
+}
+
+#[test]
+fn test_conversion_aux_reports_mode_and_chunk_like_composing() {
+    // Space must not blank out what typing reported: the window leads with
+    // the same mode indicator and carries the composing line's own reading
+    // field, so the line only gains the conversion's own fields.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    let composing = last_aux_text(&engine.process_key(&press('i'))).expect("aux");
+    assert!(
+        composing.starts_with("[あ] あい 2/30"),
+        "aux was: {composing}"
+    );
+
+    let aux = last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux");
+    assert!(aux.starts_with("[あ][変換]"), "aux was: {aux}");
+    assert!(aux.contains("あい 2/30"), "aux was: {aux}");
+
+    // An unfired romaji tail rides along in both states, as typed.
+    let mut engine = InputMethodEngine::new();
+    for ch in ['a', 'i'] {
+        engine.process_key(&press(ch));
+    }
+    let composing = last_aux_text(&engine.process_key(&press('k'))).expect("aux");
+    assert!(
+        composing.starts_with("[あ] あいk 2/30"),
+        "aux was: {composing}"
+    );
+    let aux = last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux");
+    assert!(aux.starts_with("[あ][変換] あいk 2/30"), "aux was: {aux}");
+
+    // A reading past the cap shows the caret's chunk alone, as composing
+    // does — the counter would read 4/2 against the whole reading.
+    let mut engine = InputMethodEngine::new();
+    engine.config.chunk_chars = 2;
+    for ch in ['a', 'i', 'u', 'e'] {
+        engine.process_key(&press(ch));
+    }
+    let aux = last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux");
+    assert!(aux.contains("うえ 2/2"), "aux was: {aux}");
+    assert!(!aux.contains("あいうえ"), "frozen head is not shown: {aux}");
+}
+
+#[test]
+fn test_typing_in_a_filtered_view_keeps_the_reading_field() {
+    // Regression: typing inside a view suppresses the suggestion, which
+    // clears the chunk grid. Reading the counter off the grid made it (and
+    // the romaji tail) vanish from the second keystroke on, so the field is
+    // split fresh from the buffer instead.
+    let mut engine = engine_in_conversion();
+    open_model_view(&mut engine);
+
+    let aux = last_aux_text(&engine.process_key(&press('k'))).expect("aux");
+    assert!(
+        aux.starts_with("[あ][変換:🤖] あいk 2/30"),
+        "aux was: {aux}"
+    );
+
+    let aux = last_aux_text(&engine.process_key(&press('a'))).expect("aux");
+    assert!(
+        aux.starts_with("[あ][変換:🤖] あいか 3/30"),
+        "aux was: {aux}"
+    );
+
+    let aux = last_aux_text(&engine.process_key(&press('s'))).expect("aux");
+    assert!(
+        aux.starts_with("[あ][変換:🤖] あいかs 3/30"),
+        "aux was: {aux}"
+    );
+}
+
+#[test]
+fn test_filtered_view_aux_shows_the_input_mode() {
+    // Shift+letter switches to direct input without leaving the window, so
+    // the header is the only place that can say so.
+    let mut engine = engine_in_conversion();
+    open_model_view(&mut engine);
+
+    let aux = last_aux_text(&engine.process_key(&press_shift('A'))).expect("aux");
+    assert!(aux.starts_with("[A][変換:🤖]"), "aux was: {aux}");
+
+    // Alt_R leaves the window standing and re-renders its line, so the
+    // switch back to hiragana shows without waiting for a keystroke.
+    let aux = last_aux_text(&engine.process_key(&press_key(Keysym::ALT_R))).expect("aux");
+    assert!(aux.starts_with("[あ][変換:🤖]"), "aux was: {aux}");
 }
 
 #[test]
@@ -905,11 +987,7 @@ fn test_ctrl_j_narrows_the_window_without_leaving_the_conversion() {
     }
     engine.process_key(&press_key(Keysym::SPACE));
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
-    assert!(
-        last_aux_text(&result)
-            .expect("aux")
-            .starts_with("[変換:🤖]")
-    );
+    assert!(last_aux_text(&result).expect("aux").contains("[変換:🤖]"));
 
     // A break at the end of the reading arms the next chunk; one at the
     // caret after moving would split. Here the caret sits at the end, so
@@ -919,9 +997,7 @@ fn test_ctrl_j_narrows_the_window_without_leaving_the_conversion() {
     assert_eq!(engine.chunk_breaks, vec![4]);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(
-        last_aux_text(&result)
-            .expect("aux")
-            .starts_with("[変換:🤖]"),
+        last_aux_text(&result).expect("aux").contains("[変換:🤖]"),
         "the filter must survive the rebuild"
     );
 }
@@ -937,7 +1013,7 @@ fn test_model_kana_top1_survives() {
     engine.process_key(&press('i'));
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:🤖]"), "aux was: {aux}");
+    assert!(aux.contains("[変換:🤖]"), "aux was: {aux}");
     assert_eq!(shown_texts(&engine), vec!["あい"]);
 }
 
@@ -1045,7 +1121,7 @@ fn test_verbose_toggle_keeps_what_conversion_needs() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     let quiet = last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux");
-    assert!(quiet.starts_with("[変換]"), "state: {quiet}");
+    assert!(quiet.contains("[変換]"), "state: {quiet}");
     assert!(quiet.contains("あい"), "reading: {quiet}");
     assert!(quiet.contains("📝"), "candidate source: {quiet}");
     assert!(!quiet.contains("推論"), "timing is a detail: {quiet}");
@@ -1053,7 +1129,7 @@ fn test_verbose_toggle_keeps_what_conversion_needs() {
     // The toggle re-renders the line being looked at, so the details show
     // now rather than on the next keystroke.
     let loud = last_aux_text(&engine.process_key(&press_ctrl_shift(Keysym::KEY_V))).expect("aux");
-    assert!(loud.starts_with("[変換]"), "state: {loud}");
+    assert!(loud.contains("[変換]"), "state: {loud}");
     assert!(loud.contains("あい"), "reading: {loud}");
     assert!(loud.contains("📝"), "candidate source: {loud}");
     assert!(loud.contains("推論"), "timing now shown: {loud}");
@@ -1069,22 +1145,14 @@ fn test_ctrl_i_jumps_straight_to_the_ai_view() {
 
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:🤖]"), "from composing: {aux}");
+    assert!(aux.contains("[変換:🤖]"), "from composing: {aux}");
 
     // And from inside another view: one press comes back, however far the
     // cycle has wandered.
     let result = engine.process_key(&press_ctrl(Keysym::KEY_R));
-    assert!(
-        last_aux_text(&result)
-            .expect("aux")
-            .starts_with("[変換:📚]")
-    );
+    assert!(last_aux_text(&result).expect("aux").contains("[変換:📚]"));
     let result = engine.process_key(&press_ctrl(Keysym::KEY_I));
-    assert!(
-        last_aux_text(&result)
-            .expect("aux")
-            .starts_with("[変換:🤖]")
-    );
+    assert!(last_aux_text(&result).expect("aux").contains("[変換:🤖]"));
 }
 
 #[test]
@@ -1109,14 +1177,14 @@ fn test_filtered_view_aux_shows_what_is_being_typed() {
 
     // An exact match commits what was typed: the query alone.
     let aux = last_aux_text(&result).expect("aux");
-    assert!(aux.starts_with("[変換:📚] わせだ |"), "aux was: {aux}");
+    assert!(aux.contains("[変換:📚] わせだ 3/30 |"), "aux was: {aux}");
 
     // The tail `d` is unfired, and the surviving entry is predictive: the
     // query leads, its full reading follows.
     let result = engine.process_key(&press('d'));
     let aux = last_aux_text(&result).expect("aux");
     assert!(
-        aux.starts_with("[変換:📚] わせだd → わせだだいがく"),
+        aux.contains("[変換:📚] わせだd → わせだだいがく"),
         "aux was: {aux}"
     );
     assert_eq!(shown_texts(&engine), vec!["早稲田大学"]);
@@ -1124,7 +1192,7 @@ fn test_filtered_view_aux_shows_what_is_being_typed() {
     let result = engine.process_key(&press('a'));
     let aux = last_aux_text(&result).expect("aux");
     assert!(
-        aux.starts_with("[変換:📚] わせだだ → わせだだいがく"),
+        aux.contains("[変換:📚] わせだだ → わせだだいがく"),
         "aux was: {aux}"
     );
 }

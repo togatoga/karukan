@@ -78,13 +78,7 @@ impl InputMethodEngine {
                 reading,
                 candidates,
                 ..
-            } => {
-                let shown = candidates
-                    .selected()
-                    .and_then(|c| c.reading.clone())
-                    .unwrap_or_else(|| reading.clone());
-                self.format_aux_conversion_with_page(&shown, Some(candidates))
-            }
+            } => self.format_aux_conversion(reading, candidates),
             InputState::Composing { .. } => self.format_aux_suggest(),
             InputState::Empty => format!("詳細表示: {mode}"),
         };

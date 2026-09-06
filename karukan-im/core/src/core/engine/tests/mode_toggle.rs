@@ -191,3 +191,36 @@ fn test_toggle_key_is_inert_during_conversion() {
     engine.process_key(&press_key(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
 }
+
+#[test]
+fn test_toggle_key_exits_alphabet_during_conversion() {
+    // Shift+letter refines the reading inside a source-filtered window
+    // (here the AI view) and stays in it, so alphabet mode can be entered
+    // there — and every other key in the Conversion state is a bound action
+    // or a consumed no-op, which used to leave direct input on until commit.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_ctrl(Keysym::KEY_I));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    engine.process_key(&press_shift('A'));
+    assert!(engine.mode.current() == InputMode::Alphabet);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    // Alt_R → hiragana, without leaving the window
+    let result = engine.process_key(&press_key(Keysym::ALT_R));
+    assert!(result.consumed);
+    assert!(engine.mode.current() == InputMode::Hiragana);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    // The window keeps its own line, source filter and all, instead of
+    // being replaced by a composing one.
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("[変換:🤖]"), "aux was: {aux}");
+
+    // The next keystrokes are romaji again
+    engine.process_key(&press('k'));
+    engine.process_key(&press('a'));
+    assert_eq!(engine.input_buf.reading(), "あいAか");
+}
