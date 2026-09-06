@@ -96,10 +96,19 @@ fn render_kanji_segment(segment: &str, digits: &[&str], ranks: &[&str], old_kanj
     out
 }
 
+/// Digit-by-digit kanji (`"2026"` → `"二〇二六"`), the form years are
+/// written in. Input must be ASCII digits.
+pub(crate) fn to_kanji_digits(digits: &str) -> String {
+    digits
+        .bytes()
+        .map(|b| KANJI_DIGITS[(b - b'0') as usize])
+        .collect()
+}
+
 /// Full kanji form. All-zero input picks the style-specific glyph:
 /// `〇` for standard, `零` for daiji. Returns `None` if the input has more
 /// big-rank segments than the table can name.
-fn to_kanji(digits: &str, old_kanji: bool) -> Option<String> {
+pub(crate) fn to_kanji(digits: &str, old_kanji: bool) -> Option<String> {
     let trimmed = digits.trim_start_matches('0');
     let (digit_table, rank_table, big_rank_table, zero): (&[&str], &[&str], &[&str], &str) =
         if old_kanji {

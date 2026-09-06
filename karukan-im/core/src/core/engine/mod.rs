@@ -28,8 +28,8 @@ use input_buffer::InputBuffer;
 mod tests;
 
 use karukan_engine::{
-    Dictionary, EmojiRewriter, KanaKanjiConverter, LearningCache, LearningConfig, RewriteOutput,
-    Rewriter, RewriterChain, RomajiConverter,
+    DateRewriter, Dictionary, EmojiRewriter, KanaKanjiConverter, LearningCache, LearningConfig,
+    RewriteOutput, Rewriter, RewriterChain, RomajiConverter,
 };
 use tracing::{debug, trace};
 
@@ -218,6 +218,12 @@ impl InputMethodEngine {
         // width rules too: a keystroke settles at the width in force when
         // it was typed.
         engine.converters.romaji = RomajiConverter::with_rules(config.symbol, config.width);
+        // The date rewriter is the only one carrying config, so it joins
+        // the chain here instead of in default_chain().
+        engine
+            .converters
+            .rewriters
+            .add(Box::new(DateRewriter::new(config.date.clone())));
         engine.config = config;
         engine
     }

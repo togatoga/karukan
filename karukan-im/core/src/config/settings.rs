@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use directories::ProjectDirs;
-use karukan_engine::{BracketStyle, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules};
+use karukan_engine::{
+    BracketStyle, DateConfig, PunctuationStyle, SlashStyle, SymbolStyle, WidthRules,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -28,6 +30,8 @@ pub struct Settings {
     pub symbol: SymbolSettings,
     /// The width kana input comes out at, per character group
     pub width: WidthRules,
+    /// Date/time phrases and their formats
+    pub date: DateConfig,
 }
 
 /// The space the Space key inputs while typing kana. Alphabet and emoji
@@ -385,6 +389,43 @@ max_surface_chars = 10
         assert_eq!(settings.learning.max_surface_chars, 10);
         assert!(settings.learning.enabled);
         assert_eq!(settings.learning.max_entries, 10000);
+    }
+
+    #[test]
+    fn test_date_phrase_override_keeps_other_defaults() {
+        // Phrases merge per-reading: きょう takes the user's formats, every
+        // other shipped phrase survives untouched. A one-line phrase rides
+        // the shared [date] formats, and formats = [] disables a phrase.
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[date.phrase]
+"きょう" = {{ formats = ["{{YEAR}}年"] }}
+"らいしゅう" = {{ offset_days = 7 }}
+"にちじ" = {{ formats = [] }}
+"#
+        )
+        .unwrap();
+
+        let settings = Settings::load_from(file.path()).unwrap();
+        let kyou = &settings.date.phrase["きょう"];
+        assert_eq!(
+            kyou.formats.as_deref(),
+            Some(["{YEAR}年".to_string()].as_slice())
+        );
+        assert_eq!(kyou.offset_days, 0);
+        let raishuu = &settings.date.phrase["らいしゅう"];
+        assert_eq!(raishuu.offset_days, 7);
+        assert!(raishuu.formats.is_none());
+        assert_eq!(
+            settings.date.phrase["にちじ"].formats.as_deref(),
+            Some([].as_slice())
+        );
+        // Untouched shipped phrases and the shared formats stay.
+        assert_eq!(settings.date.phrase["あした"].offset_days, 1);
+        assert!(settings.date.phrase.contains_key("いま"));
+        assert!(!settings.date.formats.is_empty());
     }
 
     #[test]

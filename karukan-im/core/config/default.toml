@@ -94,3 +94,35 @@ digit = "half"
 # 英字に設定はありません。かな入力中の英字は入力途中のローマ字（「わせだd」の d）
 # か辞書の表記のどちらかで、どちらも勝手に幅を変えるものではないため。
 # 全角の英字は候補一覧の ＡＢＣ（[全]英大文字）から選べます。
+
+# 日付・時刻の変換。フレーズの読みを変換すると、今日±offset_days の日時を
+# formats で描画した候補が出る（候補一覧の末尾と Ctrl+R のビュー）。
+# 詳細は docs/date.md を参照。
+#
+# フォーマットは {YEAR} {MONTH} {DATE} {HOUR} {MINUTE}（ゼロ埋め2桁）、
+# {ERA}（令和）{ERA_YEAR}（8）{WEEKDAY}（土）{HOUR12}{AMPM}（午後3）、
+# {{} はリテラルの「{」。数値トークンは :bare でゼロ埋めなし（9月）、
+# :kanji で漢数字（九月、二〇二六）。
+[date]
+# formats を持たないフレーズが共通で使うフォーマット
+formats = [
+    "{YEAR}/{MONTH}/{DATE}",
+    "{YEAR}-{MONTH}-{DATE}",
+    "{YEAR}年{MONTH:bare}月{DATE:bare}日",
+    "{ERA}{ERA_YEAR}年{MONTH:bare}月{DATE:bare}日",
+    "{MONTH:bare}月{DATE:bare}日",
+    "{WEEKDAY}曜日",
+]
+
+# フレーズは読み単位で追加・上書きでき、既定の他フレーズは残る。
+# formats を書いたフレーズはそれだけを使う。formats = [] で無効化。
+[date.phrase]
+"きょう" = { offset_days = 0 }
+"きのう" = { offset_days = -1 }
+"おととい" = { offset_days = -2 }
+"あした" = { offset_days = 1 }
+"あす" = { offset_days = 1 }
+"あさって" = { offset_days = 2 }
+"しあさって" = { offset_days = 3 }
+"いま" = { formats = ["{HOUR}:{MINUTE}", "{HOUR:bare}時{MINUTE:bare}分", "{AMPM}{HOUR12}時{MINUTE:bare}分"] }
+"にちじ" = { formats = ["{YEAR}/{MONTH}/{DATE} {HOUR}:{MINUTE}", "{YEAR}年{MONTH:bare}月{DATE:bare}日{HOUR:bare}時{MINUTE:bare}分"] }

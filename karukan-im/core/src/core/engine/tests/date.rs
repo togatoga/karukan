@@ -1,0 +1,105 @@
+//! Integration tests for the date rewriter: config.toml phrases surface as
+//! Rewriter candidates. The clock is real here, so assertions check shape
+//! (`2026/09/06`-like), not exact dates.
+
+use karukan_engine::{DateConfig, DatePhrase};
+
+use super::*;
+use crate::config::Settings;
+
+/// Engine carrying `date` config, in Composing state, no kanji model.
+fn date_engine(date: DateConfig, reading: &str) -> InputMethodEngine {
+    let mut engine = InputMethodEngine::with_config(EngineConfig {
+        date,
+        ..EngineConfig::default()
+    });
+    engine.input_buf.insert(reading);
+    engine.state = InputState::Composing {
+        preedit: Preedit::new(),
+    };
+    engine.converters.kanji = None;
+    engine
+}
+
+fn slash_date(text: &str) -> bool {
+    let b = text.as_bytes();
+    b.len() == 10
+        && b[4] == b'/'
+        && b[7] == b'/'
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| matches!(i, 4 | 7) || c.is_ascii_digit())
+}
+
+#[test]
+fn registered_phrase_surfaces_date_candidates() {
+    let mut phrase = std::collections::BTreeMap::new();
+    phrase.insert(
+        "きょう".to_string(),
+        DatePhrase {
+            offset_days: 0,
+            formats: Some(vec!["{YEAR}/{MONTH}/{DATE}".to_string()]),
+        },
+    );
+    let mut engine = date_engine(
+        DateConfig {
+            formats: Vec::new(),
+            phrase,
+        },
+        "きょう",
+    );
+    let candidates =
+        engine.build_conversion_candidates("きょう", "きょう", "", 9, LearningLookup::Use);
+    let date = candidates
+        .iter()
+        .find(|c| c.source == CandidateSource::Rewriter && slash_date(&c.text))
+        .unwrap_or_else(|| panic!("no date candidate: {:?}", candidates));
+    assert_eq!(date.description.as_deref(), Some("日付"));
+}
+
+#[test]
+fn default_settings_carry_the_shipped_phrases() {
+    let settings = Settings::default();
+    for reading in [
+        "きょう",
+        "きのう",
+        "おととい",
+        "あした",
+        "あす",
+        "あさって",
+        "しあさって",
+        "いま",
+        "にちじ",
+    ] {
+        assert!(
+            settings.date.phrase.contains_key(reading),
+            "default.toml lacks date phrase {reading}"
+        );
+    }
+
+    // The shipped きょう formats render through the whole engine path.
+    let config = EngineConfig::from_settings(&settings);
+    let mut engine = date_engine(config.date, "きょう");
+    let candidates =
+        engine.build_conversion_candidates("きょう", "きょう", "", 9, LearningLookup::Use);
+    assert!(
+        candidates
+            .iter()
+            .any(|c| c.source == CandidateSource::Rewriter && slash_date(&c.text)),
+        "no date candidate from default config: {candidates:?}"
+    );
+}
+
+#[test]
+fn unregistered_reading_gets_no_date_candidates() {
+    let settings = Settings::default();
+    let mut engine = date_engine(settings.date.clone(), "こんにちは");
+    let candidates =
+        engine.build_conversion_candidates("こんにちは", "こんにちは", "", 9, LearningLookup::Use);
+    assert!(
+        !candidates
+            .iter()
+            .any(|c| c.source == CandidateSource::Rewriter && slash_date(&c.text)),
+        "date candidate leaked for a plain word: {candidates:?}"
+    );
+}

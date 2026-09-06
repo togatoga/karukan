@@ -20,6 +20,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde_json = "1"
 toml = "1.0"
 thiserror = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # Internal crates
 karukan-engine = { path = "karukan-engine" }
