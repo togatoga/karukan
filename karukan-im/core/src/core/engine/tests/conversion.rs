@@ -116,6 +116,50 @@ fn test_bare_digit_during_conversion_refines_instead_of_selecting() {
 }
 
 #[test]
+fn test_commit_on_type_commits_and_starts_next_composition() {
+    // `commit_on_type`: a printable key commits the selected candidate and
+    // opens the next composition with that key (mozc-style).
+    let mut engine = InputMethodEngine::new();
+    engine.config.commit_on_type = true;
+    engine.dicts.user = Some(dict_from_json(
+        r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#,
+    ));
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    let selected = engine
+        .candidates()
+        .unwrap()
+        .selected_text()
+        .unwrap()
+        .to_string();
+
+    let result = engine.process_key(&press('k'));
+    assert!(result.consumed);
+    assert_eq!(committed(&result), Some(selected));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "k");
+
+    engine.process_key(&press('a'));
+    assert_eq!(engine.input_buf.reading(), "か");
+}
+
+#[test]
+fn test_commit_on_type_punctuation_commits() {
+    let mut engine = InputMethodEngine::new();
+    engine.config.commit_on_type = true;
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let result = engine.process_key(&press(','));
+    assert!(committed(&result).is_some(), "punctuation must commit");
+    assert_eq!(engine.preedit().unwrap().text(), "、");
+}
+
+#[test]
 fn test_ctrl_digit_selects_candidate_during_conversion() {
     let mut engine = InputMethodEngine::new();
     engine.dicts.user = Some(dict_from_json(

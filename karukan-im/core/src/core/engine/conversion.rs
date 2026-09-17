@@ -635,8 +635,14 @@ impl InputMethodEngine {
 
                 // A printable character refines instead of committing:
                 // the reading grows and the suggestion rewrites in place,
-                // keeping any active source filter.
+                // keeping any active source filter. With `commit_on_type`
+                // it commits the selection and starts the next composition
+                // with the key instead (mozc-style); a narrowed source view
+                // still refines, since typing there is the search itself.
                 if key.to_char().is_some() && !key.modifiers.control_key {
+                    if self.config.commit_on_type && self.state.filter().is_none() {
+                        return self.commit_and_continue(key, shift_active);
+                    }
                     return self.refine_through_composing(key, shift_active);
                 }
 
@@ -662,6 +668,16 @@ impl InputMethodEngine {
         {
             return self.start_conversion_with_filter(source);
         }
+        result
+    }
+
+    /// Commit the selected conversion, then feed `key` to the fresh Empty
+    /// state so it opens the next composition. The actions are concatenated
+    /// in order, so the frontend commits first and then shows the new preedit.
+    fn commit_and_continue(&mut self, key: &KeyEvent, shift_active: bool) -> EngineResult {
+        let mut result = self.commit_conversion();
+        let next = self.process_key_empty(key, shift_active);
+        result.actions.extend(next.actions);
         result
     }
 

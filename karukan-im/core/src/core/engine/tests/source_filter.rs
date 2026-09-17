@@ -462,6 +462,28 @@ fn test_typing_on_empty_view_keeps_view_and_refines() {
 }
 
 #[test]
+fn test_commit_on_type_still_refines_in_filtered_view() {
+    // Typing inside a narrowed view is the search itself, so it keeps
+    // refining even when `commit_on_type` is set.
+    let mut engine = engine_with_learned("あい", "愛");
+    engine.config.commit_on_type = true;
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    cycle_expecting(&mut engine, true, CandidateSource::Learning);
+
+    let result = engine.process_key(&press('k'));
+    assert!(
+        !result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(_)))
+    );
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(engine.input_buf.display(), "あいk");
+}
+
+#[test]
 fn test_delete_keeps_cursor_position() {
     // Deleting row N leaves the cursor at N (the old N+1 slides in), so
     // consecutive deletes chew through the list without jumping to the top.

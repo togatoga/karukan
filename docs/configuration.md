@@ -5,6 +5,7 @@
 ```toml
 [conversion]
 live_conversion = true          # ライブ変換を起動時に有効化（Ctrl+Shift+L で実行中も切替。既定ON）
+commit_on_type = false          # 変換中に文字を打つと確定して次の入力を始める（既定OFF = 読みに足して変換し直す）
 chunk_chars = 30                # 一度にAI変換する Chunk の最大文字数（[Chunk](chunking.md) 参照）
 chunk_symbols = 1               # Chunk に残せる記号（、。！？など）の数
 chunk_digits = 0                # Chunk に残せる数字の桁数（0 = 数字はAI変換にかけない）
@@ -63,6 +64,19 @@ phrases = [                    # フレーズ一覧（書くと既定一覧ご�
 入力と同時にかな漢字変換の結果をプリエディットへリアルタイム表示します（Spaceを押さずに変換が進む）。`Ctrl+Shift+L` でON/OFFを切り替えられ、既定では `live_conversion = true` で有効です。
 
 入力中の文が長くなっても変換時間が伸びないよう、変換は一定の長さごとの Chunk に区切って実行されます。Chunk の決まり方、表示のちらつきを止める手動区切り、`chunk_*` の調整方法は [Chunk](chunking.md) を参照してください。
+
+## 変換中の文字入力
+
+Space で変換した後に文字を打つと、既定では確定せず、読みに文字を足してその場で変換し直します（`にほんご` → Space → `日本語` の状態で `wa` と打つと、読みが `にほんごわ` になる）。ライブ変換を OFF にしていると、変換結果がひらがなに戻ったように見えます。
+
+`commit_on_type = true` にすると、Mozc などと同じく選択中の候補（`日本語`）を確定し、打った文字から次の入力を始めます。
+
+```toml
+[conversion]
+commit_on_type = true
+```
+
+Ctrl+T / Ctrl+R で候補を絞り込んでいる間は、どちらの設定でも読みに文字を足します（絞り込みの検索を続けるため）。
 
 ## 記号・半角全角
 

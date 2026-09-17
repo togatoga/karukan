@@ -45,6 +45,10 @@ light_model = "jinen-v2-xsmall-q5"
 n_threads = 4
 # 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
 live_conversion = true
+# 変換中に文字を打ったときの動作。false は読みに文字を足して変換し直す（既定）。
+# true は選択中の候補を確定し、打った文字から次の入力を始める（Mozc と同じ）。
+# どちらでも Ctrl+T / Ctrl+R で絞り込んだ候補の中では読みに文字を足す。
+commit_on_type = false
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
 
 [learning]
