@@ -59,6 +59,9 @@ max_surface_chars = 50
 # 補助テキストに詳細（別候補の範囲・推論時間・モデル名・文脈）を表示する。
 # Ctrl+Shift+V でいつでも切り替えられる。
 verbose = false
+# 候補ウィンドウをいつ開くか。"always" は入力中から常時、"conversion" は Space で
+# 変換を始めてから。絵文字モードの候補は設定に関わらず出る。
+candidate_window = "always"
 
 # どのキーがどの記号を入力するか。幅（半角・全角）は [width] が決める。
 [symbol]

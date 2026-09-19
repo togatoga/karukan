@@ -7,6 +7,7 @@ use crate::core::keycode::KeyModifiers;
 
 mod alphabet;
 mod basic;
+mod candidate_window;
 mod candidates;
 mod chunks;
 mod conversion;

@@ -73,6 +73,17 @@ impl SymbolSettings {
     }
 }
 
+/// When the candidate window opens.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CandidateWindow {
+    /// While typing too, then through the conversion.
+    #[default]
+    Always,
+    /// Only once Space starts a conversion.
+    Conversion,
+}
+
 /// Aux-line settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplaySettings {
@@ -80,6 +91,9 @@ pub struct DisplaySettings {
     /// which part the alternatives cover, inference timing, the model that
     /// ran, and the context handed to it.
     pub verbose: bool,
+    /// When the candidate window opens: while typing too, or only once
+    /// Space starts a conversion.
+    pub candidate_window: CandidateWindow,
 }
 
 /// Conversion strategy mode
@@ -389,6 +403,22 @@ max_surface_chars = 10
         assert_eq!(settings.learning.max_surface_chars, 10);
         assert!(settings.learning.enabled);
         assert_eq!(settings.learning.max_entries, 10000);
+    }
+
+    #[test]
+    fn test_candidate_window_setting() {
+        assert_eq!(
+            Settings::default().display.candidate_window,
+            CandidateWindow::Always
+        );
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "[display]\ncandidate_window = \"conversion\"").unwrap();
+        let settings = Settings::load_from(file.path()).unwrap();
+        assert_eq!(
+            settings.display.candidate_window,
+            CandidateWindow::Conversion
+        );
+        assert!(!settings.display.verbose);
     }
 
     #[test]
