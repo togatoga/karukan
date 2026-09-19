@@ -6,7 +6,6 @@ use std::collections::HashSet;
 
 use tracing::debug;
 
-use super::filter::source_for_key;
 use super::*;
 
 /// Maximum number of learning candidates to show
@@ -540,6 +539,33 @@ impl InputMethodEngine {
         if key.modifiers.alt_key {
             return EngineResult::not_consumed();
         }
+        if key.modifiers.control_key {
+            match key.keysym.letter() {
+                // Ctrl+N / Ctrl+P: emacs-style candidate navigation
+                Some('n') => return self.next_candidate(),
+                Some('p') => return self.prev_candidate(),
+                // Ctrl+T / Ctrl+R: cycle the source filter forward / backward
+                Some('t') => return self.cycle_candidate_filter(FilterDirection::Forward),
+                Some('r') => return self.cycle_candidate_filter(FilterDirection::Backward),
+                // Ctrl+I: straight to the AI view
+                Some('i') => return self.jump_to_source(CandidateSource::Model),
+                // Ctrl+J: split at the caret and rebuild, so the
+                // alternatives cover only the text after the break.
+                Some('j') => return self.rebreak_conversion(),
+                // Ctrl+A/B/E/F: the same caret moves as while composing,
+                // dropping back to editing like the arrow keys below.
+                Some('a' | 'b' | 'e' | 'f') => {
+                    return self.in_composing(false, |e| e.process_key_composing(key));
+                }
+                _ => {}
+            }
+            // Ctrl+1..9: select and commit that candidate. Bare digits
+            // refine below like any printable character, so typing numbers
+            // never conflicts with selection.
+            if let Some(digit) = key.keysym.digit_value() {
+                return self.select_shown_candidate(digit);
+            }
+        }
         match key.keysym {
             Keysym::RETURN => self.commit_conversion(),
             Keysym::ESCAPE => self.cancel_conversion(),
@@ -554,7 +580,7 @@ impl InputMethodEngine {
             // Ctrl+Backspace / Ctrl+Delete: delete the selected learning
             // candidate (the Mac "delete" key is Backspace). A non-learning
             // selection consumes the chord as a no-op.
-            Keysym::DELETE | Keysym::BACKSPACE if key.modifiers.control_key => {
+            Keysym::BACKSPACE | Keysym::DELETE if key.modifiers.control_key => {
                 if self.selected_is_deletable() {
                     self.delete_selected_candidate_from_history()
                 } else {
@@ -562,13 +588,12 @@ impl InputMethodEngine {
                 }
             }
             // Inside a narrowed view Backspace shrinks the reading and
-            // stays in the view — the mirror of typing-refine, so the list
-            // re-expands as the query shrinks. Without a filter it returns
-            // to the composition as before.
+            // stays in the view: the mirror of typing-refine, so the list
+            // re-expands as the query shrinks. Without a filter it cancels
+            // back to the composition, like Escape.
             Keysym::BACKSPACE if self.state.filter().is_some() => {
                 self.refine_through_composing(key)
             }
-            // Backspace cancels back to the composition, like Escape.
             Keysym::BACKSPACE => self.cancel_conversion(),
             // Caret keys drop back to editing, the same way a caret move
             // ends the live-conversion display while composing: the
@@ -578,67 +603,14 @@ impl InputMethodEngine {
             Keysym::LEFT | Keysym::RIGHT | Keysym::HOME | Keysym::END => {
                 self.in_composing(false, |e| e.process_key_composing(key))
             }
-            _ => {
-                // Ctrl+N / Ctrl+P: emacs-style candidate navigation
-                if key.modifiers.control_key {
-                    match key.keysym {
-                        Keysym::KEY_N | Keysym::KEY_N_UPPER => return self.next_candidate(),
-                        Keysym::KEY_P | Keysym::KEY_P_UPPER => return self.prev_candidate(),
-                        // Ctrl+R / Ctrl+T: cycle the source filter. Both
-                        // keysym cases — some environments fold Shift into
-                        // an uppercase keysym; direction must not change.
-                        Keysym::KEY_R | Keysym::KEY_R_UPPER => {
-                            return self.cycle_candidate_filter(FilterDirection::Backward);
-                        }
-                        Keysym::KEY_T | Keysym::KEY_T_UPPER => {
-                            return self.cycle_candidate_filter(FilterDirection::Forward);
-                        }
-                        // Ctrl+J: split at the caret and rebuild, so the
-                        // alternatives cover only the text after the break.
-                        Keysym::KEY_J | Keysym::KEY_J_UPPER => {
-                            return self.rebreak_conversion();
-                        }
-                        // Ctrl+A/B/E/F: the same caret moves as while
-                        // composing, dropping back to editing like the
-                        // arrow keys above.
-                        Keysym::KEY_A
-                        | Keysym::KEY_A_UPPER
-                        | Keysym::KEY_B
-                        | Keysym::KEY_B_UPPER
-                        | Keysym::KEY_E
-                        | Keysym::KEY_E_UPPER
-                        | Keysym::KEY_F
-                        | Keysym::KEY_F_UPPER => {
-                            return self.in_composing(false, |e| e.process_key_composing(key));
-                        }
-                        _ => {}
-                    }
-
-                    // Ctrl+Y/U/I/O: jump straight to one source's view.
-                    if let Some(source) = source_for_key(key.keysym) {
-                        return self.jump_to_source(source);
-                    }
-
-                    // Ctrl+1..9: select and commit that candidate. Bare
-                    // digits refine below like any printable character, so
-                    // typing numbers never conflicts with selection.
-                    if let Some(digit) = key.keysym.digit_value() {
-                        return self.select_shown_candidate(digit);
-                    }
-                }
-
-                // A printable character refines instead of committing:
-                // the reading grows and the suggestion rewrites in place,
-                // keeping any active source filter.
-                if key.to_char().is_some() && !key.modifiers.control_key {
-                    return self.refine_through_composing(key);
-                }
-
-                // Everything else is consumed as a no-op — leaked chords
-                // would let the app act on them mid-conversion (e.g. a
-                // browser reloading on Ctrl+R).
-                EngineResult::consumed()
-            }
+            // A printable character refines instead of committing: the
+            // reading grows and the suggestion rewrites in place, keeping
+            // any active source filter.
+            _ if key.to_char().is_some() => self.refine_through_composing(key),
+            // Everything else is consumed as a no-op: a leaked chord would
+            // let the app act on it mid-conversion (a browser reloading on
+            // Ctrl+R).
+            _ => EngineResult::consumed(),
         }
     }
 

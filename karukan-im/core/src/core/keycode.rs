@@ -49,46 +49,6 @@ impl Keysym {
     // Space
     pub const SPACE: Keysym = Keysym(0x0020);
 
-    // Numbers
-    pub const KEY_0: Keysym = Keysym(0x0030);
-    pub const KEY_1: Keysym = Keysym(0x0031);
-    pub const KEY_2: Keysym = Keysym(0x0032);
-    pub const KEY_3: Keysym = Keysym(0x0033);
-    pub const KEY_4: Keysym = Keysym(0x0034);
-    pub const KEY_5: Keysym = Keysym(0x0035);
-    pub const KEY_6: Keysym = Keysym(0x0036);
-    pub const KEY_7: Keysym = Keysym(0x0037);
-    pub const KEY_8: Keysym = Keysym(0x0038);
-    pub const KEY_9: Keysym = Keysym(0x0039);
-
-    // Letters (lowercase and uppercase)
-    pub const KEY_A: Keysym = Keysym(0x0061); // lowercase 'a'
-    pub const KEY_A_UPPER: Keysym = Keysym(0x0041); // uppercase 'A'
-    pub const KEY_B: Keysym = Keysym(0x0062); // lowercase 'b'
-    pub const KEY_B_UPPER: Keysym = Keysym(0x0042); // uppercase 'B'
-    pub const KEY_E: Keysym = Keysym(0x0065); // lowercase 'e'
-    pub const KEY_E_UPPER: Keysym = Keysym(0x0045); // uppercase 'E'
-    pub const KEY_F: Keysym = Keysym(0x0066); // lowercase 'f'
-    pub const KEY_F_UPPER: Keysym = Keysym(0x0046); // uppercase 'F'
-    pub const KEY_I: Keysym = Keysym(0x0069); // lowercase 'i'
-    pub const KEY_I_UPPER: Keysym = Keysym(0x0049); // uppercase 'I'
-    pub const KEY_J: Keysym = Keysym(0x006a); // lowercase 'j'
-    pub const KEY_J_UPPER: Keysym = Keysym(0x004a); // uppercase 'J'
-    pub const KEY_K: Keysym = Keysym(0x006b); // lowercase 'k'
-    pub const KEY_K_UPPER: Keysym = Keysym(0x004b); // uppercase 'K'
-    pub const KEY_N: Keysym = Keysym(0x006e); // lowercase 'n'
-    pub const KEY_N_UPPER: Keysym = Keysym(0x004e); // uppercase 'N'
-    pub const KEY_L: Keysym = Keysym(0x006c); // lowercase 'l'
-    pub const KEY_L_UPPER: Keysym = Keysym(0x004c); // uppercase 'L'
-    pub const KEY_P: Keysym = Keysym(0x0070); // lowercase 'p'
-    pub const KEY_P_UPPER: Keysym = Keysym(0x0050); // uppercase 'P'
-    pub const KEY_R: Keysym = Keysym(0x0072); // lowercase 'r'
-    pub const KEY_R_UPPER: Keysym = Keysym(0x0052); // uppercase 'R'
-    pub const KEY_T: Keysym = Keysym(0x0074); // lowercase 't'
-    pub const KEY_T_UPPER: Keysym = Keysym(0x0054); // uppercase 'T'
-    pub const KEY_V: Keysym = Keysym(0x0076); // lowercase 'v'
-    pub const KEY_V_UPPER: Keysym = Keysym(0x0056); // uppercase 'V'
-
     /// Check if this keysym represents a printable character
     pub fn is_printable(&self) -> bool {
         // ASCII printable range (0x20-0x7e)
@@ -110,6 +70,14 @@ impl Keysym {
             0x0031..=0x0039 => Some((self.0 - 0x0030) as usize),
             _ => None,
         }
+    }
+
+    /// The letter this keysym types, lowercased. Chords are bound to the
+    /// key, and some environments fold Shift into the uppercase keysym.
+    pub fn letter(&self) -> Option<char> {
+        self.to_char()
+            .filter(char::is_ascii_alphabetic)
+            .map(|c| c.to_ascii_lowercase())
     }
 
     /// Check if this key switches back to hiragana input mode.
@@ -146,6 +114,14 @@ impl Keysym {
                 | Self::HYPER_L
                 | Self::HYPER_R
         )
+    }
+}
+
+/// Printable keys are spelled as the character they type: a Latin-1
+/// keysym is its code point.
+impl From<char> for Keysym {
+    fn from(c: char) -> Self {
+        Keysym(c as u32)
     }
 }
 
@@ -253,13 +229,19 @@ impl KeyEvent {
             && !self.modifiers.alt_key
     }
 
-    /// Get the character for this key event if it's a printable press
+    /// The character a printable press types. Shift+letter is the uppercase
+    /// letter whichever way the frontend spells it (the uppercase keysym, or
+    /// the lowercase one with the Shift bit), so callers see one shape.
     pub fn to_char(&self) -> Option<char> {
-        if self.is_printable_press() {
-            self.keysym.to_char()
-        } else {
-            None
+        if !self.is_printable_press() {
+            return None;
         }
+        let c = self.keysym.to_char()?;
+        Some(if self.modifiers.shift_key {
+            c.to_ascii_uppercase()
+        } else {
+            c
+        })
     }
 }
 
@@ -285,10 +267,33 @@ mod tests {
 
     #[test]
     fn test_digit_value() {
-        assert_eq!(Keysym::KEY_1.digit_value(), Some(1));
-        assert_eq!(Keysym::KEY_9.digit_value(), Some(9));
-        assert_eq!(Keysym::KEY_0.digit_value(), None);
-        assert_eq!(Keysym(0x0061).digit_value(), None);
+        assert_eq!(Keysym::from('1').digit_value(), Some(1));
+        assert_eq!(Keysym::from('9').digit_value(), Some(9));
+        assert_eq!(Keysym::from('0').digit_value(), None);
+        assert_eq!(Keysym::from('a').digit_value(), None);
+    }
+
+    #[test]
+    fn test_keysym_from_char() {
+        assert_eq!(Keysym::from('a'), Keysym(0x0061));
+        assert_eq!(Keysym::from('é'), Keysym(0x00e9));
+    }
+
+    #[test]
+    fn test_letter() {
+        assert_eq!(Keysym::from('t').letter(), Some('t'));
+        assert_eq!(Keysym::from('T').letter(), Some('t'));
+        assert_eq!(Keysym::from('1').letter(), None);
+        assert_eq!(Keysym::SPACE.letter(), None);
+    }
+
+    #[test]
+    fn test_key_event_shift_letter() {
+        let shifted =
+            |c| KeyEvent::new(Keysym::from(c), KeyModifiers::new().with_shift(true), true);
+        assert_eq!(shifted('a').to_char(), Some('A'));
+        assert_eq!(KeyEvent::press(Keysym::from('A')).to_char(), Some('A'));
+        assert_eq!(shifted(';').to_char(), Some(';'));
     }
 
     #[test]

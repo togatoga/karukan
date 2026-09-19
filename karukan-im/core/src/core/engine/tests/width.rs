@@ -88,7 +88,7 @@ fn typed_symbols_come_out_at_the_configured_width() {
     });
     let result = type_keys(&mut engine, "a?b!");
     assert_eq!(shown_preedit(&result).as_deref(), Some("あ?b!"));
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("あ?b!"));
 
     let mut engine = engine_with_width(WidthRules {
@@ -131,7 +131,7 @@ fn model_output_is_settled_too() {
     type_keys(&mut engine, "a");
     set_live_text(&mut engine, "亜!");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("亜！"));
 }
 
@@ -146,11 +146,11 @@ fn the_shipped_default_makes_kana_input_full_width() {
 
     // Digits are the exception: nothing here remembers a width the user
     // picked, so a full-width default would be one they cannot take back.
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     let result = type_keys(&mut engine, "123");
     assert_eq!(shown_preedit(&result).as_deref(), Some("123"));
 
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     engine.process_key(&press_shift('A'));
     let result = type_keys(&mut engine, "bc, d.");
     assert_eq!(shown_preedit(&result).as_deref(), Some("Abc, d."));
@@ -166,7 +166,7 @@ fn rewriter_variants_keep_their_own_width() {
     });
 
     type_keys(&mut engine, "@");
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let candidates = shown_candidates(&result);
     assert!(
         candidates.iter().any(|c| c == "＠"),
@@ -186,7 +186,7 @@ fn folding_a_variant_into_its_twin_drops_the_duplicate() {
     });
 
     type_keys(&mut engine, "1");
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let shown = shown_candidates(&result);
     assert_eq!(
         shown.iter().filter(|c| c.as_str() == "１").count(),
@@ -218,7 +218,7 @@ fn dictionary_surfaces_keep_the_width_they_were_written_at() {
     ));
 
     type_keys(&mut engine, "kabu");
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let candidates = shown_candidates(&result);
     for expected in ["Yahoo!", "１２３号"] {
         assert!(
@@ -278,7 +278,7 @@ fn alphabet_input_always_takes_an_ascii_space() {
         ..EngineConfig::default()
     });
     engine.process_key(&press_shift('A'));
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
 
     assert_eq!(shown_preedit(&result).as_deref(), Some("A "));
 }
@@ -290,7 +290,7 @@ fn shift_space_alone_is_always_the_full_width_one() {
             space,
             ..EngineConfig::default()
         });
-        let result = engine.process_key(&press_shift_key(Keysym::SPACE));
+        let result = engine.process_key(&press_shift(Keysym::SPACE));
         assert_eq!(committed(&result).as_deref(), Some("\u{3000}"));
     }
 }
@@ -303,7 +303,7 @@ fn picking_a_width_variant_commits_that_width() {
     engine.converters.kanji = None;
 
     type_keys(&mut engine, "<>1234");
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let shown = shown_candidates(&result);
     let index = shown
         .iter()
@@ -323,7 +323,7 @@ fn the_configured_form_and_both_widths_are_all_offered() {
     engine.converters.kanji = None;
 
     type_keys(&mut engine, "<>1234");
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let shown = shown_candidates(&result);
     for expected in ["＜＞1234", "＜＞１２３４", "<>1234"] {
         assert!(
@@ -350,7 +350,7 @@ fn a_settled_symbol_keeps_its_width_when_alphabet_input_starts() {
     let result = engine.process_key(&press_shift('A'));
     assert_eq!(shown_preedit(&result).as_deref(), Some("（A"));
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("（A"));
 }
 
@@ -368,6 +368,6 @@ fn model_output_spaces_follow_the_space_setting() {
     type_keys(&mut engine, "a");
     set_live_text(&mut engine, "亜 井");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("亜　井"));
 }

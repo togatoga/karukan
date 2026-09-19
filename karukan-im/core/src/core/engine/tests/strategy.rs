@@ -213,7 +213,7 @@ fn test_adaptive_flag_reset_after_commit_and_new_input() {
     engine.metrics.adaptive_use_light_model = true;
 
     // Commit
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     assert!(matches!(engine.state(), InputState::Empty));
     // Flag is still true (reset happens on next key in Empty state)
     assert!(engine.metrics.adaptive_use_light_model);

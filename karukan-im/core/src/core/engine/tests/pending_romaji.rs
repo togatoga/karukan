@@ -17,13 +17,13 @@ fn preedit_text(engine: &InputMethodEngine) -> String {
 fn send(engine: &mut InputMethodEngine, keys: &str) {
     for ch in keys.chars() {
         let key = match ch {
-            '←' => press_key(Keysym::LEFT),
-            '⌫' => press_key(Keysym::BACKSPACE),
-            '⇥' => press_key(Keysym::END),
-            '␛' => press_key(Keysym::ESCAPE),
-            '␣' => press_key(Keysym::SPACE),
-            '↹' => press_key(Keysym::TAB),
-            '変' => press_key(Keysym::HENKAN),
+            '←' => press(Keysym::LEFT),
+            '⌫' => press(Keysym::BACKSPACE),
+            '⇥' => press(Keysym::END),
+            '␛' => press(Keysym::ESCAPE),
+            '␣' => press(Keysym::SPACE),
+            '↹' => press(Keysym::TAB),
+            '変' => press(Keysym::HENKAN),
             c if c.is_ascii_uppercase() => press_shift(c),
             c => press(c),
         };

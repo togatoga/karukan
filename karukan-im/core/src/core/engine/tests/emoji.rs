@@ -5,7 +5,7 @@ use super::*;
 /// Press `:` (keysym 0x003A, sent with Shift on a US layout, but
 /// fcitx5 normally resolves it as the literal keysym).
 fn press_colon() -> KeyEvent {
-    KeyEvent::press(Keysym(b':' as u32))
+    KeyEvent::press(Keysym::from(':'))
 }
 
 /// Texts from the most recent ShowCandidates action — auto-suggest
@@ -93,7 +93,7 @@ fn escape_commits_literal_and_exits_emoji_mode() {
     }
     assert_eq!(engine.mode.current(), InputMode::Emoji);
 
-    let result = engine.process_key(&press_key(Keysym::ESCAPE));
+    let result = engine.process_key(&press(Keysym::ESCAPE));
     assert_eq!(commit_text(&result).as_deref(), Some(":smile"));
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
     assert!(matches!(engine.state(), InputState::Empty));
@@ -109,8 +109,8 @@ fn committing_emoji_resets_to_hiragana() {
         engine.process_key(&press(ch));
     }
     // Space starts conversion → first candidate selected → Return commits.
-    engine.process_key(&press_key(Keysym::SPACE));
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::SPACE));
+    engine.process_key(&press(Keysym::RETURN));
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
     assert!(matches!(engine.state(), InputState::Empty));
 }
@@ -135,7 +135,7 @@ fn enter_on_emoji_query_commits_emoji_not_literal() {
     for ch in ['s', 'm', 'i', 'l', 'e'] {
         engine.process_key(&press(ch));
     }
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert_eq!(commit_text(&result).as_deref(), Some("😄"));
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
 }
@@ -153,7 +153,7 @@ fn conversion_emoji_first_not_literal() {
     for ch in ['s', 'm', 'i', 'l', 'e'] {
         engine.process_key(&press(ch));
     }
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
 
     // Selected text on entering Conversion comes from the first
     // candidate; assert it's the emoji, not the literal.
@@ -196,7 +196,7 @@ fn conversion_unknown_emoji_shows_no_literal() {
     for ch in ['q', 'q', 'q', 'q'] {
         engine.process_key(&press(ch));
     }
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     let texts: Vec<String> = engine
         .candidates()
         .map(|list| list.candidates().iter().map(|c| c.text.clone()).collect())
@@ -218,7 +218,7 @@ fn enter_on_unknown_emoji_query_commits_literal() {
     for ch in ['q', 'q', 'q', 'q'] {
         engine.process_key(&press(ch));
     }
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert_eq!(commit_text(&result).as_deref(), Some(":qqqq"));
 }
 
@@ -237,7 +237,7 @@ fn typing_kiniku_surfaces_muscle_via_silent_n() {
             engine.process_key(&press(ch));
         }
         let last_show = engine
-            .process_key(&press_key(Keysym::SPACE))
+            .process_key(&press(Keysym::SPACE))
             .actions
             .into_iter()
             .find_map(|a| match a {
@@ -277,7 +277,7 @@ fn backspacing_to_empty_exits_emoji_mode() {
     assert_eq!(engine.mode.current(), InputMode::Emoji);
 
     for _ in 0..6 {
-        engine.process_key(&press_key(Keysym::BACKSPACE));
+        engine.process_key(&press(Keysym::BACKSPACE));
     }
     assert!(matches!(engine.state(), InputState::Empty));
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
@@ -304,7 +304,7 @@ fn backspacing_to_empty_restores_pre_emoji_katakana_mode() {
     }
 
     for _ in 0..6 {
-        engine.process_key(&press_key(Keysym::BACKSPACE));
+        engine.process_key(&press(Keysym::BACKSPACE));
     }
     assert!(matches!(engine.state(), InputState::Empty));
     assert_eq!(engine.mode.current(), InputMode::Katakana);
@@ -319,7 +319,7 @@ fn commit_emoji_restores_pre_emoji_katakana_mode() {
     for ch in ['s', 'm', 'i', 'l', 'e'] {
         engine.process_key(&press(ch));
     }
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     assert_eq!(engine.mode.current(), InputMode::Katakana);
 }
 
@@ -332,7 +332,7 @@ fn escape_emoji_restores_pre_emoji_katakana_mode() {
     for ch in ['s', 'm', 'i', 'l', 'e'] {
         engine.process_key(&press(ch));
     }
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert_eq!(engine.mode.current(), InputMode::Katakana);
 }
 

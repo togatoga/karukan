@@ -1,6 +1,5 @@
 //! Composing input handling (Empty and Composing states)
 
-use super::filter::source_for_key;
 use super::*;
 
 /// Append candidates to `target`, skipping duplicates by text.
@@ -132,41 +131,21 @@ impl InputMethodEngine {
             };
         }
 
-        // `:` from Empty enters emoji shortcode mode. Accept both keysym
-        // shapes a layout can emit for `:` — the `colon` keysym directly,
-        // or `semicolon` with shift held.
-        let typed_colon = key.to_char() == Some(':')
-            || (key.modifiers.shift_key && key.keysym == Keysym(b';' as u32));
-        if typed_colon
-            && !key.modifiers.control_key
-            && !key.modifiers.alt_key
-            && self.mode.current() != InputMode::Alphabet
-        {
-            return self.start_emoji_mode();
-        }
-
-        // Only handle printable characters without modifiers (except shift)
-        if let Some(ch) = key.to_char()
-            && !key.modifiers.control_key
-            && !key.modifiers.alt_key
-        {
-            // Detect Shift+letter: shift modifier with alphabetic, OR uppercase keysym.
-            // fcitx5 may resolve Shift into the keysym (sending 'A' instead of 'a'+shift),
-            // so we must also check for uppercase to handle both cases.
-            let is_shift_alpha =
-                ch.is_ascii_uppercase() || (key.modifiers.shift_key && ch.is_ascii_alphabetic());
-
-            if is_shift_alpha {
-                // Shift-alphabet is a temporary per-word mode, not a sticky
-                // toggle: ModeState remembers the mode to restore when this
-                // word is committed, so the next word returns to kana (#37).
+        if let Some(ch) = key.to_char() {
+            // `:` from Empty enters emoji shortcode mode. A layout can emit
+            // it as `:` directly, or as `;` with Shift held.
+            if (ch == ':' || (ch == ';' && key.modifiers.shift_key))
+                && self.mode.current() != InputMode::Alphabet
+            {
+                return self.start_emoji_mode();
+            }
+            // Shift+letter (an uppercase char) starts the word in direct
+            // input. A temporary per-word mode, not a sticky toggle:
+            // ModeState remembers the mode to restore when this word is
+            // committed, so the next word returns to kana (#37).
+            if ch.is_ascii_uppercase() {
                 self.mode.enter_temporary(InputMode::Alphabet);
             }
-            let ch = if self.mode.current() == InputMode::Alphabet && is_shift_alpha {
-                ch.to_ascii_uppercase()
-            } else {
-                ch
-            };
             return self.start_input(ch);
         }
         EngineResult::not_consumed()
@@ -219,35 +198,25 @@ impl InputMethodEngine {
 
     /// Process key in hiragana input state
     pub(super) fn process_key_composing(&mut self, key: &KeyEvent) -> EngineResult {
-        // Handle Ctrl+key shortcuts
         if key.modifiers.control_key {
-            match key.keysym {
+            match key.keysym.letter() {
                 // Ctrl+J: start a new live-conversion chunk at the caret
-                Keysym::KEY_J | Keysym::KEY_J_UPPER => return self.insert_chunk_break(),
+                Some('j') => return self.insert_chunk_break(),
                 // Ctrl+K: enter katakana mode
-                Keysym::KEY_K | Keysym::KEY_K_UPPER => return self.enter_katakana_mode(),
-                // Ctrl+A: move to beginning (Emacs-style Home)
-                Keysym::KEY_A | Keysym::KEY_A_UPPER => return self.move_caret_home(),
-                // Ctrl+B: move left (Emacs-style Left)
-                Keysym::KEY_B | Keysym::KEY_B_UPPER => return self.move_caret_left(),
-                // Ctrl+E: move to end (Emacs-style End)
-                Keysym::KEY_E | Keysym::KEY_E_UPPER => return self.move_caret_end(),
-                // Ctrl+F: move right (Emacs-style Right)
-                Keysym::KEY_F | Keysym::KEY_F_UPPER => return self.move_caret_right(),
-                // Ctrl+R / Ctrl+T: start the conversion already narrowed
-                // (first source / the cycle's tail), straight from typing —
-                // no Space needed to reach the filtered view.
-                Keysym::KEY_R | Keysym::KEY_R_UPPER => {
-                    return self.start_filtered_conversion(FilterDirection::Backward);
-                }
-                Keysym::KEY_T | Keysym::KEY_T_UPPER => {
-                    return self.start_filtered_conversion(FilterDirection::Forward);
-                }
+                Some('k') => return self.enter_katakana_mode(),
+                // Ctrl+A/B/E/F: Emacs-style Home/Left/End/Right
+                Some('a') => return self.move_caret_home(),
+                Some('b') => return self.move_caret_left(),
+                Some('e') => return self.move_caret_end(),
+                Some('f') => return self.move_caret_right(),
+                // Ctrl+I: straight to the AI view
+                Some('i') => return self.jump_to_source(CandidateSource::Model),
+                // Ctrl+T / Ctrl+R: start the conversion already narrowed
+                // (the first source / the cycle's tail), straight from
+                // typing: no Space needed to reach the filtered view.
+                Some('t') => return self.start_filtered_conversion(FilterDirection::Forward),
+                Some('r') => return self.start_filtered_conversion(FilterDirection::Backward),
                 _ => {}
-            }
-            // Ctrl+Y/U/I/O: jump straight to one source's view.
-            if let Some(source) = source_for_key(key.keysym) {
-                return self.jump_to_source(source);
             }
             // Ctrl+1..9: commit the numbered candidate from the suggestion
             // window. Bare digits stay plain text input, so numbers can be
@@ -278,16 +247,10 @@ impl InputMethodEngine {
             Keysym::HOME => self.move_caret_home(),
             Keysym::END => self.move_caret_end(),
             _ => {
-                if let Some(ch) = key.to_char()
-                    && !key.modifiers.control_key
-                    && !key.modifiers.alt_key
-                {
-                    // Detect Shift+letter: shift modifier with alphabetic, OR uppercase keysym.
-                    // fcitx5 may resolve Shift into the keysym (sending 'A' instead of 'a'+shift).
-                    let is_shift_alpha = ch.is_ascii_uppercase()
-                        || (key.modifiers.shift_key && ch.is_ascii_alphabetic());
-
-                    if is_shift_alpha && self.mode.current() != InputMode::Alphabet {
+                if let Some(ch) = key.to_char() {
+                    // Shift+letter (an uppercase char) switches the word to
+                    // direct input.
+                    if ch.is_ascii_uppercase() && self.mode.current() != InputMode::Alphabet {
                         // Bake katakana before switching so preedit doesn't
                         // revert; in kana mode the live romaji stays live so
                         // typing next to it can still combine
@@ -295,18 +258,12 @@ impl InputMethodEngine {
                             self.settle_romaji();
                             self.bake_katakana();
                         }
-                        // Shift-alphabet is a temporary per-word mode:
-                        // ModeState remembers the mode to restore on
-                        // commit/cancel, so the next word returns to the
-                        // prior mode (issue #37).
+                        // A temporary per-word mode: ModeState remembers the
+                        // mode to restore on commit/cancel, so the next word
+                        // returns to the prior mode (issue #37).
                         self.mode.enter_temporary(InputMode::Alphabet);
                         self.live.shown = false;
                     }
-                    let ch = if self.mode.current() == InputMode::Alphabet && is_shift_alpha {
-                        ch.to_ascii_uppercase()
-                    } else {
-                        ch
-                    };
                     return self.input_char(ch);
                 }
                 EngineResult::not_consumed()

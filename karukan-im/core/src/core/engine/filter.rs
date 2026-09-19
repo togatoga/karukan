@@ -28,19 +28,12 @@ const FILTER_CYCLE: [CandidateSource; 4] = [
     CandidateSource::Rewriter,
 ];
 
-/// Ctrl+I opens the AI view directly. It is the one view worth a key of
-/// its own: the others are a step or two along the cycle and are opened
-/// rarely, and every extra chord is one more thing to collide with.
-pub(super) fn source_for_key(keysym: Keysym) -> Option<CandidateSource> {
-    match keysym {
-        Keysym::KEY_I | Keysym::KEY_I_UPPER => Some(CandidateSource::Model),
-        _ => None,
-    }
-}
-
 impl InputMethodEngine {
     /// Show `source`'s view directly, from either state: entering the
-    /// conversion first when composing.
+    /// conversion first when composing. Only the AI view has a key of its
+    /// own (Ctrl+I): the others are a step or two along the cycle and are
+    /// opened rarely, and every extra chord is one more thing to collide
+    /// with.
     pub(super) fn jump_to_source(&mut self, source: CandidateSource) -> EngineResult {
         match &self.state {
             InputState::Conversion { .. } => self.apply_candidate_filter(source),

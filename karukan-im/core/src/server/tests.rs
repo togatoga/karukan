@@ -5,9 +5,9 @@ use crate::config::Settings;
 use crate::core::keycode::Keysym;
 
 // XKB keysyms for common keys (u32 aliases for the JSON payloads below)
-const XKB_KEY_K: u32 = Keysym::KEY_K.0;
-const XKB_KEY_A: u32 = Keysym::KEY_A.0;
-const XKB_KEY_LOWER_L: u32 = Keysym::KEY_L.0;
+const XKB_KEY_K: u32 = 'k' as u32;
+const XKB_KEY_A: u32 = 'a' as u32;
+const XKB_KEY_LOWER_L: u32 = 'l' as u32;
 const XKB_KEY_RETURN: u32 = Keysym::RETURN.0;
 const XKB_KEY_ESCAPE: u32 = Keysym::ESCAPE.0;
 const XKB_KEY_SPACE: u32 = Keysym::SPACE.0;

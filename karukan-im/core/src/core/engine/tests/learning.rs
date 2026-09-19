@@ -50,7 +50,7 @@ fn tab_key_skips_learning_in_composing() {
     engine.process_key(&press('i'));
     assert_eq!(engine.input_buf.reading(), "あい");
 
-    let result = engine.process_key(&press_key(Keysym::TAB));
+    let result = engine.process_key(&press(Keysym::TAB));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
@@ -75,7 +75,7 @@ fn ctrl_delete_removes_selected_learning_entry() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
     // Learning candidates are force-pushed first, so the learned entry is
@@ -141,7 +141,7 @@ fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     let selected = engine
         .state()
@@ -178,7 +178,7 @@ fn ctrl_delete_keeps_surface_that_another_source_also_produces() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     let selected = engine
         .state()
@@ -241,7 +241,7 @@ fn ctrl_backspace_deletes_learning_entry_like_ctrl_delete() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
     assert!(result.consumed);
@@ -259,9 +259,9 @@ fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     // Move the selection off the learning candidate.
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     let before = engine.state().candidates().unwrap().clone();
     assert!(!before.selected().unwrap().is_deletable());
 
@@ -310,7 +310,7 @@ fn ctrl_alt_delete_leaves_history_alone() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     assert!(
         engine
             .state()
@@ -335,9 +335,9 @@ fn plain_backspace_still_cancels_conversion() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
-    let result = engine.process_key(&press_key(Keysym::BACKSPACE));
+    let result = engine.process_key(&press(Keysym::BACKSPACE));
     assert!(result.consumed);
     // Backspace without Ctrl keeps its cancel-to-composing behavior and
     // deletes nothing from the history.
@@ -351,10 +351,10 @@ fn ctrl_delete_ignores_non_learning_candidate() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     // Move the selection off the learning candidate onto a fallback one.
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     let selected = engine
         .state()
         .candidates()
@@ -382,7 +382,7 @@ fn ctrl_delete_removes_prefix_matched_entry_by_full_reading() {
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     let selected = engine
         .state()
@@ -414,7 +414,7 @@ fn aux_shows_delete_hint_only_for_learning_candidate() {
     engine.process_key(&press('i'));
 
     // Learning candidate selected → aux carries the deletion hint.
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let aux = last_aux_text(&result).expect("conversion must update aux text");
     assert!(
         aux.contains(LEARNING_DELETE_HINT),
@@ -423,7 +423,7 @@ fn aux_shows_delete_hint_only_for_learning_candidate() {
     );
 
     // Moving to a non-learning candidate drops the hint.
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let aux = last_aux_text(&result).expect("navigation must update aux text");
     assert!(
         !aux.contains(LEARNING_DELETE_HINT),
@@ -441,7 +441,7 @@ fn space_key_keeps_learning_in_composing() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 

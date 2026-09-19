@@ -67,7 +67,7 @@ fn test_thx_chars_not_lost() {
     assert_eq!(preedit, "thx", "Should show 'thx', not lose characters");
 
     // Commit should produce "thx"
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let has_commit = result
         .actions
         .iter()
@@ -125,7 +125,7 @@ fn test_digit_starts_input_mode() {
     assert_eq!(engine.preedit().unwrap().text(), "20せいき");
 
     // Commit should produce "20せいき"
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let has_commit = result
         .actions
         .iter()

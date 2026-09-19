@@ -212,7 +212,7 @@ fn ellipsis_candidate_carries_three_dot_leader_description() {
     let mut engine = InputMethodEngine::new();
     type_string(&mut engine, "..");
     engine.process_key(&press('.'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     assert_eq!(
         description_for(&engine, "…"),
@@ -290,7 +290,7 @@ fn typing_three_dots_emits_ellipsis_in_auto_suggest_and_conversion() {
 
     assert_contains(&auto_suggest_texts(&final_result), "…");
 
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     assert_contains(&conversion_state_texts(&engine), "…");
 }
 
@@ -299,7 +299,7 @@ fn typing_a_then_space_emits_half_width_katakana() {
     let mut engine = InputMethodEngine::new();
     type_string(&mut engine, "a");
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     assert!(result.consumed);
     assert_contains(&conversion_state_texts(&engine), "ｱ");
 }

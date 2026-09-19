@@ -41,7 +41,7 @@ fn test_live_conversion_escape_shows_hiragana() {
     set_live_text(&mut engine, "愛");
 
     // Press Escape -> should clear live_conversion_text and show hiragana
-    let result = engine.process_key(&press_key(Keysym::ESCAPE));
+    let result = engine.process_key(&press(Keysym::ESCAPE));
     assert!(result.consumed);
     assert!(engine.live_text().is_empty());
     assert!(matches!(engine.state(), InputState::Composing { .. }));
@@ -60,12 +60,12 @@ fn test_live_conversion_escape_twice_cancels() {
     set_live_text(&mut engine, "愛");
 
     // First Escape: clears live conversion, shows hiragana
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
     assert!(engine.live_text().is_empty());
 
     // Second Escape: cancels input entirely
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Empty));
 }
 
@@ -81,7 +81,7 @@ fn test_live_conversion_commit_with_converted_text() {
     set_live_text(&mut engine, "愛");
 
     // Press Enter -> should commit "愛", not "あい"
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert!(result.consumed);
 
     let commit_text = result
@@ -112,7 +112,7 @@ fn test_commit_composing_hides_candidate_window() {
     engine.process_key(&press('i'));
     set_live_text(&mut engine, "愛");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert!(result.consumed);
     assert!(
         result
@@ -131,7 +131,7 @@ fn test_live_conversion_commit_empty_falls_back_to_hiragana() {
     engine.process_key(&press('a'));
     assert!(engine.live_text().is_empty());
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let commit_text = result
         .actions
         .iter()
@@ -156,7 +156,7 @@ fn test_live_conversion_commit_keeps_pending_tail() {
     }
     set_live_text(&mut engine, "早稲田");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let commit_text = result
         .actions
         .iter()
@@ -196,11 +196,11 @@ fn test_conversion_keeps_pending_tail_of_live_candidate() {
     }
     set_live_text(&mut engine, "早稲田");
 
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(engine.preedit().unwrap().text(), "早稲田d");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let commit_text = result
         .actions
         .iter()
@@ -223,12 +223,12 @@ fn test_commit_mid_buffer_ignores_live_text() {
     let mut engine = make_live_conversion_engine();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     engine.process_key(&press('d'));
     assert_eq!(engine.preedit().unwrap().text(), "あdい");
     set_live_text(&mut engine, "愛");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let commit_text = result
         .actions
         .iter()
@@ -253,7 +253,7 @@ fn test_live_conversion_cursor_move_clears() {
     set_live_text(&mut engine, "愛");
 
     // Left arrow clears live conversion
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert!(engine.live_text().is_empty());
 }
 
@@ -325,7 +325,7 @@ fn test_shift_space_alone_commits_a_fullwidth_space() {
     // The exception to the setting, committed directly rather than opening
     // a composition a second Space would convert.
     for mut engine in [InputMethodEngine::new(), fullwidth_space_engine()] {
-        let result = engine.process_key(&press_shift_key(Keysym::SPACE));
+        let result = engine.process_key(&press_shift(Keysym::SPACE));
         assert!(result.consumed);
         assert!(matches!(engine.state(), InputState::Empty));
         let commit = result.actions.iter().find_map(|a| match a {
@@ -346,10 +346,10 @@ fn test_shift_space_inserts_the_configured_space_into_a_composition() {
         (fullwidth_space_engine(), "あ\u{3000}"),
     ] {
         engine.process_key(&press('a'));
-        engine.process_key(&press_shift_key(Keysym::SPACE));
+        engine.process_key(&press_shift(Keysym::SPACE));
         assert_eq!(engine.preedit().unwrap().text(), expected);
 
-        let result = engine.process_key(&press_key(Keysym::RETURN));
+        let result = engine.process_key(&press(Keysym::RETURN));
         let commit = result.actions.iter().find_map(|a| match a {
             EngineAction::Commit(text) => Some(text.clone()),
             _ => None,
@@ -366,12 +366,12 @@ fn test_ctrl_shift_l_toggles_live_conversion() {
     assert!(!engine.live.enabled);
 
     // Ctrl+Shift+L → toggle ON
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let result = engine.process_key(&press_ctrl_shift('L'));
     assert!(result.consumed);
     assert!(engine.live.enabled);
 
     // Ctrl+Shift+L again → toggle OFF
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let result = engine.process_key(&press_ctrl_shift('L'));
     assert!(result.consumed);
     assert!(!engine.live.enabled);
 }
@@ -382,7 +382,7 @@ fn test_ctrl_shift_l_lowercase_toggles() {
     assert!(!engine.live.enabled);
 
     // Ctrl+Shift+l (lowercase keysym) → toggle ON
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
+    let result = engine.process_key(&press_ctrl_shift('l'));
     assert!(result.consumed);
     assert!(engine.live.enabled);
 }
@@ -399,7 +399,7 @@ fn test_toggle_on_during_composing_applies_immediately() {
     engine.process_key(&press('i'));
     assert!(!engine.live.enabled);
 
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let result = engine.process_key(&press_ctrl_shift('L'));
     assert!(result.consumed);
     assert!(engine.live.enabled);
 
@@ -423,7 +423,7 @@ fn test_toggle_off_during_composing_clears_live_text() {
     engine.process_key(&press('i'));
     set_live_text(&mut engine, "愛");
 
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let result = engine.process_key(&press_ctrl_shift('L'));
     assert!(result.consumed);
     assert!(!engine.live.enabled);
     assert!(engine.live_text().is_empty());
@@ -454,7 +454,7 @@ fn test_ctrl_shift_l_shows_aux_text() {
     let mut engine = InputMethodEngine::new();
 
     // Ctrl+Shift+L → check aux text shows "ライブ変換: ON"
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let result = engine.process_key(&press_ctrl_shift('L'));
     let has_aux = result
         .actions
         .iter()
@@ -462,7 +462,7 @@ fn test_ctrl_shift_l_shows_aux_text() {
     assert!(has_aux);
 
     // Ctrl+Shift+L again → "ライブ変換: OFF"
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let result = engine.process_key(&press_ctrl_shift('L'));
     let has_aux = result.actions.iter().any(
         |a| matches!(a, EngineAction::UpdateAuxText(text) if text.contains("ライブ変換: OFF")),
     );

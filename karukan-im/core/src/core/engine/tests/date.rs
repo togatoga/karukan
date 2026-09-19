@@ -119,7 +119,7 @@ fn committing_a_date_candidate_records_no_learning() {
         filter: None,
     };
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
 
     assert!(
         result

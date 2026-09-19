@@ -599,20 +599,15 @@ impl InputMethodEngine {
             return EngineResult::not_consumed();
         }
 
-        // Ctrl+Shift+L: toggle live conversion (works in all states)
-        if key.modifiers.control_key
-            && key.modifiers.shift_key
-            && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
-        {
-            return self.toggle_live_conversion();
-        }
-
-        // Ctrl+Shift+V: toggle the verbose aux line (works in all states)
-        if key.modifiers.control_key
-            && key.modifiers.shift_key
-            && (key.keysym == Keysym::KEY_V || key.keysym == Keysym::KEY_V_UPPER)
-        {
-            return self.toggle_verbose();
+        // Toggles that work in every state.
+        if key.modifiers.control_key && key.modifiers.shift_key {
+            match key.keysym.letter() {
+                // Ctrl+Shift+L: live conversion
+                Some('l') => return self.toggle_live_conversion(),
+                // Ctrl+Shift+V: the verbose aux line
+                Some('v') => return self.toggle_verbose(),
+                _ => {}
+            }
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)

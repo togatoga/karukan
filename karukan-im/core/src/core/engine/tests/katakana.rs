@@ -19,16 +19,7 @@ fn test_ctrl_k_converts_to_katakana() {
     assert_eq!(engine.preedit().unwrap().text(), "あいうえお");
 
     // Press Ctrl+k -> should convert preedit to katakana (preedit shows "アイウエオ")
-    let ctrl_k = KeyEvent {
-        keysym: Keysym::KEY_K,
-        modifiers: KeyModifiers {
-            control_key: true,
-            shift_key: false,
-            alt_key: false,
-            super_key: false,
-        },
-        is_press: true,
-    };
+    let ctrl_k = press_ctrl('k');
     let result = engine.process_key(&ctrl_k);
 
     assert!(result.consumed);
@@ -48,7 +39,7 @@ fn test_ctrl_k_converts_to_katakana() {
     );
 
     // Now press Enter -> should commit as katakana
-    let enter_result = engine.process_key(&press_key(Keysym::RETURN));
+    let enter_result = engine.process_key(&press(Keysym::RETURN));
     let has_katakana_commit = enter_result
         .actions
         .iter()
@@ -62,16 +53,7 @@ fn test_ctrl_k_with_empty_input() {
     let mut engine = InputMethodEngine::new();
 
     // No input, Ctrl+k should do nothing harmful
-    let ctrl_k = KeyEvent {
-        keysym: Keysym::KEY_K,
-        modifiers: KeyModifiers {
-            control_key: true,
-            shift_key: false,
-            alt_key: false,
-            super_key: false,
-        },
-        is_press: true,
-    };
+    let ctrl_k = press_ctrl('k');
     let result = engine.process_key(&ctrl_k);
 
     // Should not crash, state should remain empty
@@ -97,16 +79,7 @@ fn test_ctrl_k_uppercase_converts_to_katakana() {
     assert_eq!(engine.preedit().unwrap().text(), "あいうえお");
 
     // Press Ctrl+K (uppercase K) -> should convert preedit to katakana
-    let ctrl_k_upper = KeyEvent {
-        keysym: Keysym::KEY_K_UPPER,
-        modifiers: KeyModifiers {
-            control_key: true,
-            shift_key: false,
-            alt_key: false,
-            super_key: false,
-        },
-        is_press: true,
-    };
+    let ctrl_k_upper = press_ctrl('K');
     let result = engine.process_key(&ctrl_k_upper);
 
     assert!(result.consumed);
@@ -147,16 +120,7 @@ fn test_katakana_baked_on_switch_to_alphabet() {
     assert_eq!(engine.preedit().unwrap().text(), "あいうえお");
 
     // Ctrl+K → katakana mode, displays "アイウエオ"
-    let ctrl_k = KeyEvent {
-        keysym: Keysym::KEY_K,
-        modifiers: KeyModifiers {
-            control_key: true,
-            shift_key: false,
-            alt_key: false,
-            super_key: false,
-        },
-        is_press: true,
-    };
+    let ctrl_k = press_ctrl('k');
     engine.process_key(&ctrl_k);
     assert_eq!(engine.preedit().unwrap().text(), "アイウエオ");
 
@@ -183,16 +147,7 @@ fn test_ctrl_k_is_one_way_to_katakana() {
     engine.process_key(&press('i'));
 
     // Ctrl+K → katakana mode
-    let ctrl_k = KeyEvent {
-        keysym: Keysym::KEY_K,
-        modifiers: KeyModifiers {
-            control_key: true,
-            shift_key: false,
-            alt_key: false,
-            super_key: false,
-        },
-        is_press: true,
-    };
+    let ctrl_k = press_ctrl('k');
     engine.process_key(&ctrl_k);
     assert!(engine.mode.current() == InputMode::Katakana);
     assert_eq!(engine.preedit().unwrap().text(), "アイ");
@@ -203,7 +158,7 @@ fn test_ctrl_k_is_one_way_to_katakana() {
     assert_eq!(engine.preedit().unwrap().text(), "アイ");
 
     // Right Super → return to hiragana mode, katakana is baked in
-    engine.process_key(&press_key(Keysym::SUPER_R));
+    engine.process_key(&press(Keysym::SUPER_R));
     assert!(engine.mode.current() == InputMode::Hiragana);
     assert_eq!(engine.input_buf.reading(), "アイ");
     assert_eq!(engine.preedit().unwrap().text(), "アイ");

@@ -176,10 +176,10 @@ fn test_current_chunk_index_tracks_cursor() {
     assert_eq!(engine.current_chunk_index(), 1);
 
     // Move cursor to the left edge of the buffer → chunk 0.
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.input_buf.reading_cursor(), 0);
     assert_eq!(engine.current_chunk_index(), 0);
 }
@@ -214,7 +214,7 @@ fn test_backspace_reconverts_last_chunk_partition() {
     type_aiue(&mut engine); // ["あい", "うえ"]
     assert_eq!(engine.chunks.len(), 2);
 
-    engine.process_key(&press_key(Keysym::BACKSPACE)); // "あいう" → ["あい", "う"]
+    engine.process_key(&press(Keysym::BACKSPACE)); // "あいう" → ["あい", "う"]
     assert_eq!(engine.input_buf.reading(), "あいう");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
     assert_eq!(readings, vec!["あい", "う"]);
@@ -240,7 +240,7 @@ fn test_chunks_cleared_on_commit() {
     type_aiue(&mut engine);
     assert!(!engine.chunks.is_empty());
 
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(engine.chunks.is_empty());
 }
@@ -255,7 +255,7 @@ fn test_delete_all_chars_clears_chunks() {
     assert!(!engine.chunks.is_empty());
 
     for _ in 0..4 {
-        engine.process_key(&press_key(Keysym::BACKSPACE));
+        engine.process_key(&press(Keysym::BACKSPACE));
     }
     assert!(matches!(engine.state(), InputState::Empty));
     assert_eq!(engine.input_buf.reading(), "");
@@ -290,9 +290,9 @@ fn test_delete_first_chunk_reconverts_survivor_with_new_lctx() {
     assert_eq!(engine.chunks[1].converted, "OLD");
 
     // Delete the first chunk's two chars ("あい") from the front.
-    engine.process_key(&press_key(Keysym::HOME));
-    engine.process_key(&press_key(Keysym::DELETE));
-    engine.process_key(&press_key(Keysym::DELETE));
+    engine.process_key(&press(Keysym::HOME));
+    engine.process_key(&press(Keysym::DELETE));
+    engine.process_key(&press(Keysym::DELETE));
 
     assert_eq!(engine.input_buf.reading(), "うえ");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
@@ -314,11 +314,11 @@ fn test_middle_delete_repartitions_and_keeps_leading_cache_hit() {
     assert_eq!(engine.chunks[0].converted, "S0");
 
     // Cursor after う (pos 3), backspace deletes う — inside the middle chunk.
-    engine.process_key(&press_key(Keysym::HOME));
-    engine.process_key(&press_key(Keysym::RIGHT));
-    engine.process_key(&press_key(Keysym::RIGHT));
-    engine.process_key(&press_key(Keysym::RIGHT));
-    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press(Keysym::HOME));
+    engine.process_key(&press(Keysym::RIGHT));
+    engine.process_key(&press(Keysym::RIGHT));
+    engine.process_key(&press(Keysym::RIGHT));
+    engine.process_key(&press(Keysym::BACKSPACE));
 
     assert_eq!(engine.input_buf.reading(), "あいえおか");
     let readings: Vec<&str> = engine.chunks.iter().map(|s| s.reading.as_str()).collect();
@@ -368,7 +368,7 @@ fn test_ctrl_j_starts_a_new_chunk() {
     type_aiue(&mut engine); // "あいうえ" → one chunk
     assert_eq!(engine.chunks.len(), 1);
 
-    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press_ctrl('j'));
     assert_eq!(engine.chunk_breaks, vec![4]);
 
     engine.process_key(&press('o')); // "あいうえお"
@@ -383,7 +383,7 @@ fn test_ctrl_j_at_end_shows_empty_new_chunk_in_aux() {
     // happened at all.
     let mut engine = make_chunk_engine(40);
     type_aiue(&mut engine);
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_J));
+    let result = engine.process_key(&press_ctrl('j'));
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.contains("0/40"), "aux was: {aux}");
     assert_eq!(engine.current_chunk_index(), engine.chunks.len());
@@ -403,9 +403,9 @@ fn test_caret_on_manual_break_tracks_right_chunk() {
     // the aux shows.
     let mut engine = make_chunk_engine(40);
     type_aiue(&mut engine);
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT)); // caret between い and う
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_J)); // ["あい", "うえ"]
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT)); // caret between い and う
+    let result = engine.process_key(&press_ctrl('j')); // ["あい", "うえ"]
     assert_eq!(engine.current_chunk_index(), 1);
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.contains("うえ 2/40"), "aux was: {aux}");
@@ -420,9 +420,9 @@ fn test_ctrl_j_freezes_left_chunk_conversion() {
     type_aiue(&mut engine);
     assert_eq!(engine.chunks[0].converted, "KEEP");
 
-    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press_ctrl('j'));
     engine.process_key(&press('o'));
-    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press(Keysym::BACKSPACE));
     engine.process_key(&press('k'));
     engine.process_key(&press('a'));
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
@@ -436,7 +436,7 @@ fn test_ctrl_j_overrides_symbol_absorption() {
     // the mark forces the split the user asked for.
     let mut engine = make_chunk_engine(40);
     type_aiue(&mut engine);
-    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press_ctrl('j'));
     engine.process_key(&press(',')); // 、
     let readings: Vec<&str> = engine.chunks.iter().map(|c| c.reading.as_str()).collect();
     assert_eq!(readings, vec!["あいうえ", "、"]);
@@ -448,10 +448,10 @@ fn test_manual_break_shifts_with_edits_to_its_left() {
     // pointing at the same spot in the reading.
     let mut engine = make_chunk_engine(40);
     type_aiue(&mut engine);
-    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press_ctrl('j'));
     engine.process_key(&press('o')); // ["あいうえ", "お"]
 
-    engine.process_key(&press_key(Keysym::HOME));
+    engine.process_key(&press(Keysym::HOME));
     engine.process_key(&press('k'));
     engine.process_key(&press('a')); // "かあいうえお"
     assert_eq!(engine.input_buf.reading(), "かあいうえお");
@@ -463,10 +463,10 @@ fn test_manual_break_shifts_with_edits_to_its_left() {
 fn test_manual_break_cleared_on_commit() {
     let mut engine = make_chunk_engine(40);
     type_aiue(&mut engine);
-    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press_ctrl('j'));
     assert!(!engine.chunk_breaks.is_empty());
 
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     assert!(engine.chunk_breaks.is_empty());
 }
 
@@ -476,11 +476,11 @@ fn test_manual_break_dropped_when_erased_past() {
     // of the reading (still armed); erasing further keeps it in range.
     let mut engine = make_chunk_engine(40);
     type_aiue(&mut engine);
-    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    engine.process_key(&press_ctrl('j'));
     engine.process_key(&press('o')); // ["あいうえ", "お"]
 
     for _ in 0..5 {
-        engine.process_key(&press_key(Keysym::BACKSPACE));
+        engine.process_key(&press(Keysym::BACKSPACE));
     }
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(engine.chunk_breaks.is_empty());
@@ -497,9 +497,9 @@ fn test_aux_shows_current_chunk_with_fill_counter() {
     assert!(aux.contains("ああ 2/2"), "aux was: {aux}");
 
     type_aiue(&mut engine); // "ああ" + "あいうえ" → ["ああ", "あい", "うえ"]
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
-    let result = engine.process_key(&press_key(Keysym::LEFT)); // caret inside "あい"
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
+    let result = engine.process_key(&press(Keysym::LEFT)); // caret inside "あい"
     let aux = last_aux_text(&result).expect("aux text action");
     assert!(aux.contains("あい 2/2"), "aux was: {aux}");
 }

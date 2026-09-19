@@ -31,7 +31,7 @@ fn test_engine_commit_composing() {
     engine.process_key(&press('i'));
     assert_eq!(engine.preedit().unwrap().text(), "あい");
 
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     assert!(result.consumed);
 
     // Check for commit action
@@ -51,10 +51,10 @@ fn test_engine_backspace() {
     engine.process_key(&press('i'));
     assert_eq!(engine.preedit().unwrap().text(), "あい");
 
-    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press(Keysym::BACKSPACE));
     assert_eq!(engine.preedit().unwrap().text(), "あ");
 
-    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press(Keysym::BACKSPACE));
     assert!(matches!(engine.state(), InputState::Empty));
 }
 
@@ -65,7 +65,7 @@ fn space_in_empty_passes_through_by_default() {
     // page) while the IME has nothing to compose.
     let mut engine = InputMethodEngine::new();
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     assert!(!result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(result.actions.is_empty());
@@ -80,7 +80,7 @@ fn space_in_empty_hiragana_commits_fullwidth_space() {
     let mut engine = fullwidth_space_engine();
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
     let committed = result.actions.iter().find_map(|a| match a {
@@ -97,7 +97,7 @@ fn double_space_in_empty_hiragana_commits_two_fullwidth_spaces() {
     // never enter Composing, and never trigger Conversion.
     let mut engine = fullwidth_space_engine();
     for _ in 0..2 {
-        let result = engine.process_key(&press_key(Keysym::SPACE));
+        let result = engine.process_key(&press(Keysym::SPACE));
         assert!(matches!(engine.state(), InputState::Empty));
         let committed = result.actions.iter().find_map(|a| match a {
             EngineAction::Commit(t) => Some(t.clone()),
@@ -113,7 +113,7 @@ fn space_in_empty_katakana_follows_the_setting() {
     let mut engine = fullwidth_space_engine();
     engine.mode.set(InputMode::Katakana);
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     let committed = result.actions.iter().find_map(|a| match a {
         EngineAction::Commit(t) => Some(t.clone()),
         _ => None,
@@ -128,7 +128,7 @@ fn space_in_empty_alphabet_passes_through() {
     let mut engine = fullwidth_space_engine();
     engine.mode.enter_temporary(InputMode::Alphabet);
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     assert!(!result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(
@@ -147,7 +147,7 @@ fn space_after_composing_starts_still_triggers_conversion() {
     engine.process_key(&press('a'));
     assert_eq!(engine.preedit().unwrap().text(), "あ");
 
-    let result = engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press(Keysym::SPACE));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 }
@@ -159,7 +159,7 @@ fn test_engine_cancel() {
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
 
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Empty));
 }
 

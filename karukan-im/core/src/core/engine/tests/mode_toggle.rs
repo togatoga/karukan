@@ -12,12 +12,12 @@ fn test_mode_toggle_key_switches_alphabet_to_hiragana() {
 
     // Alt_R press → switch to hiragana mode (mid-composition; the toggle key
     // is the explicit way out, independent of the per-word auto-revert)
-    let result = engine.process_key(&press_key(Keysym::ALT_R));
+    let result = engine.process_key(&press(Keysym::ALT_R));
     assert!(result.consumed);
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Clear the composed "A", then type 'a' → should be 'あ' (hiragana mode)
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     engine.process_key(&press('a'));
     assert_eq!(engine.preedit().unwrap().text(), "あ");
 }
@@ -28,7 +28,7 @@ fn test_mode_toggle_key_noop_in_hiragana() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Alt_R press in hiragana mode → not consumed, no mode change
-    let result = engine.process_key(&press_key(Keysym::ALT_R));
+    let result = engine.process_key(&press(Keysym::ALT_R));
     assert!(!result.consumed);
     assert!(engine.mode.current() != InputMode::Alphabet);
 
@@ -48,7 +48,7 @@ fn test_mode_toggle_key_during_alphabet_input() {
     assert!(engine.mode.current() == InputMode::Alphabet);
 
     // Alt_R → switch to hiragana
-    let result = engine.process_key(&press_key(Keysym::ALT_R));
+    let result = engine.process_key(&press(Keysym::ALT_R));
     assert!(result.consumed);
     assert!(engine.mode.current() != InputMode::Alphabet);
 
@@ -67,7 +67,7 @@ fn test_super_r_also_switches_alphabet_to_hiragana() {
     assert!(engine.mode.current() == InputMode::Alphabet);
 
     // Super_R press → switch to hiragana (one-way)
-    let result = engine.process_key(&press_key(Keysym::SUPER_R));
+    let result = engine.process_key(&press(Keysym::SUPER_R));
     assert!(result.consumed);
     assert!(engine.mode.current() != InputMode::Alphabet);
 }
@@ -81,7 +81,7 @@ fn test_meta_r_also_switches_alphabet_to_hiragana() {
     assert!(engine.mode.current() == InputMode::Alphabet);
 
     // Meta_R press → switch to hiragana (one-way)
-    let result = engine.process_key(&press_key(Keysym::META_R));
+    let result = engine.process_key(&press(Keysym::META_R));
     assert!(result.consumed);
     assert!(engine.mode.current() != InputMode::Alphabet);
 }
@@ -98,12 +98,12 @@ fn test_henkan_switches_alphabet_to_hiragana() {
     assert!(engine.mode.current() == InputMode::Alphabet);
 
     // 変換 press → switch to hiragana (one-way)
-    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    let result = engine.process_key(&press(Keysym::HENKAN));
     assert!(result.consumed);
     assert!(engine.mode.current() == InputMode::Hiragana);
 
     // Clear the composed "A", then type 'a' → should be 'あ' (hiragana mode)
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     engine.process_key(&press('a'));
     assert_eq!(engine.preedit().unwrap().text(), "あ");
 }
@@ -115,13 +115,13 @@ fn test_henkan_switches_katakana_to_hiragana_and_bakes_preedit() {
     // Compose "か", enter katakana mode via Ctrl+K
     engine.process_key(&press('k'));
     engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
+    engine.process_key(&press_ctrl('k'));
     assert!(engine.mode.current() == InputMode::Katakana);
     assert_eq!(engine.preedit().unwrap().text(), "カ");
 
     // 変換 press → back to hiragana; the katakana preedit must stay
     // katakana (baked), not revert to hiragana display
-    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    let result = engine.process_key(&press(Keysym::HENKAN));
     assert!(result.consumed);
     assert!(engine.mode.current() == InputMode::Hiragana);
     assert_eq!(engine.preedit().unwrap().text(), "カ");
@@ -134,7 +134,7 @@ fn test_henkan_noop_in_hiragana_passes_through() {
 
     // 変換 in hiragana mode → not consumed, no mode change (same policy
     // as the right-modifier toggle keys)
-    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    let result = engine.process_key(&press(Keysym::HENKAN));
     assert!(!result.consumed);
     assert!(engine.mode.current() == InputMode::Hiragana);
 }
@@ -174,13 +174,13 @@ fn test_toggle_key_is_inert_during_conversion() {
     // Katakana mode, compose かか, start conversion (candidate window open)
     engine.process_key(&press('k'));
     engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
+    engine.process_key(&press_ctrl('k'));
     engine.process_key(&press('k'));
     engine.process_key(&press('a'));
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
-    let result = engine.process_key(&press_key(Keysym::HENKAN));
+    let result = engine.process_key(&press(Keysym::HENKAN));
     assert!(!result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(engine.mode.current() == InputMode::Katakana);
@@ -188,7 +188,7 @@ fn test_toggle_key_is_inert_during_conversion() {
     assert_eq!(engine.input_buf.reading(), "かか");
 
     // Escape back to Composing: the typed hiragana reading is intact
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Composing { .. }));
 }
 
@@ -201,8 +201,8 @@ fn test_toggle_key_exits_alphabet_during_conversion() {
     let mut engine = InputMethodEngine::new();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::SPACE));
-    engine.process_key(&press_ctrl(Keysym::KEY_I));
+    engine.process_key(&press(Keysym::SPACE));
+    engine.process_key(&press_ctrl('i'));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
     engine.process_key(&press_shift('A'));
@@ -210,7 +210,7 @@ fn test_toggle_key_exits_alphabet_during_conversion() {
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
     // Alt_R → hiragana, without leaving the window
-    let result = engine.process_key(&press_key(Keysym::ALT_R));
+    let result = engine.process_key(&press(Keysym::ALT_R));
     assert!(result.consumed);
     assert!(engine.mode.current() == InputMode::Hiragana);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));

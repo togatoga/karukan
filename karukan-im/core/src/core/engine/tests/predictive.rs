@@ -152,7 +152,7 @@ fn conversion_with_pending_keeps_narrowed_candidates() {
     for ch in "wased".chars() {
         engine.process_key(&press(ch));
     }
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press(Keysym::SPACE));
 
     let candidates = engine.candidates().expect("conversion candidates");
     let texts: Vec<&str> = candidates

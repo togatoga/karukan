@@ -63,32 +63,20 @@ fn dict_from_json(json: &str) -> Dictionary {
     Dictionary::build_from_json(tmp.path()).unwrap()
 }
 
-fn press(ch: char) -> KeyEvent {
-    KeyEvent::press(Keysym(ch as u32))
-}
-
-fn press_key(keysym: Keysym) -> KeyEvent {
-    KeyEvent::press(keysym)
+fn press(keysym: impl Into<Keysym>) -> KeyEvent {
+    KeyEvent::press(keysym.into())
 }
 
 fn release_key(keysym: Keysym) -> KeyEvent {
     KeyEvent::new(keysym, KeyModifiers::default(), false)
 }
 
-fn press_shift(ch: char) -> KeyEvent {
-    KeyEvent::new(
-        Keysym(ch as u32),
-        KeyModifiers::new().with_shift(true),
-        true,
-    )
+fn press_shift(keysym: impl Into<Keysym>) -> KeyEvent {
+    KeyEvent::new(keysym.into(), KeyModifiers::new().with_shift(true), true)
 }
 
-fn press_shift_key(keysym: Keysym) -> KeyEvent {
-    KeyEvent::new(keysym, KeyModifiers::new().with_shift(true), true)
-}
-
-fn press_ctrl(keysym: Keysym) -> KeyEvent {
-    KeyEvent::new(keysym, KeyModifiers::new().with_control(true), true)
+fn press_ctrl(keysym: impl Into<Keysym>) -> KeyEvent {
+    KeyEvent::new(keysym.into(), KeyModifiers::new().with_control(true), true)
 }
 
 fn press_alt(keysym: Keysym) -> KeyEvent {
@@ -113,9 +101,9 @@ fn press_ctrl_alt(keysym: Keysym) -> KeyEvent {
     )
 }
 
-fn press_ctrl_shift(keysym: Keysym) -> KeyEvent {
+fn press_ctrl_shift(ch: char) -> KeyEvent {
     KeyEvent::new(
-        keysym,
+        Keysym::from(ch),
         KeyModifiers::new().with_control(true).with_shift(true),
         true,
     )

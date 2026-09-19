@@ -93,22 +93,22 @@ fn test_cursor_move_left_right() {
     assert_eq!(engine.preedit().unwrap().caret(), 3); // cursor at end
 
     // Move left -> cursor between "い" and "う"
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
     assert_eq!(engine.preedit().unwrap().caret(), 2);
 
     // Move left again -> cursor between "あ" and "い"
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 
     // Move right -> cursor between "い" and "う"
-    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press(Keysym::RIGHT));
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
     assert_eq!(engine.preedit().unwrap().caret(), 2);
 
     // Move right -> cursor at end
-    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press(Keysym::RIGHT));
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
     assert_eq!(engine.preedit().unwrap().caret(), 3);
 }
@@ -122,11 +122,11 @@ fn test_cursor_left_boundary() {
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 
     // Move left past start
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.preedit().unwrap().caret(), 0);
 
     // Move left again - should stay at 0
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.preedit().unwrap().caret(), 0);
 }
 
@@ -139,7 +139,7 @@ fn test_cursor_right_boundary() {
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 
     // Move right past end - should stay at 1
-    engine.process_key(&press_key(Keysym::RIGHT));
+    engine.process_key(&press(Keysym::RIGHT));
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 }
 
@@ -153,7 +153,7 @@ fn test_cursor_insert_in_middle() {
     assert_eq!(engine.preedit().unwrap().text(), "あう");
 
     // Move left to before "う"
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 
     // Type "い" (i) - should insert between "あ" and "う"
@@ -172,7 +172,7 @@ fn test_cursor_insert_romaji_in_middle() {
     assert_eq!(engine.preedit().unwrap().text(), "あう");
 
     // Move left to before "う"
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
 
     // Type "ka" - 'k' goes to buffer, then 'a' produces "か"
     engine.process_key(&press('k'));
@@ -196,12 +196,12 @@ fn test_cursor_backspace_in_middle() {
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
 
     // Move left once (before "う"), then left again (before "い")
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.preedit().unwrap().caret(), 1);
 
     // Backspace - should delete "あ" before cursor
-    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press(Keysym::BACKSPACE));
     assert_eq!(engine.preedit().unwrap().text(), "いう");
     assert_eq!(engine.preedit().unwrap().caret(), 0);
 }
@@ -216,11 +216,11 @@ fn test_cursor_delete_key() {
     engine.process_key(&press('u'));
 
     // Move to beginning
-    engine.process_key(&press_key(Keysym::HOME));
+    engine.process_key(&press(Keysym::HOME));
     assert_eq!(engine.preedit().unwrap().caret(), 0);
 
     // Delete - should remove "あ"
-    engine.process_key(&press_key(Keysym::DELETE));
+    engine.process_key(&press(Keysym::DELETE));
     assert_eq!(engine.preedit().unwrap().text(), "いう");
     assert_eq!(engine.preedit().unwrap().caret(), 0);
 }
@@ -236,12 +236,12 @@ fn test_cursor_home_end() {
     assert_eq!(engine.preedit().unwrap().caret(), 3);
 
     // Home - cursor to start
-    engine.process_key(&press_key(Keysym::HOME));
+    engine.process_key(&press(Keysym::HOME));
     assert_eq!(engine.preedit().unwrap().caret(), 0);
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
 
     // End - cursor to end
-    engine.process_key(&press_key(Keysym::END));
+    engine.process_key(&press(Keysym::END));
     assert_eq!(engine.preedit().unwrap().caret(), 3);
 }
 
@@ -255,7 +255,7 @@ fn test_cursor_left_flushes_romaji_buffer() {
     assert_eq!(engine.preedit().unwrap().text(), "あk");
 
     // Move left - should flush "k" (becomes "k" as-is or gets handled)
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     // After flush, buffer should be empty, the flushed char is in composed text
     let preedit = engine.preedit().unwrap();
     // "k" flushed becomes "k" (pass-through since no match)
@@ -275,11 +275,11 @@ fn test_cursor_commit_after_editing() {
     assert_eq!(engine.preedit().unwrap().text(), "あいう");
 
     // Move left twice (before "い")
-    engine.process_key(&press_key(Keysym::LEFT));
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
 
     // Delete "い" at cursor
-    engine.process_key(&press_key(Keysym::DELETE));
+    engine.process_key(&press(Keysym::DELETE));
     assert_eq!(engine.preedit().unwrap().text(), "あう");
 
     // Insert "え" at cursor
@@ -287,7 +287,7 @@ fn test_cursor_commit_after_editing() {
     assert_eq!(engine.preedit().unwrap().text(), "あえう");
 
     // Commit
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let has_commit = result
         .actions
         .iter()
@@ -308,7 +308,7 @@ fn test_cursor_waseda_scenario() {
     assert_eq!(engine.preedit().unwrap().text(), "わせだだいがく");
 
     // Now let's test the fix scenario: type "waseyadaigaku" (wrong)
-    engine.process_key(&press_key(Keysym::ESCAPE)); // Cancel
+    engine.process_key(&press(Keysym::ESCAPE)); // Cancel
     for ch in "waseyadaigaku".chars() {
         engine.process_key(&press(ch));
     }
@@ -318,12 +318,12 @@ fn test_cursor_waseda_scenario() {
     // "わせやだいがく" - 7 chars, cursor at end (7)
     // Move left 5 times to get to position 2 (after "せ")
     for _ in 0..5 {
-        engine.process_key(&press_key(Keysym::LEFT));
+        engine.process_key(&press(Keysym::LEFT));
     }
     assert_eq!(engine.preedit().unwrap().caret(), 2);
 
     // Delete "や" at cursor
-    engine.process_key(&press_key(Keysym::DELETE));
+    engine.process_key(&press(Keysym::DELETE));
     assert_eq!(engine.preedit().unwrap().text(), "わせだいがく");
     assert_eq!(engine.preedit().unwrap().caret(), 2);
 
@@ -333,7 +333,7 @@ fn test_cursor_waseda_scenario() {
     assert_eq!(engine.preedit().unwrap().text(), "わせだだいがく");
 
     // Commit
-    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let result = engine.process_key(&press(Keysym::RETURN));
     let has_commit = result
         .actions
         .iter()
@@ -354,12 +354,12 @@ fn test_cursor_composed_hiragana_tracking() {
     assert_eq!(engine.input_buf.reading_cursor(), 2);
 
     // Move left keeps the elements; only the cursor changes
-    engine.process_key(&press_key(Keysym::LEFT));
+    engine.process_key(&press(Keysym::LEFT));
     assert_eq!(engine.input_buf.reading(), "あい");
     assert_eq!(engine.input_buf.cursor(), 1);
 
     // Cancel should clear
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert_eq!(engine.input_buf.reading(), "");
     assert_eq!(engine.input_buf.cursor(), 0);
 }

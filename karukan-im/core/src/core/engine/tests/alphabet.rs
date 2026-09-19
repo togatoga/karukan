@@ -8,7 +8,7 @@ fn test_shift_alone_does_not_toggle_mode() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Shift press alone should NOT toggle mode
-    let result = engine.process_key(&press_key(Keysym::SHIFT_L));
+    let result = engine.process_key(&press(Keysym::SHIFT_L));
     assert!(!result.consumed);
     assert!(engine.mode.current() != InputMode::Alphabet);
 
@@ -42,11 +42,7 @@ fn test_shift_letter_fcitx5_lowercase_keysym() {
 
     // fcitx5 sends keysym='a' (lowercase!) with modifiers.shift_key=true
     // This should enter alphabet mode and input uppercase 'A'
-    let event = KeyEvent::new(
-        Keysym(0x0061), // lowercase 'a'
-        KeyModifiers::new().with_shift(true),
-        true,
-    );
+    let event = press_shift('a');
     engine.process_key(&event);
     assert!(engine.mode.current() == InputMode::Alphabet);
     assert!(matches!(engine.state(), InputState::Composing { .. }));
@@ -64,10 +60,10 @@ fn test_shift_letter_in_hiragana_enters_alphabet_and_uppercase() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Shift press
-    engine.process_key(&press_key(Keysym::SHIFT_L));
+    engine.process_key(&press(Keysym::SHIFT_L));
 
     // Shift+a (fcitx5 sends lowercase keysym)
-    let event = KeyEvent::new(Keysym(0x0061), KeyModifiers::new().with_shift(true), true);
+    let event = press_shift('a');
     engine.process_key(&event);
     assert!(engine.mode.current() == InputMode::Alphabet);
     assert_eq!(engine.preedit().unwrap().text(), "あA");
@@ -81,11 +77,7 @@ fn test_uppercase_keysym_without_shift_flag_enters_alphabet() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Empty state: uppercase keysym without shift flag
-    let event = KeyEvent::new(
-        Keysym(0x0041), // uppercase 'A'
-        KeyModifiers::new(),
-        true,
-    );
+    let event = press('A');
     engine.process_key(&event);
     assert!(
         engine.mode.current() == InputMode::Alphabet,
@@ -105,11 +97,7 @@ fn test_uppercase_keysym_without_shift_flag_composing() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Uppercase keysym without shift flag
-    let event = KeyEvent::new(
-        Keysym(0x0041), // uppercase 'A'
-        KeyModifiers::new(),
-        true,
-    );
+    let event = press('A');
     engine.process_key(&event);
     assert!(
         engine.mode.current() == InputMode::Alphabet,
@@ -125,11 +113,7 @@ fn test_shift_symbol_stays_in_hiragana_mode() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // '!' with shift modifier → stays in hiragana mode
-    let event = KeyEvent::new(
-        Keysym(0x0021), // '!'
-        KeyModifiers::new().with_shift(true),
-        true,
-    );
+    let event = press_shift('!');
     engine.process_key(&event);
     assert!(engine.mode.current() != InputMode::Alphabet);
 }
@@ -141,11 +125,7 @@ fn test_shift_digit_stays_in_hiragana_mode() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // '2' with shift modifier → stays in hiragana mode
-    let event = KeyEvent::new(
-        Keysym(0x0032), // '2'
-        KeyModifiers::new().with_shift(true),
-        true,
-    );
+    let event = press_shift('2');
     engine.process_key(&event);
     assert!(engine.mode.current() != InputMode::Alphabet);
 }
@@ -163,11 +143,7 @@ fn test_alphabet_mode_uppercase_with_shift() {
     assert_eq!(engine.preedit().unwrap().text(), "Aa");
 
     // Shift+a → uppercase 'A' (still in alphabet mode)
-    let event = KeyEvent::new(
-        Keysym(0x0061), // lowercase keysym
-        KeyModifiers::new().with_shift(true),
-        true,
-    );
+    let event = press_shift('a');
     engine.process_key(&event);
     assert!(engine.mode.current() == InputMode::Alphabet);
     assert_eq!(engine.preedit().unwrap().text(), "AaA");
@@ -210,11 +186,7 @@ fn test_mixed_hiragana_alphabet_input() {
 
     // Shift+L → enters alphabet mode, inputs 'L'
     // fcitx5 sends lowercase keysym with shift flag
-    let event = KeyEvent::new(
-        Keysym(0x006c), // lowercase 'l'
-        KeyModifiers::new().with_shift(true),
-        true,
-    );
+    let event = press_shift('l');
     engine.process_key(&event);
     assert!(engine.mode.current() == InputMode::Alphabet);
     assert_eq!(engine.preedit().unwrap().text(), "わたしはL");
@@ -237,7 +209,7 @@ fn test_shift_alphabet_reverts_to_hiragana_after_commit() {
 
     // Type and commit the alphabet word
     engine.process_key(&press('i'));
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     assert!(matches!(engine.state(), InputState::Empty));
 
     // Shift-alphabet is a temporary per-word mode: after commit we are back
@@ -255,7 +227,7 @@ fn test_shift_alphabet_reverts_to_hiragana_after_cancel() {
     engine.process_key(&press_shift('A'));
     engine.process_key(&press('b'));
 
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
     assert!(matches!(engine.state(), InputState::Empty));
     // Cancelling the temporary alphabet word restores Hiragana
     assert!(engine.mode.current() == InputMode::Hiragana);
@@ -272,7 +244,7 @@ fn test_shift_alphabet_reverts_to_hiragana_after_erase_to_empty() {
     assert!(engine.mode.current() == InputMode::Alphabet);
 
     // Erasing back to an empty buffer ends the temporary alphabet word
-    engine.process_key(&press_key(Keysym::BACKSPACE));
+    engine.process_key(&press(Keysym::BACKSPACE));
     assert!(matches!(engine.state(), InputState::Empty));
     assert!(engine.mode.current() == InputMode::Hiragana);
 }
@@ -283,7 +255,7 @@ fn test_shift_alphabet_from_katakana_reverts_to_katakana() {
 
     // Type a char, then switch to katakana mode (Ctrl+K)
     engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
+    engine.process_key(&press_ctrl('k'));
     assert!(engine.mode.current() == InputMode::Katakana);
 
     // Shift+A enters alphabet, remembering Katakana as the prior mode
@@ -292,7 +264,7 @@ fn test_shift_alphabet_from_katakana_reverts_to_katakana() {
 
     // Commit → reverts to Katakana (the mode before the Shift gesture),
     // not all the way to Hiragana
-    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press(Keysym::RETURN));
     assert!(engine.mode.current() == InputMode::Katakana);
 }
 
@@ -305,7 +277,7 @@ fn test_alphabet_mode_aux_text() {
     let aux_hiragana = engine.format_aux_composing();
     assert!(aux_hiragana.starts_with("[あ]"));
 
-    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press(Keysym::ESCAPE));
 
     // Enter alphabet mode via Shift+A
     engine.process_key(&press_shift('A'));
@@ -320,7 +292,7 @@ fn test_shift_right_alone_does_not_toggle() {
     assert!(engine.mode.current() != InputMode::Alphabet);
 
     // Right Shift alone should NOT toggle alphabet mode
-    engine.process_key(&press_key(Keysym::SHIFT_R));
+    engine.process_key(&press(Keysym::SHIFT_R));
     assert!(engine.mode.current() != InputMode::Alphabet);
 }
 
