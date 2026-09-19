@@ -75,6 +75,9 @@ pub struct EngineConfig {
     pub display_context_chars: usize,
     /// Maximum context length for API calls (to avoid overflow)
     pub context_chars: usize,
+    /// User persona text prepended to every model lctx (empty = disabled);
+    /// see `persona_lctx`
+    pub persona: String,
     /// Maximum reading length (chars) converted by the model in a single call.
     /// The composing buffer is split into chunks of at most this many chars so
     /// live-conversion latency stays bounded for long input. See
@@ -131,6 +134,7 @@ impl EngineConfig {
             chunk_digits: settings.conversion.chunk_digits,
             chunk_alphabets: settings.conversion.chunk_alphabets,
             beam_chars: settings.conversion.beam_chars,
+            persona: settings.conversion.persona.clone(),
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
             strategy: settings.conversion.strategy,
@@ -156,6 +160,7 @@ impl Default for EngineConfig {
             chunk_digits: 0,
             chunk_alphabets: 0,
             beam_chars: 30,
+            persona: String::new(),
             beam_width: 3,
             max_latency_ms: 100,
             strategy: StrategyMode::default(),

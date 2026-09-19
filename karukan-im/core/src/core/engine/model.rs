@@ -11,10 +11,30 @@ use tracing::debug;
 
 use super::*;
 
+/// Max persona chars kept (tail) when prepended to the lctx
+const MAX_PERSONA_CHARS: usize = 25;
+
 impl InputMethodEngine {
+    /// Prepend the persona to `ctx` by bare concatenation, so it reads as
+    /// preceding text. Applied at the single model entry point, so live
+    /// chunks and Space conversion both carry it and it lands in the
+    /// conversion cache key.
+    fn persona_lctx(&self, ctx: &str) -> String {
+        format!("{}{}", self.effective_persona(), ctx)
+    }
+
+    /// The persona text as the model receives it: trimmed, last
+    /// [`MAX_PERSONA_CHARS`] chars; empty when unset. Also what the aux
+    /// mode indicator displays, so screen and model always agree.
+    pub(super) fn effective_persona(&self) -> String {
+        keep_last_chars(self.config.persona.trim(), MAX_PERSONA_CHARS)
+    }
+
     /// Kana-kanji conversion via the model(s). Every model call goes through
     /// the conversion cache, so re-running unchanged chunks is free.
-    /// `api_context` is the left context fed to the model.
+    /// `api_context` is the left context fed to the model; the configured
+    /// persona is prepended here (`persona_lctx`), so every path carries it
+    /// and it lands in the cache key.
     ///
     /// Kana-free readings skip the model entirely: it hallucinates on
     /// symbol/alphabet-only input (rewriters cover those).
@@ -27,6 +47,8 @@ impl InputMethodEngine {
         if !karukan_engine::contains_kana(reading) {
             return vec![];
         }
+        let lctx = self.persona_lctx(api_context);
+        let api_context = lctx.as_str();
         let strategy = self.determine_strategy(reading, num_candidates);
         let katakana = karukan_engine::hiragana_to_katakana(reading);
 

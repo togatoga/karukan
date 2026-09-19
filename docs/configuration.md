@@ -16,6 +16,7 @@ model = "jinen-v2-small-q5"     # メインモデル（[models] のキーを指�
 light_model = "jinen-v2-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用。[models] のキーを指定）
 use_context = true              # Surrounding Textを変換に使用する
 context_chars = 10              # 変換に使う前後テキストの最大文字数
+persona = ""                    # 変換ペルソナ（例: "プログラミング"。[Conversion Persona](#conversion-persona) 参照）
 beam_chars = 30                 # 別候補を出す範囲の文字数（Chunk単位で後ろからまとめる）
 beam_width = 3                  # 別候補の本数
 max_latency_ms = 100            # メインモデルの許容レイテンシ（ms）。超過時は軽量モデルに自動切替（0 = 無効）
@@ -123,6 +124,10 @@ verbose = false                 # 補助テキストに詳細を出す（Ctrl+Sh
 | 推論時間 | `推論: 41ms key: 45ms` | モデルの呼び出しにかかった時間と、その打鍵の処理全体にかかった時間。キャッシュに当たった場合、推論は `0ms` になる |
 | モデル名 | `jinen-v2-small-q5` | 表示中の候補を出したモデル（`[models]` のキー） |
 | モデルに渡した文脈 | `lctx: 昨日は` | 変換時に前方の文脈としてモデルへ渡した文字列 |
+
+## Conversion Persona
+
+`persona` によく書く話題のキーワード（例: `プログラミング`。英語表記を優先したければ `programming` のような英単語）を設定すると、モデルへ渡す左コンテキストの先頭にそのまま連結され（`{persona}{文脈}`）、それに合わせた変換が出やすくなります。ライブ変換・Space変換の両方に適用され、適用中は aux のモード表示に実効値が表示されます（例: `⚡[あ]P:プログラミング`）。末尾25文字まで使用（10〜20文字推奨）。空（既定）で無効です。
 
 ## Conversion Strategy
 
