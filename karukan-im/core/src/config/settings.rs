@@ -147,6 +147,10 @@ pub struct ConversionSettings {
     pub n_threads: u32,
     /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
     pub live_conversion: bool,
+    /// Typing a printable character during conversion commits the selected
+    /// candidate and starts the next composition, instead of refining the
+    /// reading (a narrowed source view still refines)
+    pub commit_on_type: bool,
 }
 
 /// Learning cache settings

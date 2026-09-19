@@ -102,6 +102,8 @@ pub struct EngineConfig {
     pub verbose: bool,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,
+    /// Typing during conversion commits instead of refining the reading
+    pub commit_on_type: bool,
     /// Which symbol the `,` `.` `/` `[` `]` keys type
     pub symbol: SymbolStyle,
     /// The width kana input comes out at, per character group
@@ -134,6 +136,7 @@ impl EngineConfig {
             strategy: settings.conversion.strategy,
             verbose: settings.display.verbose,
             live_conversion: settings.conversion.live_conversion,
+            commit_on_type: settings.conversion.commit_on_type,
             symbol: settings.symbol.style(),
             width: settings.width,
             space: settings.symbol.space,
@@ -158,6 +161,7 @@ impl Default for EngineConfig {
             strategy: StrategyMode::default(),
             verbose: false,
             live_conversion: false,
+            commit_on_type: false,
             symbol: SymbolStyle::default(),
             width: WidthRules::default(),
             space: SpaceStyle::default(),
