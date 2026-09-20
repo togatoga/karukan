@@ -10,6 +10,15 @@ use crate::config::settings::StrategyMode;
 
 use super::*;
 
+/// Process-global cache of the merged user dictionary.
+///
+/// The merged dictionary (potentially several large TSVs) takes seconds to
+/// load and merge. Karukan creates one engine per input context; without
+/// this cache, every new context (window/field switch) re-read and
+/// re-merged all dictionaries.
+static USER_DICT_CACHE: std::sync::OnceLock<Option<std::sync::Arc<Dictionary>>> =
+    std::sync::OnceLock::new();
+
 /// Converters produced by the background model-loading thread, handed to the
 /// engine through the `model_loading` channel.
 pub(super) struct LoadedConverters {
@@ -192,7 +201,7 @@ impl InputMethodEngine {
         match Dictionary::load(&path) {
             Ok(dict) => {
                 debug!("System dictionary loaded from {:?}", path);
-                self.dicts.system = Some(dict);
+                self.dicts.system = Some(std::sync::Arc::new(dict));
             }
             Err(e) => {
                 debug!("Failed to load system dictionary from {:?}: {}", path, e);
@@ -251,6 +260,12 @@ impl InputMethodEngine {
             return;
         }
 
+        if let Some(cached) = USER_DICT_CACHE.get() {
+            debug!("User dictionaries resolved from process-level cache (no reload)");
+            self.dicts.user = cached.clone();
+            return;
+        }
+
         let Some(dir) = Settings::user_dict_dir() else {
             debug!("Could not determine user dictionary directory");
             return;
@@ -306,9 +321,13 @@ impl InputMethodEngine {
                     paths.len(),
                     dir
                 );
-                self.dicts.user = Some(merged);
+                let merged = std::sync::Arc::new(merged);
+                self.dicts.user = Some(merged.clone());
+                let _ = USER_DICT_CACHE.set(Some(merged));
             }
-            Ok(None) => {}
+            Ok(None) => {
+                let _ = USER_DICT_CACHE.set(None);
+            }
             Err(e) => {
                 debug!("Failed to merge user dictionaries: {}", e);
             }

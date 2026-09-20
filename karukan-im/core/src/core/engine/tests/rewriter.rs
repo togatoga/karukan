@@ -126,7 +126,7 @@ fn rewriter_does_not_expand_dictionary_candidates() {
     // (wrongly) fed dictionary candidates, those three variants would
     // appear even though the user typed only hiragana.
     let mut engine = composing_engine("てすと");
-    engine.dicts.user = Some(user_dict_with("てすと", ","));
+    engine.dicts.user = Some(std::sync::Arc::new(user_dict_with("てすと", ",")));
 
     let texts: Vec<String> = engine
         .build_conversion_candidates("てすと", "てすと", "", 9, LearningLookup::Use)

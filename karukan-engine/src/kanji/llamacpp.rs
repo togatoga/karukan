@@ -15,10 +15,10 @@ use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Global llama.cpp backend (can only be initialized once)
 static LLAMA_BACKEND: OnceLock<std::result::Result<LlamaBackend, String>> = OnceLock::new();
@@ -92,7 +92,7 @@ struct BeamState {
 /// generated tokens). Typing grows the prompt at the tail, so the next call
 /// usually only has to decode the few tokens past the common prefix.
 struct GreedySession {
-    /// Borrows the `Box<LlamaModel>` next to it in [`LlamaCppModel`]; the
+    /// Borrows the `Arc<LlamaModel>` next to it in [`LlamaCppModel`]; the
     /// lifetime is erased there under the invariants documented on the field.
     ctx: LlamaContext<'static>,
     cached: Vec<LlamaToken>,
@@ -111,23 +111,45 @@ fn common_prefix_len(a: &[LlamaToken], b: &[LlamaToken]) -> usize {
 /// llama.cpp based GPT-2 model for GGUF inference
 pub struct LlamaCppModel {
     /// Persistent context for the greedy path. Declared before `model` so it
-    /// drops first: its context borrows the model behind the box.
+    /// drops first: its context borrows the model behind the `Arc`.
     greedy_session: Mutex<Option<GreedySession>>,
-    /// Boxed for a stable address — `greedy_session` holds a context whose
-    /// model reference points into this allocation, so the box must never be
-    /// replaced after construction.
-    model: Box<LlamaModel>,
+    /// Shared with every other engine that loaded the same file (see
+    /// `MODEL_CACHE`). The `Arc` keeps the address stable and this field
+    /// keeps it alive for as long as `greedy_session` borrows from it, so it
+    /// must never be replaced after construction.
+    model: Arc<LlamaModel>,
     n_ctx: u32,
     /// External HuggingFace tokenizer (always required).
     /// `tokenize()` and `decode()` use this instead of llama.cpp's built-in tokenizer.
-    external_tokenizer: tokenizers::Tokenizer,
+    external_tokenizer: Arc<tokenizers::Tokenizer>,
     /// Token ids `decode(_, skip_special_tokens=true)` removes before
     /// detokenizing: added tokens with `special: true`, minus the
     /// byte-fallback tokens (see [`is_byte_fallback_token`]).
-    special_token_ids: HashSet<u32>,
+    special_token_ids: Arc<HashSet<u32>>,
     /// Number of threads for inference (0 = use llama.cpp default)
     n_threads: u32,
 }
+
+/// Process-global cache of loaded GGUF models, keyed by their
+/// (model, tokenizer) paths.
+///
+/// Karukan creates one engine per input context (window/field) and each
+/// engine loads its own converters; without this cache every new context
+/// reloaded the GGUF from disk (and held a separate copy in memory).
+/// Inference builds a fresh llama context per call, so sharing the loaded
+/// model across engines is safe.
+static MODEL_CACHE: OnceLock<
+    Mutex<
+        HashMap<
+            (String, String),
+            (
+                Arc<LlamaModel>,
+                Arc<tokenizers::Tokenizer>,
+                Arc<HashSet<u32>>,
+            ),
+        >,
+    >,
+> = OnceLock::new();
 
 /// llama.cpp aborts the process when the model file is absent, so check
 /// first and fail as an ordinary error the caller can degrade on.
@@ -152,6 +174,26 @@ impl LlamaCppModel {
         tokenizer_json: T,
         n_ctx: u32,
     ) -> Result<Self> {
+        let cache_key = (
+            path.as_ref().to_string_lossy().to_string(),
+            tokenizer_json.as_ref().to_string_lossy().to_string(),
+        );
+
+        // Cache hit: reuse the already-loaded model, tokenizer and token ids.
+        let cache = MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Some((model, external_tokenizer, special_token_ids)) =
+            cache.lock().unwrap().get(&cache_key).cloned()
+        {
+            return Ok(Self {
+                greedy_session: Mutex::new(None),
+                model,
+                n_ctx,
+                external_tokenizer,
+                special_token_ids,
+                n_threads: 0,
+            });
+        }
+
         ensure_model_file_exists(path.as_ref())?;
         let backend = get_backend()?;
 
@@ -160,22 +202,45 @@ impl LlamaCppModel {
 
         let model = LlamaModel::load_from_file(backend, path.as_ref(), &model_params)
             .map_err(|e| KanjiError::ModelLoad(e.into()))?;
-        Self::finish(model, tokenizer_json, n_ctx)
+        Self::finish(model, tokenizer_json, n_ctx, cache_key)
     }
 
     /// Load the external tokenizer and construct the model wrapper.
-    fn finish<T: AsRef<Path>>(model: LlamaModel, tokenizer_json: T, n_ctx: u32) -> Result<Self> {
+    /// The loaded resources are cached process-globally under `cache_key`.
+    fn finish<T: AsRef<Path>>(
+        model: LlamaModel,
+        tokenizer_json: T,
+        n_ctx: u32,
+        cache_key: (String, String),
+    ) -> Result<Self> {
         let external_tokenizer = load_tokenizer(tokenizer_json)?;
-        let special_token_ids = external_tokenizer
+        let special_token_ids: HashSet<u32> = external_tokenizer
             .get_added_tokens_decoder()
             .into_iter()
             .filter(|(_, tok)| tok.special && !is_byte_fallback_token(&tok.content))
             .map(|(id, _)| id)
             .collect();
 
+        let model = Arc::new(model);
+        let external_tokenizer = Arc::new(external_tokenizer);
+        let special_token_ids = Arc::new(special_token_ids);
+
+        MODEL_CACHE
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .unwrap()
+            .insert(
+                cache_key,
+                (
+                    model.clone(),
+                    external_tokenizer.clone(),
+                    special_token_ids.clone(),
+                ),
+            );
+
         Ok(Self {
             greedy_session: Mutex::new(None),
-            model: Box::new(model),
+            model,
             n_ctx,
             external_tokenizer,
             special_token_ids,
@@ -321,7 +386,7 @@ impl LlamaCppModel {
             .with_n_batch(self.n_ctx)
             .with_n_ubatch(self.n_ctx);
         let ctx = self.new_context(params)?;
-        // SAFETY: the context borrows the model inside `self.model`'s box,
+        // SAFETY: the context borrows the model inside `self.model`'s `Arc`,
         // whose address is stable and which is never replaced; the session
         // lives in a field declared before `model`, so it drops first.
         let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
