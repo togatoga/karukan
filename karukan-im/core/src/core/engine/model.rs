@@ -14,7 +14,14 @@ use super::*;
 impl InputMethodEngine {
     /// Kana-kanji conversion via the model(s). Every model call goes through
     /// the conversion cache, so re-running unchanged chunks is free.
-    /// `api_context` is the left context fed to the model.
+    ///
+    /// `api_context` is the left context fed to the model. The persona
+    /// (`config.persona`, already normalized by `with_config`) is prepended
+    /// to it here as `{persona} {ctx}`, so it reads as preceding text: the
+    /// space keeps it from fusing with the context into one word
+    /// (「プログラミング今日は」). This is the single model entry point, so
+    /// live chunks and Space conversion both carry it and it lands in the
+    /// cache key.
     ///
     /// Kana-free readings skip the model entirely: it hallucinates on
     /// symbol/alphabet-only input (rewriters cover those).
@@ -27,6 +34,12 @@ impl InputMethodEngine {
         if !karukan_engine::contains_kana(reading) {
             return vec![];
         }
+        let lctx = if self.config.persona.is_empty() {
+            api_context.to_string()
+        } else {
+            format!("{} {}", self.config.persona, api_context)
+        };
+        let api_context = lctx.as_str();
         let strategy = self.determine_strategy(reading, num_candidates);
         let katakana = karukan_engine::hiragana_to_katakana(reading);
 

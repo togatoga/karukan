@@ -287,3 +287,50 @@ fn test_display_context_truncation() {
     assert!(ctx.contains("rctx: "));
     assert!(ctx.ends_with("..."));
 }
+
+#[test]
+fn test_whitespace_only_left_context_is_dropped() {
+    // A terminal or code editor reports the indentation before the caret
+    // as the left context; blanks are not context, so they are dropped at
+    // the door instead of reaching the model (or showing as `lctx:    `).
+    let mut engine = InputMethodEngine::new();
+    engine.config.context_chars = 50;
+
+    for blank in ["    ", "\t\t", "\u{3000}\u{3000}", "  \u{3000} "] {
+        engine.set_surrounding_context(blank, "");
+        assert!(engine.surrounding_context.is_none(), "left={blank:?}");
+    }
+
+    // Blank left, real right: only the left side is dropped.
+    engine.set_surrounding_context("    ", "右側");
+    let ctx = engine.surrounding_context.as_ref().unwrap();
+    assert_eq!(ctx.left, None);
+    assert_eq!(ctx.right.as_deref(), Some("右側"));
+
+    // Blanks inside real text stay as they are.
+    engine.set_surrounding_context("  東京  ", "");
+    let ctx = engine.surrounding_context.as_ref().unwrap();
+    assert_eq!(ctx.left.as_deref(), Some("  東京  "));
+}
+
+#[test]
+fn test_whitespace_only_lctx_reaches_model_as_empty() {
+    // Through the whole live-conversion path: with only blanks before the
+    // caret, the chunk's lctx (and thus the cache key) is empty.
+    let mut engine = InputMethodEngine::new();
+    engine.set_surrounding_context("    ", "");
+    seed_model_cache(&mut engine, "アイ", "", &["HIT"]);
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert_eq!(engine.chunks[0].converted, "HIT");
+}
+
+#[test]
+fn test_lctx_for_drops_whitespace_only_context() {
+    let engine = InputMethodEngine::new();
+    assert_eq!(engine.lctx_for("", "\u{3000}"), "");
+    assert_eq!(engine.lctx_for("  ", " "), "");
+    // Not all blank: kept verbatim, blanks included.
+    assert_eq!(engine.lctx_for("", " 東京"), " 東京");
+    assert_eq!(engine.lctx_for("  ", "東京 "), "  東京 ");
+}

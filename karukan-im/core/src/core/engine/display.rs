@@ -140,10 +140,16 @@ impl InputMethodEngine {
             // user sees they're not in plain alphabet input.
             InputMode::Emoji => "[☺]",
         };
-        if self.live.enabled {
-            format!("⚡{}", base)
+        // The persona is debug information like the lctx: it never changes
+        // while typing, so it only rides along in verbose mode, shown
+        // verbatim (e.g. ⚡[あ]P:プログラミング) so what is steering the
+        // model is visible at a glance.
+        let live = if self.live.enabled { "⚡" } else { "" };
+        let persona = &self.config.persona;
+        if persona.is_empty() || !self.config.verbose {
+            format!("{live}{base}")
         } else {
-            base.to_string()
+            format!("{live}{base}P:{persona}")
         }
     }
 

@@ -142,8 +142,18 @@ impl InputMethodEngine {
     /// The left context (lctx) a chunk is built with: `base` (editor
     /// surrounding text) + preceding converted text, truncated to the API
     /// budget. Defined once so conversion and the aux display can't drift.
+    ///
+    /// A whitespace-only result (a lone Shift+Space chunk ahead of the
+    /// caret, or a truncation that kept only trailing blanks) is dropped to
+    /// empty: blanks are noise to the model and would only split the cache
+    /// between `""` and `"　"`.
     pub(super) fn lctx_for(&self, base: &str, preceding_converted: &str) -> String {
-        self.truncate_context(&format!("{base}{preceding_converted}"))
+        let lctx = self.truncate_context(&format!("{base}{preceding_converted}"));
+        if lctx.trim().is_empty() {
+            String::new()
+        } else {
+            lctx
+        }
     }
 
     /// Left context for the chunk at `index`, derived on demand from the

@@ -89,6 +89,11 @@ impl AnnotatedCandidate {
     }
 }
 
+/// Persona chars kept (its tail) when it is prepended to the model lctx.
+/// Mirrors azooKey's profile limit; the model reads it as ordinary
+/// preceding text, so a long one only crowds out the real context.
+const PERSONA_CHARS: usize = 25;
+
 /// Keep at most the last `n` characters of `s`.
 fn keep_last_chars(s: &str, n: usize) -> String {
     let char_count = s.chars().count();
@@ -190,11 +195,18 @@ impl InputMethodEngine {
     }
 
     /// Create with configuration
-    pub fn with_config(config: EngineConfig) -> Self {
+    pub fn with_config(mut config: EngineConfig) -> Self {
         let mut engine = Self {
             live: LiveConversion::new(config.live_conversion),
             ..Self::new()
         };
+        // The persona is normalized once — NFKC (the prompt is NFKC'd
+        // anyway, so `Ｐｒｏｇｒａｍｍｉｎｇ` would otherwise be shown,
+        // cached and capped as full-width but read as ASCII), trimmed,
+        // last `PERSONA_CHARS` — so `config.persona` is exactly the text
+        // the model receives and the aux mode indicator shows.
+        let persona = karukan_engine::normalize_nfkc(&config.persona);
+        config.persona = keep_last_chars(persona.trim(), PERSONA_CHARS);
         // The symbol style is baked into the rule trie, so the converter is
         // rebuilt rather than configured after the fact. It carries the
         // width rules too: a keystroke settles at the width in force when
@@ -400,6 +412,15 @@ impl InputMethodEngine {
         let left_context = match left_context.rsplit_once('\n') {
             Some((_, after)) => after,
             None => left_context,
+        };
+        // A whitespace-only left context is noise, not context: a terminal
+        // or code editor reports the indentation before the caret, and the
+        // model would read `    ` as preceding text. Treat it as empty so
+        // it neither reaches the model nor shows as a blank `lctx:`.
+        let left_context = if left_context.trim().is_empty() {
+            ""
+        } else {
+            left_context
         };
         let right_context = right_context
             .split_once('\n')
