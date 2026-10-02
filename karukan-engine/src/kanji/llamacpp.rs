@@ -225,22 +225,19 @@ impl LlamaCppModel {
     /// For byte-level BPE tokens that represent partial UTF-8 sequences,
     /// this returns a hex representation like `<0xE3>` instead of replacement characters.
     pub fn decode_token_for_display(&self, token: LlamaToken) -> String {
-        match self.model.token_to_piece_bytes(token, 32, true, None) {
-            Ok(bytes) => {
-                if let Ok(s) = std::str::from_utf8(&bytes) {
-                    // Valid UTF-8, return as-is (escape control chars)
-                    if s.chars().all(|c| !c.is_control() || c == ' ' || c == '\n') {
-                        s.to_string()
-                    } else {
-                        // Has control characters, show hex
-                        bytes_to_hex_display(&bytes)
-                    }
-                } else {
-                    // Invalid UTF-8 (partial sequence), show hex
-                    bytes_to_hex_display(&bytes)
-                }
-            }
-            Err(_) => format!("<{}>", token.0),
+        let bytes = self.model.vocab().token_to_piece(token, true, None);
+        if bytes.is_empty() {
+            // Unknown token type: llama.cpp wrote nothing for it
+            return format!("<{}>", token.0);
+        }
+        // Valid UTF-8 without control characters is shown as-is; a partial UTF-8
+        // sequence or a control character falls back to the hex form.
+        if let Ok(s) = std::str::from_utf8(&bytes)
+            && s.chars().all(|c| !c.is_control() || c == ' ' || c == '\n')
+        {
+            s.to_string()
+        } else {
+            bytes_to_hex_display(&bytes)
         }
     }
 
@@ -284,7 +281,7 @@ impl LlamaCppModel {
                 .with_n_ubatch(batch_size),
         )?;
 
-        let model_eos = self.model.token_eos();
+        let model_eos = self.model.vocab().eos();
         let input_len = input_tokens.len();
 
         // Step 1: Process input tokens for ALL sequences in one batch
@@ -398,7 +395,7 @@ impl LlamaCppModel {
             return Ok(Vec::new());
         }
         let beam_size = beam_size.min(MAX_BEAM_SIZE);
-        let model_eos = self.model.token_eos();
+        let model_eos = self.model.vocab().eos();
         let input_len = input_tokens.len();
 
         // Sequence slots 0..beam_size hold the live beams. The scratch slots
@@ -517,7 +514,7 @@ impl LlamaCppModel {
         if beam_size == 0 || max_new_tokens == 0 || input_tokens.is_empty() {
             return Ok(Vec::new());
         }
-        let model_eos = self.model.token_eos();
+        let model_eos = self.model.vocab().eos();
 
         let initial_logits = self.eval_sequence(input_tokens)?;
         let top = self.get_top_k_tokens(&initial_logits, beam_size);
@@ -734,7 +731,7 @@ impl LlamaCppModel {
     ) -> bool {
         eos_token_id.is_some_and(|eos| token.0 == eos)
             || token == model_eos
-            || self.model.is_eog_token(token)
+            || self.model.vocab().is_eog(token)
     }
 
     /// Generate tokens with a custom sampler
@@ -767,7 +764,7 @@ impl LlamaCppModel {
         ctx.decode(&mut batch).map_err(inference_err)?;
 
         // Get model's EOS token for comparison
-        let model_eos = self.model.token_eos();
+        let model_eos = self.model.vocab().eos();
 
         // Generate new tokens
         for n_cur in (input_tokens.len()..).take(max_new_tokens) {
@@ -794,7 +791,7 @@ impl LlamaCppModel {
 
     /// Get the EOS token ID from the model
     pub fn eos_token_id(&self) -> LlamaToken {
-        self.model.token_eos()
+        self.model.vocab().eos()
     }
 }
 
