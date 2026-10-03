@@ -210,12 +210,12 @@ fn dictionary_surfaces_keep_the_width_they_were_written_at() {
         ..WidthRules::default()
     });
     engine.converters.kanji = None;
-    engine.dicts.system = Some(dict_from_json(
+    engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"かぶ","candidates":[{"surface":"Yahoo!","score":1.0}]}]"#,
-    ));
-    engine.dicts.user = Some(dict_from_json(
+    )));
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"かぶ","candidates":[{"surface":"１２３号","score":1.0}]}]"#,
-    ));
+    )));
 
     type_keys(&mut engine, "kabu");
     let result = engine.process_key(&press_key(Keysym::SPACE));
