@@ -46,6 +46,11 @@ impl Keysym {
     /// keyboards.
     pub const HENKAN: Keysym = Keysym(0xff23);
 
+    /// 半角/全角 key (XK_Zenkaku_Hankaku). The key left of `1` on JIS
+    /// keyboards; delivered by fcitx5 for the eisu position, so JIS users
+    /// get the standard Japanese ⇄ direct-input toggle key.
+    pub const ZENKAKU_HANKAKU: Keysym = Keysym(0xff2a);
+
     // Space
     pub const SPACE: Keysym = Keysym(0x0020);
 
@@ -127,6 +132,12 @@ impl Keysym {
             *self,
             Self::ALT_R | Self::SUPER_R | Self::META_R | Self::HYPER_R | Self::HENKAN
         )
+    }
+
+    /// Check if this is the 半角/全角 (Zenkaku/Hankaku) eisu key — the JIS
+    /// key that toggles Japanese and direct (alphabet) input.
+    pub fn is_eisu_toggle_key(&self) -> bool {
+        *self == Self::ZENKAKU_HANKAKU
     }
 
     /// Check if this is a modifier key

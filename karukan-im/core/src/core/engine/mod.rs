@@ -511,6 +511,62 @@ impl InputMethodEngine {
         Some(EngineResult::not_consumed())
     }
 
+    /// Handle the 半角/全角 (Zenkaku/Hankaku) eisu key: the JIS key that
+    /// toggles Japanese and direct (alphabet) input — the counterpart of the
+    /// 変換 key for the other direction.
+    ///
+    /// Kana → the temporary Alphabet (the same per-word English Shift+letter
+    /// enters, issue #37), committing any composition first so the kana the
+    /// user already typed is kept. Alphabet → back to the kana mode that was
+    /// active before it (the temporary-mode comeback).
+    fn handle_eisu_toggle_key(&mut self, key: &KeyEvent) -> Option<EngineResult> {
+        if !key.keysym.is_eisu_toggle_key() {
+            return None;
+        }
+        // 半角/全角 is an ordinary key, not a modifier: a modified chord
+        // (Ctrl+半角/全角 etc.) may be an app or fcitx5 shortcut, so only the
+        // bare press acts as the toggle.
+        if key.modifiers.any() {
+            return None;
+        }
+        if !key.is_press {
+            return Some(EngineResult::not_consumed());
+        }
+        match self.mode.current() {
+            InputMode::Alphabet => {
+                // English → Japanese: come back to the kana mode that was
+                // active before the temporary Alphabet.
+                self.mode.exit_temporary();
+                // An open candidate window keeps its own line, mode indicator
+                // included — mirror the mode-toggle key's aux handling.
+                let aux = match &self.state {
+                    InputState::Conversion {
+                        reading,
+                        candidates,
+                        ..
+                    } => self.format_aux_conversion(reading, candidates),
+                    _ => self.format_aux_composing(),
+                };
+                if matches!(self.state, InputState::Composing { .. }) {
+                    let preedit = self.set_composing_state();
+                    return Some(
+                        EngineResult::consumed()
+                            .with_action(EngineAction::UpdatePreedit(preedit))
+                            .with_action(EngineAction::UpdateAuxText(aux)),
+                    );
+                }
+                Some(EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux)))
+            }
+            _ => {
+                // Japanese → English: commit any composition, then enter the
+                // temporary Alphabet (the same mode Shift+letter enters).
+                let result = self.commit_result();
+                self.mode.enter_temporary(InputMode::Alphabet);
+                Some(result)
+            }
+        }
+    }
+
     /// Text the engine did not type, at the width its groups are
     /// configured for: the model's answers and the candidates built from
     /// them, the dictionaries, the learning cache.
@@ -596,6 +652,11 @@ impl InputMethodEngine {
 
         // Right Alt/Super/Meta/Hyper: one-way non-Hiragana → Hiragana switch
         if let Some(result) = self.handle_mode_toggle_key(key) {
+            return result;
+        }
+
+        // 半角/全角 (JIS eisu key): Japanese ⇄ direct input toggle
+        if let Some(result) = self.handle_eisu_toggle_key(key) {
             return result;
         }
 
