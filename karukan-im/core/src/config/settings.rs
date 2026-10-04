@@ -201,6 +201,10 @@ pub struct ConversionSettings {
     pub n_threads: u32,
     /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
     pub live_conversion: bool,
+    /// A printable character during conversion commits the highlighted
+    /// candidate, then the character starts the next input. Off by default:
+    /// the character extends the reading and the candidates are rebuilt.
+    pub commit_on_input: bool,
 }
 
 /// Learning cache settings

@@ -116,6 +116,62 @@ fn test_bare_digit_during_conversion_refines_instead_of_selecting() {
 }
 
 #[test]
+fn test_commit_on_input_commits_highlight_then_types() {
+    // The highlighted candidate is what Space (and the arrows) selected.
+    // The next character commits it and starts a new composition, instead
+    // of folding back into the reading.
+    let mut engine = InputMethodEngine::with_config(EngineConfig {
+        commit_on_input: true,
+        ..EngineConfig::default()
+    });
+    engine.dicts.user = Some(dict_from_json(
+        r#"[{"reading":"あい","candidates":[
+            {"surface":"愛","score":2.0},
+            {"surface":"藍","score":1.0}
+        ]}]"#,
+    ));
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    let first = engine
+        .candidates()
+        .and_then(|c| c.selected_text())
+        .unwrap()
+        .to_string();
+    engine.process_key(&press_key(Keysym::SPACE));
+    let selected = engine
+        .candidates()
+        .and_then(|c| c.selected_text())
+        .unwrap()
+        .to_string();
+    assert_ne!(selected, first);
+
+    let result = engine.process_key(&press('k'));
+    assert_eq!(committed(&result).as_deref(), Some(selected.as_str()));
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+
+    engine.process_key(&press('a'));
+    assert_eq!(engine.input_buf.reading(), "か");
+}
+
+#[test]
+fn test_commit_on_input_leaves_backspace_as_cancel() {
+    let mut engine = InputMethodEngine::with_config(EngineConfig {
+        commit_on_input: true,
+        ..EngineConfig::default()
+    });
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let result = engine.process_key(&press_key(Keysym::BACKSPACE));
+    assert!(committed(&result).is_none());
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.input_buf.reading(), "あい");
+}
+
+#[test]
 fn test_ctrl_digit_selects_candidate_during_conversion() {
     let mut engine = InputMethodEngine::new();
     engine.dicts.user = Some(dict_from_json(

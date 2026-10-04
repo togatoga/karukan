@@ -5,6 +5,7 @@
 ```toml
 [conversion]
 live_conversion = true          # ライブ変換を起動時に有効化（Ctrl+Shift+L で実行中も切替。既定ON）
+commit_on_input = false         # true で、変換中の文字は選択中の候補を確定してから打つ（既定は読みを伸ばす）
 chunk_chars = 30                # 一度にAI変換する Chunk の最大文字数（[Chunk](chunking.md) 参照）
 chunk_symbols = 1               # Chunk に残せる記号（、。！？など）の数
 chunk_digits = 0                # Chunk に残せる数字の桁数（0 = 数字はAI変換にかけない）
@@ -85,6 +86,8 @@ my-model = "/home/user/models/my-model.gguf"
 入力と同時にかな漢字変換の結果をプリエディットへリアルタイム表示します（Spaceを押さずに変換が進む）。`Ctrl+Shift+L` でON/OFFを切り替えられ、既定では `live_conversion = true` で有効です。
 
 入力中の文が長くなっても変換時間が伸びないよう、変換は一定の長さごとの Chunk に区切って実行されます。Chunk の決まり方、表示のちらつきを止める手動区切り、`chunk_*` の調整方法は [Chunk](chunking.md) を参照してください。
+
+`commit_on_input = true` にすると、変換中に文字や数字を打ったとき、いま選ばれている候補を確定してからその文字を打ちます。既定の `false` は確定せず、読みを伸ばして候補を出し直します。Enter と Ctrl+1〜9 の確定はどちらの設定でも同じです。
 
 ## 記号・半角全角
 

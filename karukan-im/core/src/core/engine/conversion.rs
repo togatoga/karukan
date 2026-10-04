@@ -627,10 +627,14 @@ impl InputMethodEngine {
                     }
                 }
 
-                // A printable character refines instead of committing:
-                // the reading grows and the suggestion rewrites in place,
-                // keeping any active source filter.
+                // A printable character. By default it refines: the reading
+                // grows and the suggestion rewrites in place, keeping any
+                // active source filter. `commit_on_input` commits the
+                // highlighted candidate first, then types the character.
                 if key.to_char().is_some() && !key.modifiers.control_key {
+                    if self.config.commit_on_input {
+                        return self.commit_then_input(key);
+                    }
                     return self.refine_through_composing(key);
                 }
 
@@ -639,6 +643,21 @@ impl InputMethodEngine {
                 // browser reloading on Ctrl+R).
                 EngineResult::consumed()
             }
+        }
+    }
+
+    /// Commit the highlighted candidate, then type `key` into the fresh
+    /// composition. An empty selection stays in the conversion: there is
+    /// nothing to commit, and feeding the key again would loop.
+    fn commit_then_input(&mut self, key: &KeyEvent) -> EngineResult {
+        let committed = self.commit_conversion();
+        if !matches!(self.state, InputState::Empty) {
+            return committed;
+        }
+        let next = self.process_key_empty(key);
+        EngineResult {
+            consumed: next.consumed,
+            actions: committed.actions.into_iter().chain(next.actions).collect(),
         }
     }
 

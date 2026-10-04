@@ -49,6 +49,9 @@ light_model = "jinen-v2-xsmall-q5"
 n_threads = 4
 # 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
 live_conversion = true
+# 変換中に文字を打ったとき、選択中の候補を確定してからその文字を打つ。
+# false（既定）は確定せず、読みを伸ばして候補を出し直す。
+commit_on_input = false
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
 
 # 変換モデル。model / light_model はここのキーを参照する。値は 2 通り:
