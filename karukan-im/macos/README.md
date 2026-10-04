@@ -29,6 +29,11 @@ Rust側(`karukan-im`)にあり、Swift側はInputMethodKitとの橋渡しに徹�
 
 ### 初回インストール
 
+#### 前提条件
+
+- Xcodeコマンドラインツール(`swift`、`make`): `xcode-select --install`
+- [Rust](https://www.rust-lang.org/tools/install)(`cargo`)
+
 ```bash
 cd karukan-im/macos
 
