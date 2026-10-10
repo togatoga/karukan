@@ -15,8 +15,8 @@ pub use kanji::{KanaKanjiConverter, ModelSource};
 pub use learning::{LearningCache, LearningConfig};
 pub use rewriter::{
     AlphabetRewriter, DateConfig, DatePhrase, DateRewriter, EmojiRewriter,
-    HalfWidthKatakanaRewriter, RewriteOutput, Rewriter, RewriterChain, SymbolRewriter,
-    description as symbol_description,
+    HalfWidthKatakanaRewriter, RewriteOutput, Rewriter, RewriterChain, SingleKanjiRewriter,
+    SymbolRewriter, description as symbol_description, single_kanji_description,
 };
 pub use romaji::{
     BracketStyle, Converted, PunctuationStyle, RomajiConverter, SlashStyle, SymbolStyle,

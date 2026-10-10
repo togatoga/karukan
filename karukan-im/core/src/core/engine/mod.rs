@@ -559,6 +559,11 @@ impl InputMethodEngine {
     /// rewriter's `１` come out `１`) and only the first survives — dropped
     /// here rather than at display time, since this list is also what
     /// Ctrl+digit indexes and commit reads.
+    ///
+    /// The single-kanji note (`高の異体字`) is attached here too, to that
+    /// kanji whoever produced it: every list passes through — the mixed
+    /// list, the composing suggestions, the source views — and the dedup
+    /// may have dropped the rewriter row that carried it.
     fn settle_candidates(&self, candidates: Vec<Candidate>) -> CandidateList {
         let mut seen = HashSet::new();
         let settled = candidates
@@ -566,6 +571,11 @@ impl InputMethodEngine {
             .filter_map(|mut candidate| {
                 if candidate.source == Some(CandidateSource::Model) {
                     candidate.text = self.settle_text(&candidate.text);
+                }
+                if candidate.description.is_none() {
+                    candidate.description =
+                        karukan_engine::single_kanji_description(&candidate.text)
+                            .map(str::to_string);
                 }
                 seen.insert(candidate.text.clone()).then_some(candidate)
             })

@@ -384,7 +384,9 @@ impl InputMethodEngine {
         // 7. Back-fill descriptions. Symbol names are Fallback-only —
         //    model/dict/learning candidates must not inherit labels like
         //    「金 = 部首」 — while width annotations (`[全]カタカナ`) apply to
-        //    any pure-kana candidate that still has none.
+        //    any pure-kana candidate that still has none. The single-kanji
+        //    note is attached in `settle_candidates`, which every list
+        //    passes through.
         for c in &mut builder.candidates {
             if c.description.is_some() {
                 continue;
@@ -498,7 +500,24 @@ impl InputMethodEngine {
         }
         self.converters
             .rewriters
-            .rewrite_all(&[reading.to_string()])
+            .rewrite_ranked(reading, |rows| self.rank_by_use(rows))
+    }
+
+    /// Single kanji committed before, under any reading, move up in order
+    /// of use; the rest keep the file's order. 高 committed as こう heads
+    /// the たか list instead of sitting where the data file put it. Only
+    /// the single-kanji rows are ranked (`Rewriter::is_catalog`), so ﾀｶ
+    /// and the symbols stay where the chain puts them.
+    fn rank_by_use(&self, variants: &mut [RewriteOutput]) {
+        let Some(learning) = &self.learning else {
+            return;
+        };
+        let scores = learning.surface_scores(variants.iter().map(|(text, _)| text.as_str()));
+        if scores.is_empty() {
+            return;
+        }
+        let used = |text: &str| scores.get(text).copied().unwrap_or(0.0);
+        variants.sort_by(|a, b| used(&b.0).total_cmp(&used(&a.0)));
     }
 
     /// Date/time candidates for `reading` (`[date]` phrases). None in emoji

@@ -4,6 +4,8 @@ https://github.com/google/mozc
 ===============================================================================
 
 karukan-engine/data/symbols.yml is derived from Mozc's symbol.tsv.
+karukan-engine/data/single_kanji.yml was bootstrapped from Mozc's
+single_kanji.tsv and variant_rule.txt.
 karukan-engine/data/emoji.yml's `descriptions:` and `entries:` sections
 are derived from Mozc's emoji_data.tsv (its `shortcodes:` section comes
 from Unicode CLDR via emoji-test.txt; see comments in emoji.yml).
