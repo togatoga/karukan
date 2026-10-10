@@ -5,14 +5,15 @@
 //! width/case helpers). See `THIRD_PARTY_LICENSES` at the repo root for the
 //! upstream BSD-3-Clause notice.
 //!
-//! A `Rewriter` takes a single candidate string and returns zero or more
-//! `(variant, description)` pairs. The description is shown as the candidate's
-//! annotation in the candidate window (e.g. `…` -> "三点リーダ"); rewriters
-//! that don't have a meaningful description return `None`.
+//! A `Rewriter` takes a single string, the typed reading, and returns zero
+//! or more `(variant, description)` pairs. The description is shown as the
+//! candidate's annotation in the candidate window (e.g. `…` -> "三点リーダ");
+//! rewriters that don't have a meaningful description return `None`.
 //!
-//! Rewriters do not perform their own kana-kanji conversion; they only
-//! transform/decorate already-converted candidates (e.g. wrapping with brackets,
-//! converting full-width katakana to half-width).
+//! Rewriters do not run the kana-kanji model. They either transform the
+//! reading mechanically (full-width katakana to half-width, a bracket to
+//! its relatives) or look it up in a table of their own (a symbol or emoji
+//! by name, the single kanji).
 //!
 //! The chain (`RewriterChain`) applies all registered rewriters to the input
 //! candidate list and returns flat variants. Caller (IMEEngine) is responsible
@@ -23,6 +24,7 @@ mod date;
 mod emoji;
 mod half_katakana;
 mod number;
+mod single_kanji;
 mod symbol;
 
 pub use alphabet::AlphabetRewriter;
@@ -30,6 +32,7 @@ pub use date::{DateConfig, DatePhrase, DateRewriter};
 pub use emoji::EmojiRewriter;
 pub use half_katakana::HalfWidthKatakanaRewriter;
 pub use number::NumberRewriter;
+pub use single_kanji::{SingleKanjiRewriter, description as single_kanji_description};
 pub use symbol::{SymbolRewriter, description};
 
 use crate::kana::is_digit;
@@ -54,6 +57,13 @@ pub trait Rewriter: Send + Sync {
     /// included in the result. Each result is paired with an optional
     /// description used as the candidate annotation.
     fn rewrite(&self, candidate: &str) -> Vec<RewriteOutput>;
+
+    /// True when the rows are a catalog whose order is only a default, so
+    /// the caller may rank them (the single kanji, by use). The others
+    /// emit a fixed order that is part of their meaning.
+    fn is_catalog(&self) -> bool {
+        false
+    }
 }
 
 /// A chain of rewriters applied in registration order.
@@ -73,15 +83,18 @@ impl RewriterChain {
         self.rewriters.push(rewriter);
     }
 
-    /// Build the default chain used by the IME: half-width katakana and symbol
-    /// variants.
+    /// Build the default chain used by the IME. The order is the order of
+    /// the rows: first what the reading itself names (a symbol, a number
+    /// form, an emoji), then the single kanji, and last the mechanical
+    /// width and case variants of the text.
     pub fn default_chain() -> Self {
         let mut chain = Self::new();
-        chain.add(Box::new(HalfWidthKatakanaRewriter));
-        chain.add(Box::new(AlphabetRewriter));
         chain.add(Box::new(SymbolRewriter));
         chain.add(Box::new(NumberRewriter));
         chain.add(Box::new(EmojiRewriter));
+        chain.add(Box::new(SingleKanjiRewriter));
+        chain.add(Box::new(HalfWidthKatakanaRewriter));
+        chain.add(Box::new(AlphabetRewriter));
         chain
     }
 
@@ -94,6 +107,25 @@ impl RewriterChain {
             for rewriter in &self.rewriters {
                 out.extend(rewriter.rewrite(cand));
             }
+        }
+        out
+    }
+
+    /// Apply all rewriters to one reading, letting `rank` reorder each
+    /// catalog rewriter's rows before they are joined. The rest keep their
+    /// own order, so a ranking never moves a row across rewriters.
+    pub fn rewrite_ranked(
+        &self,
+        reading: &str,
+        mut rank: impl FnMut(&mut [RewriteOutput]),
+    ) -> Vec<RewriteOutput> {
+        let mut out = Vec::new();
+        for rewriter in &self.rewriters {
+            let mut rows = rewriter.rewrite(reading);
+            if rewriter.is_catalog() {
+                rank(&mut rows);
+            }
+            out.extend(rows);
         }
         out
     }
@@ -139,6 +171,32 @@ mod tests {
         let chain = RewriterChain::new();
         let out = chain.rewrite_all(&["a".to_string(), "b".to_string()]);
         assert!(out.is_empty());
+    }
+
+    /// Emits a fixed list and declares it a catalog.
+    struct CatalogRewriter;
+    impl Rewriter for CatalogRewriter {
+        fn name(&self) -> &'static str {
+            "catalog"
+        }
+        fn rewrite(&self, _: &str) -> Vec<RewriteOutput> {
+            vec![("乙".to_string(), None), ("甲".to_string(), None)]
+        }
+        fn is_catalog(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn ranking_touches_only_catalog_rows() {
+        let mut chain = RewriterChain::new();
+        chain.add(Box::new(UpcaseRewriter));
+        chain.add(Box::new(CatalogRewriter));
+        // The ranker reverses whatever it is given: only the catalog's rows
+        // come back reversed, and they stay behind the upcase row.
+        let out = chain.rewrite_ranked("ab", |rows| rows.reverse());
+        let texts: Vec<&str> = out.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(texts, ["AB", "甲", "乙"]);
     }
 
     #[test]

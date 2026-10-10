@@ -4,7 +4,7 @@
 //! boosts those candidates on subsequent conversions. Persisted as a
 //! simple TSV file (`reading\tsurface\tfrequency\tlast_access`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -134,6 +134,24 @@ impl LearningCache {
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
         scored
+    }
+
+    /// Score of each of `surfaces` summed over every reading it was
+    /// committed under: how much the text itself is used, whatever it was
+    /// typed as. Surfaces never committed are absent.
+    pub fn surface_scores<'a>(
+        &self,
+        surfaces: impl IntoIterator<Item = &'a str>,
+    ) -> HashMap<String, f64> {
+        let wanted: HashSet<&str> = surfaces.into_iter().collect();
+        let now = now_unix();
+        let mut scores = HashMap::new();
+        for entry in self.entries.values().flatten() {
+            if wanted.contains(entry.surface.as_str()) {
+                *scores.entry(entry.surface.clone()).or_insert(0.0) += score(entry, now);
+            }
+        }
+        scores
     }
 
     /// Prefix-match lookup: returns `(reading, surface, score)` triples
@@ -323,6 +341,18 @@ mod tests {
         LearningCache::new(config_with(max_entries))
     }
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn surface_scores_sum_over_readings() {
+        let mut cache = LearningCache::new(LearningConfig::default());
+        cache.record("こう", "高");
+        cache.record("こう", "高");
+        cache.record("たか", "高");
+        cache.record("かさ", "嵩");
+        let scores = cache.surface_scores(["高", "嵩", "鷹"]);
+        assert!(scores["高"] > scores["嵩"]);
+        assert!(!scores.contains_key("鷹"));
+    }
 
     #[test]
     fn test_record_and_lookup() {

@@ -23,6 +23,7 @@ mod pending_romaji;
 mod persona;
 mod predictive;
 mod rewriter;
+mod single_kanji;
 mod source_filter;
 mod strategy;
 mod surrounding;

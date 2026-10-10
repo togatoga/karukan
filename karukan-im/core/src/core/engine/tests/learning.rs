@@ -28,16 +28,19 @@ fn build_candidates_includes_learning_when_not_skipped() {
 fn build_candidates_omits_learning_when_skipped() {
     let mut engine = engine_with_learned("あい", "藍");
 
-    let texts: Vec<String> = engine
+    // 藍 is also a single-kanji candidate for あい, so check the source,
+    // not the text.
+    let learned: Vec<String> = engine
         .build_conversion_candidates("あい", "あい", "", 9, LearningLookup::Skip)
         .into_iter()
+        .filter(|c| c.source == CandidateSource::Learning)
         .map(|c| c.text)
         .collect();
 
     assert!(
-        !texts.contains(&"藍".to_string()),
+        learned.is_empty(),
         "Tab path (skip_learning=true) must drop learned `藍`, got {:?}",
-        texts,
+        learned,
     );
 }
 
@@ -54,18 +57,21 @@ fn tab_key_skips_learning_in_composing() {
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
-    let texts: Vec<String> = engine
+    // 藍 is also a single-kanji candidate for あい, so check the source,
+    // not the text.
+    let learned: Vec<String> = engine
         .state()
         .candidates()
         .unwrap()
         .candidates()
         .iter()
+        .filter(|c| c.source == Some(CandidateSource::Learning))
         .map(|c| c.text.clone())
         .collect();
     assert!(
-        !texts.contains(&"藍".to_string()),
+        learned.is_empty(),
         "Tab must skip the learned `藍` candidate, got {:?}",
-        texts,
+        learned,
     );
 }
 

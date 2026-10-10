@@ -46,4 +46,4 @@ cp dict.bin ~/Library/"Application Support"/com.karukan.karukan-im/
 3. 🤖 モデル推論
 4. 📚 システム辞書（スコア順）
 5. ひらがな / カタカナ
-6. 🔄 Rewriter（半角カタカナ・英字全角半角・記号バリアント）
+6. 🔄 Rewriter（記号バリアント・数字表記・絵文字・[単漢字](single-kanji.md)・半角カタカナ・英字全角半角、この順。単漢字の中は確定したことのある字が使用順に前へ）
