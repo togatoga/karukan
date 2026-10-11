@@ -13,7 +13,7 @@ fn conversion_window_engine() -> InputMethodEngine {
         candidate_window: CandidateWindow::Conversion,
         ..EngineConfig::default()
     });
-    engine.dicts.user = Some(dict_from_json(AI_DICT));
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(AI_DICT)));
     engine
 }
 
@@ -135,7 +135,7 @@ fn test_emoji_picker_still_shows() {
 #[test]
 fn test_window_opens_while_typing_by_default() {
     let mut engine = make_live_conversion_engine();
-    engine.dicts.user = Some(dict_from_json(AI_DICT));
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(AI_DICT)));
     engine.process_key(&press('a'));
     let result = engine.process_key(&press('i'));
     assert!(shows_candidates(&result), "{:?}", result.actions);

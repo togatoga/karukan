@@ -306,12 +306,15 @@ impl LiveConversion {
 }
 
 /// Dictionary store: system, user, and future cache dictionaries
+///
+/// `Arc` allows the (expensive-to-load) merged user dictionary to be shared
+/// across per-context engine instances via a process-global cache.
 #[derive(Default)]
 pub(in crate::core) struct Dictionaries {
     /// System dictionary for yada double-array trie lookup
-    pub system: Option<Dictionary>,
+    pub system: Option<std::sync::Arc<Dictionary>>,
     /// User dictionary (merged from user_dict_paths)
-    pub user: Option<Dictionary>,
+    pub user: Option<std::sync::Arc<Dictionary>>,
 }
 
 /// Conversion model dispatch strategy based on input length
