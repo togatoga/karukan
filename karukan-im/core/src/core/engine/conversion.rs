@@ -20,6 +20,12 @@ const MAX_PREDICTIVE_SUGGESTIONS: usize = 3;
 /// Min typed characters before predictive dictionary lookup kicks in — a
 /// single key would flood the list from a large dictionary
 const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
+/// Cap on dictionary predictive (prefix) candidates in the Space conversion
+/// list. With a large user dictionary an unbounded prefix expansion would
+/// fill every page before the model's own conversion appears.
+const MAX_CONVERSION_PREDICTIVE: usize = 12;
+/// Cap on user-dictionary predictive candidates shown after the model.
+const MAX_USER_PREDICTIVE_AFTER_MODEL: usize = 5;
 
 /// How the unresolved romaji tail constrains the predictive lookup.
 enum TailConstraint {
@@ -320,19 +326,23 @@ impl InputMethodEngine {
         }
 
         // 2. User dictionary candidates (system dictionary follows the model
-        //    in step 4, so the two are split here).
+        //    in step 4, so the two are split here). Only exact matches
+        //    outrank the model: predictive (prefix) hits are longer words
+        //    the user may not have meant, so they follow the model (3b).
         let (user_dict, system_dict): (Vec<_>, Vec<_>) = self
             .search_dictionaries(
                 base,
                 pending,
                 usize::MAX,
-                usize::MAX,
+                MAX_CONVERSION_PREDICTIVE,
                 MIN_PREDICTIVE_PREFIX_CHARS,
                 None,
             )
             .into_iter()
             .partition(|ac| ac.source == CandidateSource::UserDictionary);
-        for ac in user_dict {
+        let (user_exact, user_predictive): (Vec<_>, Vec<_>) =
+            user_dict.into_iter().partition(|ac| ac.reading.is_none());
+        for ac in user_exact {
             builder.push(ac);
         }
 
@@ -350,6 +360,14 @@ impl InputMethodEngine {
             for text in candidates {
                 builder.push(AnnotatedCandidate::new(text, CandidateSource::Model));
             }
+        }
+
+        // 3b. User dictionary predictive candidates (see step 2).
+        for ac in user_predictive
+            .into_iter()
+            .take(MAX_USER_PREDICTIVE_AFTER_MODEL)
+        {
+            builder.push(ac);
         }
 
         // 4. System dictionary candidates
