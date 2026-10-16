@@ -1,8 +1,10 @@
 //! Type definitions for the IME engine
 
+use std::sync::Arc;
+
 use karukan_engine::{
-    DateConfig, DateRewriter, Dictionary, KanaKanjiConverter, RewriterChain, RomajiConverter,
-    SymbolStyle, WidthRules,
+    ChainTable, DateConfig, DateRewriter, Dictionary, KanaKanjiConverter, RewriterChain,
+    RomajiConverter, SymbolStyle, WidthRules,
 };
 
 use crate::config::settings::{CandidateWindow, SpaceStyle, StrategyMode};
@@ -117,6 +119,9 @@ pub struct EngineConfig {
     pub space: SpaceStyle,
     /// Date/time phrases and their formats
     pub date: DateConfig,
+    /// A user romaji table replacing the built-in rules (see
+    /// `Settings::romaji_table`)
+    pub romaji_table: Option<Arc<ChainTable>>,
 }
 
 impl EngineConfig {
@@ -147,6 +152,7 @@ impl EngineConfig {
             width: settings.width,
             space: settings.symbol.space,
             date: settings.date.clone(),
+            romaji_table: settings.romaji_table.clone(),
         }
     }
 }
@@ -173,6 +179,7 @@ impl Default for EngineConfig {
             width: WidthRules::default(),
             space: SpaceStyle::default(),
             date: DateConfig::default(),
+            romaji_table: None,
         }
     }
 }
