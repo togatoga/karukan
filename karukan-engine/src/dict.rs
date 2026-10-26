@@ -525,6 +525,14 @@ impl Dictionary {
             return Ok(None);
         }
 
+        // Fast path: a single dictionary needs no union — running it through
+        // the rebuild below would reconstruct the same entries at the cost of
+        // a full re-insert, which is seconds of work for large merged user
+        // dictionaries (e.g. a single pre-merged file) with no change.
+        if dicts.len() == 1 {
+            return Ok(dicts.into_iter().next());
+        }
+
         // Collect all entries, grouped by reading
         let mut merged: HashMap<String, Vec<Candidate>> = HashMap::new();
         let mut reading_order: Vec<String> = Vec::new();
