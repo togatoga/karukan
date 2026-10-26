@@ -170,3 +170,68 @@ fn conversion_with_pending_keeps_narrowed_candidates() {
         .unwrap();
     assert_eq!(waseda.reading.as_deref(), Some("わせだ"));
 }
+
+/// Space conversion with a large user dictionary (hundreds of thousands of
+/// proper nouns): a predictive (prefix) hit is a longer word the user may
+/// not have meant, so it must follow the model's conversion — otherwise
+/// けいざい converts to 経済移民 instead of 経済.
+#[test]
+fn conversion_ranks_user_predictive_after_model() {
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.user = Some(dict_from_json(
+        r#"[{"reading":"けいざいいみん","candidates":[{"surface":"経済移民","score":1000.0}]}]"#,
+    ));
+    seed_model_cache(&mut engine, "ケイザイ", "", &["経済"]);
+
+    for ch in "keizai".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let texts: Vec<String> = engine
+        .candidates()
+        .expect("conversion candidates")
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    let pos = |t: &str| {
+        texts
+            .iter()
+            .position(|x| x == t)
+            .unwrap_or_else(|| panic!("{t} missing from {texts:?}"))
+    };
+    assert_eq!(pos("経済"), 0, "model conversion stays first: {texts:?}");
+    assert!(
+        pos("経済移民") > pos("経済"),
+        "predictive follows the model: {texts:?}"
+    );
+}
+
+/// An exact user-dictionary match is what the user registered for this
+/// very reading, so it still outranks the model.
+#[test]
+fn conversion_keeps_user_exact_match_ahead_of_model() {
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.user = Some(dict_from_json(
+        r#"[
+            {"reading":"けいざい","candidates":[{"surface":"経財","score":1000.0}]},
+            {"reading":"けいざいいみん","candidates":[{"surface":"経済移民","score":1000.0}]}
+        ]"#,
+    ));
+    seed_model_cache(&mut engine, "ケイザイ", "", &["経済"]);
+
+    for ch in "keizai".chars() {
+        engine.process_key(&press(ch));
+    }
+    engine.process_key(&press_key(Keysym::SPACE));
+
+    let texts: Vec<String> = engine
+        .candidates()
+        .expect("conversion candidates")
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect();
+    assert_eq!(&texts[..3], ["経財", "経済", "経済移民"], "{texts:?}");
+}
