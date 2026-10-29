@@ -61,6 +61,19 @@ impl Keysym {
     pub const KEY_8: Keysym = Keysym(0x0038);
     pub const KEY_9: Keysym = Keysym(0x0039);
 
+    // Numeric keypad (XKB KP_* keysyms). The macOS frontend maps numpad
+    // keycodes to these so the engine can tell numpad keys apart from the
+    // main row; fcitx5 delivers them natively.
+    pub const KP_ENTER: Keysym = Keysym(0xff8d);
+    pub const KP_EQUAL: Keysym = Keysym(0xffbd);
+    pub const KP_MULTIPLY: Keysym = Keysym(0xffaa);
+    pub const KP_ADD: Keysym = Keysym(0xffab);
+    pub const KP_SUBTRACT: Keysym = Keysym(0xffad);
+    pub const KP_DECIMAL: Keysym = Keysym(0xffae);
+    pub const KP_DIVIDE: Keysym = Keysym(0xffaf);
+    pub const KP_0: Keysym = Keysym(0xffb0);
+    pub const KP_9: Keysym = Keysym(0xffb9);
+
     // Letters (lowercase and uppercase)
     pub const KEY_A: Keysym = Keysym(0x0061); // lowercase 'a'
     pub const KEY_A_UPPER: Keysym = Keysym(0x0041); // uppercase 'A'
@@ -108,6 +121,27 @@ impl Keysym {
     pub fn digit_value(&self) -> Option<usize> {
         match self.0 {
             0x0031..=0x0039 => Some((self.0 - 0x0030) as usize),
+            _ => None,
+        }
+    }
+
+    /// The main-row keysym equivalent of a numeric keypad keysym, if any.
+    ///
+    /// Digits and operators map to their ASCII counterparts and keypad Enter
+    /// to Return, so the engine can treat the numpad exactly like the main
+    /// row unless `numpad_direct_input` passes it through untouched.
+    pub fn keypad_main_row(&self) -> Option<Keysym> {
+        match *self {
+            Self::KP_ENTER => Some(Self::RETURN),
+            Self::KP_EQUAL => Some(Keysym(b'=' as u32)),
+            Self::KP_MULTIPLY => Some(Keysym(b'*' as u32)),
+            Self::KP_ADD => Some(Keysym(b'+' as u32)),
+            Self::KP_SUBTRACT => Some(Keysym(b'-' as u32)),
+            Self::KP_DECIMAL => Some(Keysym(b'.' as u32)),
+            Self::KP_DIVIDE => Some(Keysym(b'/' as u32)),
+            k if (Self::KP_0.0..=Self::KP_9.0).contains(&k.0) => {
+                Some(Keysym(k.0 - Self::KP_0.0 + b'0' as u32))
+            }
             _ => None,
         }
     }

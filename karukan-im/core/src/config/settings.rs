@@ -33,8 +33,20 @@ pub struct Settings {
     pub width: WidthRules,
     /// Date/time phrases and their formats
     pub date: DateConfig,
+    /// Keyboard input behavior
+    pub input: InputSettings,
     /// Conversion models, keyed by the name `model` / `light_model` refer to
     pub models: BTreeMap<String, ModelDef>,
+}
+
+/// Keyboard input behavior settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputSettings {
+    /// Pass numeric keypad (numpad) keys straight through to the application
+    /// instead of routing them through the IME, like the macOS built-in
+    /// Japanese input. When false (default), numpad keys behave exactly like
+    /// their main-row equivalents.
+    pub numpad_direct_input: bool,
 }
 
 /// One `[models]` entry as written: a string (the path of a local GGUF,

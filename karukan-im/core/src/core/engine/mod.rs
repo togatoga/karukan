@@ -585,6 +585,24 @@ impl InputMethodEngine {
 
     /// Process a key event
     pub fn process_key(&mut self, key: &KeyEvent) -> EngineResult {
+        // Numeric keypad keys (macOS frontend maps numpad keycodes to KP_*
+        // keysyms; fcitx5 delivers them natively). With `numpad_direct_input`
+        // they bypass the IME entirely so the application receives them
+        // directly, like the macOS built-in Japanese input (issue #51).
+        // Otherwise they act as their main-row equivalents.
+        let translated;
+        let key = match key.keysym.keypad_main_row() {
+            // Keypad Enter is the confirm key, not text: it always acts as
+            // Return, whatever `numpad_direct_input` says.
+            Some(_) if key.keysym != Keysym::KP_ENTER && self.config.numpad_direct_input => {
+                return self.hide_candidate_window(EngineResult::not_consumed());
+            }
+            Some(main_row) => {
+                translated = KeyEvent::new(main_row, key.modifiers, key.is_press);
+                &translated
+            }
+            None => key,
+        };
         let result = self.dispatch_key(key);
         self.hide_candidate_window(result)
     }
