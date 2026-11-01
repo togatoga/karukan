@@ -80,6 +80,8 @@ impl Keysym {
     pub const KEY_N_UPPER: Keysym = Keysym(0x004e); // uppercase 'N'
     pub const KEY_L: Keysym = Keysym(0x006c); // lowercase 'l'
     pub const KEY_L_UPPER: Keysym = Keysym(0x004c); // uppercase 'L'
+    pub const KEY_M: Keysym = Keysym(0x006d); // lowercase 'm'
+    pub const KEY_M_UPPER: Keysym = Keysym(0x004d); // uppercase 'M'
     pub const KEY_P: Keysym = Keysym(0x0070); // lowercase 'p'
     pub const KEY_P_UPPER: Keysym = Keysym(0x0050); // uppercase 'P'
     pub const KEY_R: Keysym = Keysym(0x0072); // lowercase 'r'

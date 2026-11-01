@@ -561,6 +561,10 @@ impl InputMethodEngine {
         }
         match key.keysym {
             Keysym::RETURN => self.commit_conversion(),
+            // Ctrl+M commits like Enter, matching mozc's MS-IME keymap.
+            Keysym::KEY_M | Keysym::KEY_M_UPPER if key.modifiers.control_key => {
+                self.commit_conversion()
+            }
             Keysym::ESCAPE => self.cancel_conversion(),
             // Shift+Tab (ISO_Left_Tab on X11) and Shift+Space step back the
             // way Tab and Space step forward: mozc-compatible muscle memory.

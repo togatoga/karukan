@@ -226,6 +226,10 @@ impl InputMethodEngine {
                 Keysym::KEY_J | Keysym::KEY_J_UPPER => return self.insert_chunk_break(),
                 // Ctrl+K: enter katakana mode
                 Keysym::KEY_K | Keysym::KEY_K_UPPER => return self.enter_katakana_mode(),
+                // Ctrl+M: commit, like Enter (mozc's MS-IME keymap binds it
+                // the same way). Unbound it would leak to the application,
+                // where a terminal reads Ctrl+M as a bare Enter.
+                Keysym::KEY_M | Keysym::KEY_M_UPPER => return self.commit_composing(),
                 // Ctrl+A: move to beginning (Emacs-style Home)
                 Keysym::KEY_A | Keysym::KEY_A_UPPER => return self.move_caret_home(),
                 // Ctrl+B: move left (Emacs-style Left)

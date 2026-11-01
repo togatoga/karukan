@@ -289,3 +289,49 @@ fn test_shift_space_steps_back_a_candidate() {
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert!(committed(&result).is_none(), "Shift+Space must not commit");
 }
+
+#[test]
+fn test_ctrl_m_commits_while_composing() {
+    // Ctrl+M is Enter's twin (mozc's MS-IME keymap binds both to Commit).
+    // Left unbound it leaked to the application, where a terminal reads
+    // Ctrl+M as a bare Enter — submitting a half-typed line.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert_eq!(engine.preedit().unwrap().text(), "あい");
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_M));
+    assert!(result.consumed, "Ctrl+M must not leak to the application");
+    assert_eq!(committed(&result).as_deref(), Some("あい"));
+    assert!(matches!(engine.state(), InputState::Empty));
+
+    // The uppercase keysym some environments fold Shift into works too.
+    engine.process_key(&press('a'));
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_M_UPPER));
+    assert!(result.consumed);
+    assert_eq!(committed(&result).as_deref(), Some("あ"));
+}
+
+#[test]
+fn test_ctrl_m_commits_during_conversion() {
+    let mut engine = engine_with_learned("あい", "愛");
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_M));
+    assert!(result.consumed, "Ctrl+M must not leak to the application");
+    assert_eq!(committed(&result).as_deref(), Some("愛"));
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+#[test]
+fn test_ctrl_m_passes_through_when_empty() {
+    // With nothing composed there is nothing to commit: the chord goes to
+    // the application, so a terminal still gets its Enter.
+    let mut engine = InputMethodEngine::new();
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_M));
+    assert!(!result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+}
