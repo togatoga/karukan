@@ -9,6 +9,7 @@ on:
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/config.toml'
       - 'tests/integration/**'
       - '.github/workflows/fcitx5-integration-test.yml'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/config.toml'
       - 'tests/integration/**'
       - '.github/workflows/fcitx5-integration-test.yml'
   workflow_dispatch:

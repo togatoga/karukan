@@ -8,6 +8,7 @@ on:
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/config.toml'
       - '.github/workflows/karukan-im-ci.yml'
   pull_request:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'karukan-engine/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/config.toml'
       - '.github/workflows/karukan-im-ci.yml'
 
 env:
