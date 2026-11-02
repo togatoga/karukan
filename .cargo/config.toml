@@ -1,0 +1,13 @@
+[env]
+# llama.cpp (via llama-cpp-sys-2) builds its vendored cpp-httplib with
+# `LLAMA_OPENSSL=ON` by default, which runs `find_package(OpenSSL)`. On a
+# machine where Homebrew's openssl@4 is installed, CMake's FindOpenSSL picks
+# it up but never creates the `OpenSSL::SSL` target, and the link step fails
+# ("Target cpp-httplib links to: OpenSSL::SSL but the target was not found").
+# GitHub's macOS runners ship openssl@4 since image 20261026, and Homebrew
+# plans to make it the default `openssl` on macOS 26.
+#
+# karukan never uses llama.cpp's HTTPS (models are fetched by hf_download in
+# karukan-engine), so skip the lookup entirely. llama-cpp-sys-2 forwards every
+# `CMAKE_*` environment variable to CMake as a cache entry.
+CMAKE_DISABLE_FIND_PACKAGE_OpenSSL = "TRUE"
