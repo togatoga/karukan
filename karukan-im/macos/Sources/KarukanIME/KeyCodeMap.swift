@@ -29,6 +29,24 @@ enum KeyCodeMap {
         51: 0xff08,  // Delete (Backspace)
         53: 0xff1b,  // Escape
         76: 0xff8d,  // Keypad Enter
+        // Numeric keypad (issue #51): mapped to XKB KP_* keysyms so the engine
+        // can tell them apart from the main row (`numpad_direct_input`).
+        65: 0xffae,  // Keypad Decimal
+        67: 0xffaa,  // Keypad Multiply
+        69: 0xffab,  // Keypad Add
+        75: 0xffaf,  // Keypad Divide
+        78: 0xffad,  // Keypad Subtract
+        81: 0xffbd,  // Keypad Equals
+        82: 0xffb0,  // Keypad 0
+        83: 0xffb1,  // Keypad 1
+        84: 0xffb2,  // Keypad 2
+        85: 0xffb3,  // Keypad 3
+        86: 0xffb4,  // Keypad 4
+        87: 0xffb5,  // Keypad 5
+        88: 0xffb6,  // Keypad 6
+        89: 0xffb7,  // Keypad 7
+        91: 0xffb8,  // Keypad 8
+        92: 0xffb9,  // Keypad 9
         115: 0xff50,  // Home
         116: 0xff55,  // Page Up
         117: 0xffff,  // Forward Delete

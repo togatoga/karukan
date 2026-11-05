@@ -152,3 +152,9 @@ phrases = [
     { reading = "いま", formats = ["{HOUR}:{MINUTE}", "{HOUR:bare}時{MINUTE:bare}分", "{AMPM}{HOUR12}時{MINUTE:bare}分"] },
     { reading = "にちじ", formats = ["{YEAR}/{MONTH}/{DATE} {HOUR}:{MINUTE}", "{YEAR}年{MONTH:bare}月{DATE:bare}日{HOUR:bare}時{MINUTE:bare}分"] },
 ]
+
+[input]
+# テンキー（数値キーパッド）の扱い。true にするとテンキー入力を IME の変換
+# 対象にせずアプリケーションへそのまま渡す（macOS 標準の日本語入力と同じ挙動）。
+# false（既定）ではテンキーもメインキー列と同じキーとして処理する。
+numpad_direct_input = false
