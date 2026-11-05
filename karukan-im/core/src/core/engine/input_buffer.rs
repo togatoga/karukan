@@ -340,7 +340,7 @@ fn evaluate_run(run: &str, romaji: &RomajiConverter) -> Vec<Element> {
             if romaji.starts_rule(c) {
                 Element::Romaji(c)
             } else {
-                Element::Converted(romaji.width().apply(c))
+                Element::Converted(romaji.settle_char(c))
             }
         })
         .chain(converted.pending.chars().map(Element::Romaji))

@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use super::chain::ChainTable;
 use super::rules::build_rules;
 use super::style::SymbolStyle;
 use super::trie::TrieNode;
@@ -20,6 +23,9 @@ pub struct Converted {
 pub struct RomajiConverter {
     trie: TrieNode,
     width: WidthRules,
+    /// A user table replacing the built-in rules (see [`ChainTable`]).
+    /// Its outputs are taken verbatim: the width rules do not apply.
+    chain: Option<Arc<ChainTable>>,
 }
 
 impl RomajiConverter {
@@ -34,6 +40,26 @@ impl RomajiConverter {
         Self {
             trie: build_rules(style),
             width,
+            chain: None,
+        }
+    }
+
+    /// Create a converter driven by a user chain table instead of the
+    /// built-in rules.
+    pub fn with_chain_table(table: Arc<ChainTable>, width: WidthRules) -> Self {
+        Self {
+            chain: Some(table),
+            ..Self::with_rules(SymbolStyle::default(), width)
+        }
+    }
+
+    /// The form a character settles at: the configured width, except that
+    /// a chain table's outputs are kept as written.
+    pub fn settle_char(&self, c: char) -> char {
+        if self.chain.is_some() {
+            c
+        } else {
+            self.width.apply(c)
         }
     }
 
@@ -50,6 +76,21 @@ impl RomajiConverter {
     /// in `text` is an input character that passed through unchanged
     /// (guarded by `rule_outputs_are_never_ascii`).
     pub fn convert(&self, raw: &str) -> Converted {
+        if let Some(chain) = &self.chain {
+            // `raw` is the previous live tail plus, last, the new keystroke.
+            let mut buf = String::new();
+            let mut chars = raw.chars();
+            let last = chars.next_back();
+            buf.extend(chars);
+            if let Some(ch) = last {
+                chain.feed(&mut buf, ch);
+            }
+            let (text, pending) = chain.split_live(&buf);
+            return Converted {
+                text: text.to_string(),
+                pending: pending.to_string(),
+            };
+        }
         let mut scratch = Scratch {
             trie: &self.trie,
             buffer: String::new(),
@@ -67,6 +108,9 @@ impl RomajiConverter {
     /// Force-convert leftover pending input (`ltu` → っ); characters with no
     /// rule pass through literally (a trailing `n` stays `n`).
     pub fn flush_pending(&self, pending: &str) -> String {
+        if self.chain.is_some() {
+            return pending.to_string();
+        }
         let mut buffer = pending.to_string();
         let mut result = String::new();
 
@@ -87,6 +131,10 @@ impl RomajiConverter {
     /// configured width. [`Self::convert`] leaves the width alone because
     /// part of its output is still live keystrokes; here everything settles.
     pub fn convert_flush(&self, raw: &str) -> String {
+        if self.chain.is_some() {
+            // Runs reaching here are already evaluated live tails.
+            return raw.to_string();
+        }
         let Converted { mut text, pending } = self.convert(raw);
         text.push_str(&self.flush_pending(&pending));
         self.width.apply_str(&text)
@@ -95,6 +143,10 @@ impl RomajiConverter {
     /// Whether `ch` can begin a conversion rule (`k`, `y`, `n` — a later
     /// keystroke could still complete a conversion with it; `1` cannot).
     pub fn starts_rule(&self, ch: char) -> bool {
+        // Chain-table text is settled as soon as it leaves the live tail.
+        if self.chain.is_some() {
+            return false;
+        }
         self.trie.children.contains_key(&ch)
     }
 
@@ -104,6 +156,9 @@ impl RomajiConverter {
     /// rule (`yk`). Used to narrow predictive dictionary lookups while a
     /// romaji tail is being typed.
     pub fn pending_expansions(&self, pending: &str) -> Vec<String> {
+        if let Some(chain) = &self.chain {
+            return chain.expansions(pending);
+        }
         if pending.is_empty() {
             return Vec::new();
         }
@@ -443,5 +498,56 @@ mod tests {
     fn test_punctuation_then_youon() {
         // 'c' must stay pending after '?' until 'ya' completes 'cya'
         assert_eq!(conv("a?b?cya"), ("あ？b？ちゃ".to_string(), "".to_string()));
+    }
+
+    /// Type `keys` the way the IME's input buffer does: each evaluation
+    /// sees the previous live tail plus one new keystroke.
+    fn type_chain(c: &RomajiConverter, keys: &str) -> (String, String) {
+        let (mut settled, mut pending) = (String::new(), String::new());
+        for key in keys.chars() {
+            let r = c.convert(&format!("{pending}{key}"));
+            settled.extend(r.text.chars().map(|ch| c.settle_char(ch)));
+            pending = r.pending;
+        }
+        (settled, pending)
+    }
+
+    fn chain_converter() -> RomajiConverter {
+        let tsv = "d\tｄ\nｄh\tか\nｄu\tきゃ\nきゃu\tきゃあ\nf\tｆ\nｆk\tし\nn\tん\n\
+                   v\tｖ\nｖ;\tで\nでｆd\tですか\n.\t。\n1\t1\n1.\t1.\n";
+        RomajiConverter::with_chain_table(
+            Arc::new(ChainTable::parse_tsv(tsv)),
+            WidthRules::default(),
+        )
+    }
+
+    #[test]
+    fn test_chain_table_typing() {
+        let c = chain_converter();
+        assert_eq!(type_chain(&c, "fkdh"), ("しか".to_string(), "".to_string()));
+        assert_eq!(
+            type_chain(&c, "duu"),
+            ("きゃあ".to_string(), "".to_string())
+        );
+        // で is shown at once but stays live: でｆd could still follow
+        assert_eq!(type_chain(&c, "v;"), ("".to_string(), "で".to_string()));
+        assert_eq!(
+            type_chain(&c, "v;fd"),
+            ("ですか".to_string(), "".to_string())
+        );
+        assert_eq!(type_chain(&c, "v;fk"), ("でし".to_string(), "".to_string()));
+    }
+
+    #[test]
+    fn test_chain_table_skips_builtin_special_cases() {
+        let c = chain_converter();
+        // No n-before-consonant or doubled-consonant handling
+        assert_eq!(type_chain(&c, "nfk"), ("んし".to_string(), "".to_string()));
+        assert_eq!(type_chain(&c, "ddh"), ("ｄか".to_string(), "".to_string()));
+        // Outputs are taken verbatim, ASCII included, without width folding
+        assert_eq!(type_chain(&c, "1."), ("1.".to_string(), "".to_string()));
+        assert_eq!(type_chain(&c, "."), ("。".to_string(), "".to_string()));
+        assert!(!c.starts_rule('d'));
+        assert_eq!(c.convert_flush("ｄ"), "ｄ");
     }
 }
