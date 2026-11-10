@@ -117,6 +117,9 @@ pub struct EngineConfig {
     pub width: WidthRules,
     /// The space the Space key inputs
     pub space: SpaceStyle,
+    /// Pass numeric keypad keys straight through to the application instead
+    /// of routing them through the IME (`[input] numpad_direct_input`)
+    pub numpad_direct_input: bool,
     /// Date/time phrases and their formats
     pub date: DateConfig,
     /// A user romaji table replacing the built-in rules (see
@@ -151,6 +154,7 @@ impl EngineConfig {
             symbol: settings.symbol.style(),
             width: settings.width,
             space: settings.symbol.space,
+            numpad_direct_input: settings.input.numpad_direct_input,
             date: settings.date.clone(),
             romaji_table: settings.romaji_table.clone(),
         }
@@ -178,6 +182,7 @@ impl Default for EngineConfig {
             symbol: SymbolStyle::default(),
             width: WidthRules::default(),
             space: SpaceStyle::default(),
+            numpad_direct_input: false,
             date: DateConfig::default(),
             romaji_table: None,
         }
