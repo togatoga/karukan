@@ -101,8 +101,8 @@ const DRAFT_PROMPT_SLACK: usize = 4;
 /// tail, so the next call usually only has to decode the few tokens past the
 /// common prefix, and most of its output is the previous one again.
 struct GreedySession {
-    /// Borrows the `Arc<LlamaModel>` next to it in [`LlamaCppModel`]; the
-    /// lifetime is erased there under the invariants documented on the field.
+    /// Borrows the model next to it in [`LoadedModel`]; the lifetime is
+    /// erased there under the invariants documented on that field.
     ctx: LlamaContext<'static>,
     /// The last prompt, cached at positions `0..prompt.len()`.
     prompt: Vec<LlamaToken>,
@@ -118,9 +118,9 @@ struct GreedySession {
     decodes: usize,
 }
 
-// SAFETY: the context is only touched while holding the owning model's
-// mutex, so accesses never overlap; llama.cpp allows moving a context
-// between threads when calls are serialized.
+// SAFETY: the context is only touched while holding the mutex it is stored
+// behind in `LoadedModel`, so accesses never overlap; llama.cpp allows
+// moving a context between threads when calls are serialized.
 unsafe impl Send for GreedySession {}
 
 /// Whether a conversion given `deadline` has run out of time. Asked between
