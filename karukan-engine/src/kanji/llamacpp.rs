@@ -124,16 +124,93 @@ fn common_prefix_len(a: &[LlamaToken], b: &[LlamaToken]) -> usize {
 
 /// The highest-scoring token, the lower id winning a tie — what llama.cpp's
 /// greedy sampler picks, without building its vocab-sized candidate array.
+///
+/// Two passes on purpose: tracking the index alongside the maximum chains
+/// every comparison to the one before it, while a bare maximum vectorizes
+/// and the search for it stops at the first hit.
 fn argmax_token(logits: &[f32]) -> LlamaToken {
-    let mut best = 0;
-    let mut best_logit = f32::NEG_INFINITY;
-    for (i, &logit) in logits.iter().enumerate() {
-        if logit > best_logit {
-            best = i;
-            best_logit = logit;
+    let max = max_logit(logits);
+    let best = logits.iter().position(|&logit| logit == max).unwrap_or(0);
+    LlamaToken(best as i32)
+}
+
+fn max_logit(logits: &[f32]) -> f32 {
+    logits.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+}
+
+/// The `k` highest logits with their positions, best first; among equal
+/// logits the lower position comes first, as a stable full sort would have it.
+///
+/// A single pass with a `k`-entry list (k is the beam width, a handful):
+/// sorting a vocab-sized vector per beam per step used to dominate the beam
+/// loop. Once the list is full almost nothing in the vocabulary beats its
+/// last entry, so the row is walked in blocks and a block whose maximum does
+/// not is skipped whole.
+fn top_k_logits(logits: &[f32], k: usize) -> Vec<(usize, f32)> {
+    const BLOCK: usize = 16;
+    let k = k.min(logits.len());
+    if k == 0 {
+        return Vec::new();
+    }
+    let mut top: Vec<(usize, f32)> = Vec::with_capacity(k + 1);
+    for (block, chunk) in logits.chunks(BLOCK).enumerate() {
+        if top.len() == k && max_logit(chunk) <= top[k - 1].1 {
+            continue;
+        }
+        for (offset, &x) in chunk.iter().enumerate() {
+            if top.len() == k && x <= top[k - 1].1 {
+                continue;
+            }
+            let pos = top.partition_point(|&(_, s)| s >= x);
+            top.insert(pos, (block * BLOCK + offset, x));
+            top.truncate(k);
         }
     }
-    LlamaToken(best as i32)
+    top
+}
+
+/// e^x for x <= 0, within a few ulp of `f32::exp`.
+///
+/// Branch-free and call-free, so a loop over it vectorizes. `f32::exp` is a
+/// libm call per element, and the normalizer below takes one per vocabulary
+/// entry, per beam, per step.
+#[inline(always)]
+fn exp_nonpositive(x: f32) -> f32 {
+    // ln 2 split in two so that `k * LN2_HI` is exact.
+    const LN2_HI: f32 = 0.693_359_4;
+    const LN2_LO: f32 = -2.121_944_4e-4;
+    // e^-87 is far below anything a sum that holds e^0 can register, and
+    // stopping there keeps 2^k a normal number.
+    let x = x.max(-87.0);
+    // x = k ln 2 + r with |r| <= ln 2 / 2. `x` is never positive, so
+    // truncating `x / ln 2 - 0.5` rounds to the nearest integer.
+    let k = (x * std::f32::consts::LOG2_E - 0.5) as i32;
+    let kf = k as f32;
+    let r = x - kf * LN2_HI - kf * LN2_LO;
+    // e^r by its Taylor series through r^6: the next term is under 2e-7.
+    let series = 1.0
+        + r * (1.0
+            + r * (0.5
+                + r * (1.0 / 6.0 + r * (1.0 / 24.0 + r * (1.0 / 120.0 + r * (1.0 / 720.0))))));
+    series * f32::from_bits(((k + 127) as u32) << 23)
+}
+
+/// ln Σ e^x over `logits`: the log-softmax normalizer.
+fn log_sum_exp(logits: &[f32]) -> f32 {
+    const LANES: usize = 8;
+    let max = max_logit(logits);
+    // One partial sum per lane. A single running sum has to add in order,
+    // which would keep the whole loop scalar.
+    let mut sums = [0.0f32; LANES];
+    let chunks = logits.chunks_exact(LANES);
+    let tail = chunks.remainder();
+    for chunk in chunks {
+        for (sum, &x) in sums.iter_mut().zip(chunk) {
+            *sum += exp_nonpositive(x - max);
+        }
+    }
+    let tail: f32 = tail.iter().map(|&x| exp_nonpositive(x - max)).sum();
+    (sums.iter().sum::<f32>() + tail).ln() + max
 }
 
 /// llama.cpp based GPT-2 model for GGUF inference
@@ -903,30 +980,9 @@ impl LlamaCppModel {
         // log-softmax normalizer. Subtracting a constant never changes the
         // ranking, so top-k selection runs on the raw logits and only the k
         // winners are normalized.
-        let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let log_sum_exp: f32 = logits
-            .iter()
-            .map(|&x| (x - max_logit).exp())
-            .sum::<f32>()
-            .ln()
-            + max_logit;
-
-        // Single-pass top-k (k is the beam width, a handful): allocating and
-        // fully sorting a vocab-sized vector here ran per beam per step and
-        // dominated the beam-search loop. Ties keep the lower token id first,
-        // matching the stable full sort this replaces.
-        let k = k.min(logits.len());
-        let mut top: Vec<(usize, f32)> = Vec::with_capacity(k + 1);
-        for (i, &x) in logits.iter().enumerate() {
-            if top.len() == k && x <= top[k - 1].1 {
-                continue;
-            }
-            let pos = top.partition_point(|&(_, s)| s >= x);
-            top.insert(pos, (i, x));
-            top.truncate(k);
-        }
-
-        top.into_iter()
+        let log_sum_exp = log_sum_exp(logits);
+        top_k_logits(logits, k)
+            .into_iter()
             .map(|(i, x)| (LlamaToken(i as i32), x - log_sum_exp))
             .collect()
     }
@@ -1311,6 +1367,93 @@ mod beam_search_tests {
                 .expect("oversized beam must be clamped, not abort")
                 .is_empty()
         );
+    }
+}
+
+#[cfg(test)]
+mod log_sum_exp_tests {
+    use super::{exp_nonpositive, log_sum_exp};
+
+    #[test]
+    fn exp_nonpositive_tracks_exp() {
+        // 0 down past the clamp, in steps that land on no special value.
+        for step in 0..=9000 {
+            let x = -(step as f32) * 0.0101;
+            let exact = x.exp();
+            let got = exp_nonpositive(x);
+            if x >= -87.0 {
+                let relative = ((got - exact) / exact).abs();
+                assert!(relative < 5e-7, "e^{x}: {got} vs {exact} ({relative})");
+            } else {
+                assert!(got <= 1.7e-38, "e^{x} past the clamp: {got}");
+            }
+        }
+        assert_eq!(exp_nonpositive(0.0), 1.0);
+        assert!(exp_nonpositive(f32::NEG_INFINITY) <= 1.7e-38);
+    }
+
+    /// A logit row shaped like the model's: one clear winner, the rest
+    /// spread over some thirty units below it.
+    fn logits(len: usize) -> Vec<f32> {
+        let mut state = 0x2545_f491u32;
+        (0..len)
+            .map(|i| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                let spread = (state % 30_000) as f32 / 1000.0;
+                if i == len / 3 { 12.5 } else { -17.0 - spread }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn log_sum_exp_matches_the_f64_sum() {
+        // Lengths around the lane width, and a vocabulary-sized row.
+        for len in [1, 7, 8, 9, 31, 32_003] {
+            let row = logits(len);
+            let exact = row.iter().map(|&x| f64::from(x).exp()).sum::<f64>().ln();
+            let got = f64::from(log_sum_exp(&row));
+            assert!((got - exact).abs() < 1e-5, "len {len}: {got} vs {exact}");
+        }
+    }
+
+    #[test]
+    fn argmax_token_is_the_first_maximum() {
+        use super::{LlamaToken, argmax_token};
+        let mut row = logits(32_003);
+        assert_eq!(argmax_token(&row), LlamaToken(32_003 / 3));
+        // A later copy of the maximum does not take over.
+        row[20_000] = 12.5;
+        assert_eq!(argmax_token(&row), LlamaToken(32_003 / 3));
+        row[5] = 12.5;
+        assert_eq!(argmax_token(&row), LlamaToken(5));
+    }
+
+    #[test]
+    fn top_k_logits_matches_a_stable_sort() {
+        use super::top_k_logits;
+        let mut row = logits(1000);
+        // Ties, inside one block and across blocks.
+        row[40] = 12.5;
+        row[41] = -3.0;
+        row[700] = -3.0;
+        row[999] = 12.5;
+        for len in [0, 1, 15, 16, 17, 1000] {
+            let row = &row[..len];
+            let mut sorted: Vec<(usize, f32)> = row.iter().copied().enumerate().collect();
+            sorted.sort_by(|a, b| b.1.total_cmp(&a.1));
+            for k in [0, 1, 3, 9, 40, 2000] {
+                let expected: Vec<(usize, f32)> = sorted.iter().copied().take(k).collect();
+                assert_eq!(top_k_logits(row, k), expected, "len {len} k {k}");
+            }
+        }
+    }
+
+    #[test]
+    fn log_sum_exp_of_equal_logits_is_ln_of_their_count() {
+        let got = log_sum_exp(&[3.0; 16]);
+        assert!((got - (3.0 + 16f32.ln())).abs() < 1e-5, "{got}");
     }
 }
 
