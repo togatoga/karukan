@@ -203,6 +203,11 @@ pub struct ConversionSettings {
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model
     pub max_latency_ms: u64,
+    /// Time budget in milliseconds for one live conversion (0 = no limit).
+    /// A model that overruns it is abandoned for that keystroke — the
+    /// reading stays kana, with dictionary candidates — and rested before
+    /// it is tried again. A Space conversion gets four times as long
+    pub timeout_ms: u64,
     /// Number of threads for llama.cpp inference (0 = all cores, llama.cpp default)
     pub n_threads: u32,
     /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)

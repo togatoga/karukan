@@ -103,6 +103,10 @@ pub struct EngineConfig {
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model
     pub max_latency_ms: u64,
+    /// Time one live conversion may take in milliseconds (0 = no limit). A
+    /// model that overruns it is abandoned for that keystroke and rested;
+    /// see `OverloadGuard`
+    pub timeout_ms: u64,
     /// Conversion strategy mode (adaptive, light, main)
     pub strategy: StrategyMode,
     /// Show the detailed aux line (Ctrl+Shift+V toggles it).
@@ -144,6 +148,7 @@ impl EngineConfig {
             beam_chars: settings.conversion.beam_chars,
             beam_width: settings.conversion.beam_width,
             max_latency_ms: settings.conversion.max_latency_ms,
+            timeout_ms: settings.conversion.timeout_ms,
             strategy: settings.conversion.strategy,
             verbose: settings.display.verbose,
             live_conversion: settings.conversion.live_conversion,
@@ -171,6 +176,7 @@ impl Default for EngineConfig {
             persona: String::new(),
             beam_width: 3,
             max_latency_ms: 100,
+            timeout_ms: 500,
             strategy: StrategyMode::default(),
             verbose: false,
             live_conversion: false,

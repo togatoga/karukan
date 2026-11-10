@@ -1,5 +1,7 @@
 //! Conversion strategy determination and adaptive model selection
 
+use std::time::Instant;
+
 use crate::config::settings::StrategyMode;
 
 use super::*;
@@ -102,12 +104,16 @@ impl InputMethodEngine {
         if self.converters.kanji.is_none() {
             return ConversionStrategy::MainModelOnly;
         }
+        // A main model resting after an overrun is avoided the way one that
+        // merely ran slow is: by the light model, where there is one.
+        let avoid_main = self.metrics.adaptive_use_light_model
+            || self.guard.is_resting(ModelRole::Main, Instant::now());
 
         determine_conversion_strategy(
             reading.chars().count(),
             num_candidates,
             has_light_model,
-            self.metrics.adaptive_use_light_model,
+            avoid_main,
             &self.config,
         )
     }
