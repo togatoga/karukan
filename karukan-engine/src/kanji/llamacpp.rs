@@ -130,26 +130,24 @@ pub struct LlamaCppModel {
     n_threads: u32,
 }
 
+/// What the model cache shares between engines: the loaded model, its
+/// tokenizer, and the special-token ids derived from that tokenizer.
+type SharedModel = (
+    Arc<LlamaModel>,
+    Arc<tokenizers::Tokenizer>,
+    Arc<HashSet<u32>>,
+);
+
 /// Process-global cache of loaded GGUF models, keyed by their
 /// (model, tokenizer) paths.
 ///
 /// Karukan creates one engine per input context (window/field) and each
 /// engine loads its own converters; without this cache every new context
 /// reloaded the GGUF from disk (and held a separate copy in memory).
-/// Inference builds a fresh llama context per call, so sharing the loaded
-/// model across engines is safe.
-static MODEL_CACHE: OnceLock<
-    Mutex<
-        HashMap<
-            (String, String),
-            (
-                Arc<LlamaModel>,
-                Arc<tokenizers::Tokenizer>,
-                Arc<HashSet<u32>>,
-            ),
-        >,
-    >,
-> = OnceLock::new();
+/// Only the immutable model is shared: every `LlamaCppModel` owns its own
+/// llama contexts (the greedy session, the per-call beam context), so
+/// engines never touch each other's inference state.
+static MODEL_CACHE: OnceLock<Mutex<HashMap<(String, String), SharedModel>>> = OnceLock::new();
 
 /// llama.cpp aborts the process when the model file is absent, so check
 /// first and fail as an ordinary error the caller can degrade on.
@@ -595,15 +593,21 @@ impl LlamaCppModel {
         // straight into the live slots would clobber a prefix still needed.
         let n_seq = beam_size * 2;
         // Cells hold the prompt (shared by every beam) plus one row of
-        // generated tokens per beam. Doubled to cover the scratch staging, in
-        // case the backend materializes a copy rather than sharing cells.
+        // generated tokens per beam, doubled as slack for the scratch staging.
         let n_cells = input_len + 2 * beam_size * (max_new_tokens + 1) + KV_HEADROOM_CELLS;
         // n_batch also caps the context's output buffer (n_outputs_max), which
         // llama.cpp reserves for n_seq_max rows — so it must cover n_seq too.
         let batch_cap = input_len.max(n_seq) + BATCH_HEADROOM;
 
+        // One unified KV buffer for all slots. llama.cpp's default gives every
+        // sequence its own stream, where a cross-sequence copy is a memcpy of
+        // the whole K/V buffer of every layer; the beam permutation issues
+        // two of those per beam per step, and they cost more than the decode
+        // they follow. In a unified buffer a copy only tags the parent's
+        // cells with the child's id, so beams share their common prefix.
         let mut ctx = self.new_context(
             self.context_params_with_n_ctx(n_cells as u32)
+                .with_kv_unified(true)
                 .with_n_seq_max(n_seq.try_into().unwrap_or(u32::MAX))
                 .with_n_batch(batch_cap as u32)
                 .with_n_ubatch(batch_cap as u32),
