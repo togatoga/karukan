@@ -19,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 
 /// Global llama.cpp backend (can only be initialized once)
 static LLAMA_BACKEND: OnceLock<std::result::Result<LlamaBackend, String>> = OnceLock::new();
@@ -117,6 +118,13 @@ struct GreedySession {
 // between threads when calls are serialized.
 unsafe impl Send for GreedySession {}
 
+/// Whether a conversion given `deadline` has run out of time. Asked between
+/// decode calls — a call in progress cannot be interrupted, so a conversion
+/// overruns its deadline by at most one of them.
+fn out_of_time(deadline: Option<Instant>) -> bool {
+    deadline.is_some_and(|deadline| Instant::now() >= deadline)
+}
+
 /// Length of the longest common prefix of two token sequences.
 fn common_prefix_len(a: &[LlamaToken], b: &[LlamaToken]) -> usize {
     a.iter().zip(b).take_while(|(x, y)| x == y).count()
@@ -202,8 +210,7 @@ fn log_sum_exp(logits: &[f32]) -> f32 {
     // One partial sum per lane. A single running sum has to add in order,
     // which would keep the whole loop scalar.
     let mut sums = [0.0f32; LANES];
-    let chunks = logits.chunks_exact(LANES);
-    let tail = chunks.remainder();
+    let (chunks, tail) = logits.as_chunks::<LANES>();
     for chunk in chunks {
         for (sum, &x) in sums.iter_mut().zip(chunk) {
             *sum += exp_nonpositive(x - max);
@@ -471,12 +478,25 @@ impl LlamaCppModel {
         max_new_tokens: usize,
         eos_token_id: Option<i32>,
     ) -> Result<Vec<LlamaToken>> {
+        self.generate_within(input_tokens, max_new_tokens, eos_token_id, None)
+    }
+
+    /// [`Self::generate`] with a deadline: a generation still running when
+    /// it passes is abandoned with [`KanjiError::Timeout`].
+    pub fn generate_within(
+        &self,
+        input_tokens: &[LlamaToken],
+        max_new_tokens: usize,
+        eos_token_id: Option<i32>,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<LlamaToken>> {
         if input_tokens.is_empty() || input_tokens.len() + max_new_tokens >= self.n_ctx as usize {
             return self.generate_with_sampler(
                 input_tokens,
                 max_new_tokens,
                 eos_token_id,
                 LlamaSampler::greedy(),
+                deadline,
             );
         }
 
@@ -485,10 +505,17 @@ impl LlamaCppModel {
             *guard = Some(self.new_greedy_session()?);
         }
         let session = guard.as_mut().expect("session initialized above");
-        let result = self.run_greedy(session, input_tokens, max_new_tokens, eos_token_id);
-        if result.is_err() {
-            // The cache no longer matches the session's record of it;
-            // rebuild next call.
+        let result = self.run_greedy(
+            session,
+            input_tokens,
+            max_new_tokens,
+            eos_token_id,
+            deadline,
+        );
+        // A timeout leaves the session in step with its cache, and what it
+        // decoded is the prefix of the next attempt. Any other failure
+        // leaves the cache in an unknown state: rebuild next call.
+        if matches!(result, Err(ref e) if !matches!(e, KanjiError::Timeout)) {
             *guard = None;
         }
         result
@@ -540,6 +567,7 @@ impl LlamaCppModel {
         input_tokens: &[LlamaToken],
         max_new_tokens: usize,
         eos_token_id: Option<i32>,
+        deadline: Option<Instant>,
     ) -> Result<Vec<LlamaToken>> {
         let n = input_tokens.len();
         let common = common_prefix_len(&session.prompt, input_tokens);
@@ -615,7 +643,12 @@ impl LlamaCppModel {
         }
 
         // Past the draft, token by token.
+        let mut timed_out = false;
         while let Some(token) = next {
+            if out_of_time(deadline) {
+                timed_out = true;
+                break;
+            }
             let pos = generated.len();
             generated.push(token);
             batch.clear();
@@ -634,8 +667,13 @@ impl LlamaCppModel {
             next = (!self.is_eos_token(token, eos_token_id, model_eos)).then_some(token);
         }
 
+        // Everything in `generated` has been decoded, on a timeout too, so
+        // the session stays in step with its cache either way.
         session.prompt.extend_from_slice(input_tokens);
         session.output.extend_from_slice(&generated[n..]);
+        if timed_out {
+            return Err(KanjiError::Timeout);
+        }
         Ok(generated)
     }
 
@@ -772,6 +810,25 @@ impl LlamaCppModel {
         eos_token_id: Option<i32>,
         beam_size: usize,
     ) -> Result<Vec<(Vec<LlamaToken>, f32)>> {
+        self.generate_beam_search_within(
+            input_tokens,
+            max_new_tokens,
+            eos_token_id,
+            beam_size,
+            None,
+        )
+    }
+
+    /// [`Self::generate_beam_search`] with a deadline: a search still
+    /// running when it passes is abandoned with [`KanjiError::Timeout`].
+    pub fn generate_beam_search_within(
+        &self,
+        input_tokens: &[LlamaToken],
+        max_new_tokens: usize,
+        eos_token_id: Option<i32>,
+        beam_size: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<(Vec<LlamaToken>, f32)>> {
         // max_new_tokens == 0 means "generate nothing": return before paying
         // for the prompt decode instead of emitting one-token pseudo-beams.
         if beam_size == 0 || max_new_tokens == 0 || input_tokens.is_empty() {
@@ -832,6 +889,9 @@ impl LlamaCppModel {
         for _step in 0..max_new_tokens.saturating_sub(1) {
             if beams.is_empty() || Self::beam_search_converged(&finished_beams, &beams, beam_size) {
                 break;
+            }
+            if out_of_time(deadline) {
+                return Err(KanjiError::Timeout);
             }
 
             // Decode one token per beam: the token chosen last step, appended
@@ -1109,6 +1169,7 @@ impl LlamaCppModel {
         max_new_tokens: usize,
         eos_token_id: Option<i32>,
         mut sampler: LlamaSampler,
+        deadline: Option<Instant>,
     ) -> Result<Vec<LlamaToken>> {
         // Size the batch to the prompt instead of inheriting llama.cpp's
         // defaults (n_batch 2048 / n_ubatch 512). The compute buffers are
@@ -1143,6 +1204,9 @@ impl LlamaCppModel {
                 break;
             }
 
+            if out_of_time(deadline) {
+                return Err(KanjiError::Timeout);
+            }
             generated.push(new_token);
 
             // Prepare next batch with just the new token
@@ -1550,7 +1614,7 @@ mod kv_reuse_tests {
         let tokens = model.tokenize(&prompt).expect("tokenize failed");
         let session = model.generate(&tokens, 20, eos).expect("generate failed");
         let fresh = model
-            .generate_with_sampler(&tokens, 20, eos, LlamaSampler::greedy())
+            .generate_with_sampler(&tokens, 20, eos, LlamaSampler::greedy(), None)
             .expect("fresh generate failed");
         let label = format!("「{katakana}」 ctx 「{context}」");
         assert_same_up_to_ties(model, eos, &session, &fresh, &label);
@@ -1662,6 +1726,60 @@ mod kv_reuse_tests {
         let output = generate_checked(&model, eos, "ワタシハガクセイデス", "");
         // Token by token: one call for the prompt, one per output token.
         assert_eq!(decodes(&model) - before, output.len() + 1);
+    }
+
+    /// A conversion that runs out of time is abandoned, not answered late —
+    /// and the session survives it: the next call, given the time, returns
+    /// what a fresh context returns.
+    #[test]
+    fn a_passed_deadline_abandons_the_generation_and_keeps_the_session() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+        let katakana = "キョウハテンキガイイノデコウエンヲサンポシタ";
+        let tokens = model
+            .tokenize(&build_jinen_prompt(katakana, ""))
+            .expect("tokenize failed");
+
+        // Already passed: the prompt is decoded, then the clock is read.
+        let abandoned = model.generate_within(&tokens, 20, eos, Some(Instant::now()));
+        assert!(
+            matches!(abandoned, Err(KanjiError::Timeout)),
+            "{abandoned:?}"
+        );
+        assert!(
+            model.lock_greedy_session().is_some(),
+            "a timeout must not discard the session"
+        );
+
+        let before = decodes(&model);
+        let output = generate_checked(&model, eos, katakana, "");
+        // The prompt was decoded by the abandoned call: only its last token
+        // is decoded again, in the same call as the first output token.
+        assert_eq!(decodes(&model) - before, output.len() + 1);
+
+        let in_time = Instant::now() + std::time::Duration::from_secs(60);
+        let unhurried = model
+            .generate_within(&tokens, 20, eos, Some(in_time))
+            .expect("generate failed");
+        assert_eq!(unhurried[tokens.len()..], output[..]);
+    }
+
+    #[test]
+    fn a_passed_deadline_abandons_the_beam_search() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+        let tokens = model
+            .tokenize(&build_jinen_prompt("キョウハテンキガイイノデ", ""))
+            .expect("tokenize failed");
+        let abandoned =
+            model.generate_beam_search_within(&tokens, 20, eos, 3, Some(Instant::now()));
+        assert!(matches!(abandoned, Err(KanjiError::Timeout)));
     }
 
     #[test]
