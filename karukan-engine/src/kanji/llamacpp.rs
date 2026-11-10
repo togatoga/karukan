@@ -1212,8 +1212,8 @@ mod beam_search_tests {
 #[cfg(test)]
 mod kv_reuse_tests {
     use super::*;
-    use crate::kanji::build_jinen_prompt;
     use crate::kanji::ModelSource;
+    use crate::kanji::build_jinen_prompt;
 
     #[test]
     fn common_prefix_len_basics() {
@@ -1228,7 +1228,12 @@ mod kv_reuse_tests {
     /// Load the default registry model, or `None` when it isn't available
     /// locally (the tests are skipped rather than failing offline).
     fn load_model() -> Option<LlamaCppModel> {
-        let (path, tok_path) = ModelSource::HuggingFace { repo: "togatogah/jinen-v2-small.gguf".into(), filename: "jinen-v2-small-Q5_K_M.gguf".into() }.resolve().ok()?;
+        let (path, tok_path) = ModelSource::HuggingFace {
+            repo: "togatogah/jinen-v2-small.gguf".into(),
+            filename: "jinen-v2-small-Q5_K_M.gguf".into(),
+        }
+        .resolve()
+        .ok()?;
         LlamaCppModel::from_file(&path, &tok_path).ok()
     }
 
