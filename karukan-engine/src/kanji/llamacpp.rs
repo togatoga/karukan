@@ -87,15 +87,29 @@ struct BeamState {
     score: f32,
 }
 
+/// How many trailing tokens of the previous prompt may differ for its output
+/// to be offered as a draft. A keystroke rewrites the last kana token or two
+/// plus the output marker behind them; a prompt that differs further back is
+/// a different conversion, whose old output would be decoded only to be
+/// thrown away.
+const DRAFT_PROMPT_SLACK: usize = 4;
+
 /// KV state the greedy path carries between calls: a persistent context and
-/// the token sequence its cache currently represents (last prompt +
-/// generated tokens). Typing grows the prompt at the tail, so the next call
-/// usually only has to decode the few tokens past the common prefix.
+/// the token sequence its cache currently represents, kept as the last
+/// prompt and the output generated from it. Typing grows the prompt at the
+/// tail, so the next call usually only has to decode the few tokens past the
+/// common prefix, and most of its output is the previous one again.
 struct GreedySession {
     /// Borrows the `Arc<LlamaModel>` next to it in [`LlamaCppModel`]; the
     /// lifetime is erased there under the invariants documented on the field.
     ctx: LlamaContext<'static>,
-    cached: Vec<LlamaToken>,
+    /// The last prompt, cached at positions `0..prompt.len()`.
+    prompt: Vec<LlamaToken>,
+    /// What was generated from it, cached right behind the prompt.
+    output: Vec<LlamaToken>,
+    /// Decode calls made so far, so a test can see the draft saving them.
+    #[cfg(test)]
+    decodes: usize,
 }
 
 // SAFETY: the context is only touched while holding the owning model's
@@ -106,6 +120,20 @@ unsafe impl Send for GreedySession {}
 /// Length of the longest common prefix of two token sequences.
 fn common_prefix_len(a: &[LlamaToken], b: &[LlamaToken]) -> usize {
     a.iter().zip(b).take_while(|(x, y)| x == y).count()
+}
+
+/// The highest-scoring token, the lower id winning a tie — what llama.cpp's
+/// greedy sampler picks, without building its vocab-sized candidate array.
+fn argmax_token(logits: &[f32]) -> LlamaToken {
+    let mut best = 0;
+    let mut best_logit = f32::NEG_INFINITY;
+    for (i, &logit) in logits.iter().enumerate() {
+        if logit > best_logit {
+            best = i;
+            best_logit = logit;
+        }
+    }
+    LlamaToken(best as i32)
 }
 
 /// llama.cpp based GPT-2 model for GGUF inference
@@ -342,11 +370,12 @@ impl LlamaCppModel {
 
     /// Generate tokens with greedy decoding.
     ///
-    /// Runs on a persistent context and re-decodes only the part of the
-    /// prompt past the longest common prefix with the previous call, so a
-    /// prompt that grows keystroke by keystroke costs a few tokens instead
-    /// of a full prefill. Falls back to a one-shot context when the prompt
-    /// cannot fit the session.
+    /// Runs on a persistent context, so a prompt that grows keystroke by
+    /// keystroke pays for what changed rather than for the whole conversion:
+    /// only the prompt past the longest common prefix with the previous call
+    /// is decoded, and the previous output rides in that same batch as a
+    /// draft to be confirmed (see [`Self::run_greedy`]). Falls back to a
+    /// one-shot context when the prompt cannot fit the session.
     pub fn generate(
         &self,
         input_tokens: &[LlamaToken],
@@ -369,7 +398,8 @@ impl LlamaCppModel {
         let session = guard.as_mut().expect("session initialized above");
         let result = self.run_greedy(session, input_tokens, max_new_tokens, eos_token_id);
         if result.is_err() {
-            // The cache no longer matches `cached`; rebuild next call.
+            // The cache no longer matches the session's record of it;
+            // rebuild next call.
             *guard = None;
         }
         result
@@ -390,12 +420,31 @@ impl LlamaCppModel {
         let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
         Ok(GreedySession {
             ctx,
-            cached: Vec::new(),
+            prompt: Vec::new(),
+            output: Vec::new(),
+            #[cfg(test)]
+            decodes: 0,
         })
     }
 
-    /// Greedy generation on the session context, reusing the KV of the
-    /// longest common prefix between `input_tokens` and the previous call.
+    /// Greedy generation on the session context.
+    ///
+    /// What a conversion costs is the number of decode calls: a call streams
+    /// every weight of the model through memory whether it carries one token
+    /// or twenty, so generating token by token pays that once per token.
+    /// Typing rarely changes more than the tail of the output, so the
+    /// previous output is offered as a draft: it is decoded in the same
+    /// batch as the changed part of the prompt, and each draft token is kept
+    /// while it is what the model itself picks at that position. The first
+    /// one that is not ends the draft, and generation continues token by
+    /// token from the model's own choice. Every kept token is therefore the
+    /// model's argmax given the tokens before it — the draft only decides
+    /// how many decode calls it takes to find that out.
+    ///
+    /// Batched and single-token evaluation round differently inside
+    /// llama.cpp's quantized kernels, so where two tokens score within a
+    /// rounding error of each other the pick can differ from what a fresh
+    /// context makes; nothing else can.
     fn run_greedy(
         &self,
         session: &mut GreedySession,
@@ -404,44 +453,100 @@ impl LlamaCppModel {
         eos_token_id: Option<i32>,
     ) -> Result<Vec<LlamaToken>> {
         let n = input_tokens.len();
-        let common = common_prefix_len(&session.cached, input_tokens);
-        // Re-decode at least the final prompt token: sampling needs its
-        // logits even when the whole prompt is already cached.
+        let common = common_prefix_len(&session.prompt, input_tokens);
+        // Re-decode at least the final prompt token: picking the first
+        // output token needs its logits even when the whole prompt is cached.
         let start = common.min(n - 1);
+
+        // Invalidate before touching the cache: a failed decode leaves it in
+        // an unknown state, and `generate` then discards the session.
+        let previous_prompt_len = session.prompt.len();
+        session.prompt.clear();
+        let mut draft = std::mem::take(&mut session.output);
+        if common + DRAFT_PROMPT_SLACK < previous_prompt_len {
+            draft.clear();
+        }
+        draft.truncate(max_new_tokens);
 
         session
             .ctx
             .kv_cache_seq_rm(0, Some(start as u32), None)
             .map_err(inference_err)?;
-        // Invalidate before decoding: a failed decode leaves the KV cache in
-        // an unknown state, and `generate` then discards the session.
-        session.cached.clear();
 
+        // One batch: the changed prompt tail, then the draft behind it.
+        // Logits are needed where a token gets picked — after the last
+        // prompt token and after every draft token.
         let mut batch = LlamaBatch::new(self.n_ctx as usize, 1);
         for (i, token) in input_tokens.iter().enumerate().skip(start) {
             batch
                 .add(*token, i as i32, &[0], i == n - 1)
                 .map_err(inference_err)?;
         }
-        session.ctx.decode(&mut batch).map_err(inference_err)?;
-
-        let mut sampler = LlamaSampler::greedy();
-        let model_eos = self.model.vocab().eos();
-        let mut generated = input_tokens.to_vec();
-        for n_cur in (n..).take(max_new_tokens) {
-            let new_token = sampler.sample(&session.ctx, -1);
-            if self.is_eos_token(new_token, eos_token_id, model_eos) {
-                break;
-            }
-            generated.push(new_token);
-            batch.clear();
+        for (i, token) in draft.iter().enumerate() {
             batch
-                .add(new_token, n_cur as i32, &[0], true)
+                .add(*token, (n + i) as i32, &[0], true)
                 .map_err(inference_err)?;
-            session.ctx.decode(&mut batch).map_err(inference_err)?;
+        }
+        session.ctx.decode(&mut batch).map_err(inference_err)?;
+        #[cfg(test)]
+        {
+            session.decodes += 1;
         }
 
-        session.cached = generated.clone();
+        let model_eos = self.model.vocab().eos();
+        let mut generated = input_tokens.to_vec();
+
+        // Walk the draft. Row `last_prompt_row + i` holds the logits that
+        // pick output token `i`: the last prompt token's for the first, the
+        // draft token before it for the rest.
+        let last_prompt_row = (n - 1 - start) as i32;
+        let mut kept = 0;
+        // The model's own pick where the draft stops matching, or where it
+        // runs out; `None` once the output is complete.
+        let mut next = None;
+        while kept < max_new_tokens {
+            let logits = session.ctx.get_logits_ith(last_prompt_row + kept as i32);
+            let token = argmax_token(logits);
+            if self.is_eos_token(token, eos_token_id, model_eos) {
+                break;
+            }
+            if draft.get(kept) != Some(&token) {
+                next = Some(token);
+                break;
+            }
+            generated.push(token);
+            kept += 1;
+        }
+        // Drop the draft tokens that were not kept from the cache.
+        if kept < draft.len() {
+            session
+                .ctx
+                .kv_cache_seq_rm(0, Some((n + kept) as u32), None)
+                .map_err(inference_err)?;
+        }
+
+        // Past the draft, token by token.
+        while let Some(token) = next {
+            let pos = generated.len();
+            generated.push(token);
+            batch.clear();
+            batch
+                .add(token, pos as i32, &[0], true)
+                .map_err(inference_err)?;
+            session.ctx.decode(&mut batch).map_err(inference_err)?;
+            #[cfg(test)]
+            {
+                session.decodes += 1;
+            }
+            if generated.len() - n >= max_new_tokens {
+                break;
+            }
+            let token = argmax_token(session.ctx.get_logits_ith(0));
+            next = (!self.is_eos_token(token, eos_token_id, model_eos)).then_some(token);
+        }
+
+        session.prompt.extend_from_slice(input_tokens);
+        session.output.extend_from_slice(&generated[n..]);
         Ok(generated)
     }
 
@@ -1237,11 +1342,78 @@ mod kv_reuse_tests {
         LlamaCppModel::from_file(&path, &tok_path).ok()
     }
 
-    /// The session must produce exactly what a fresh context produces, over
-    /// the call sequences typing actually generates: prompts growing one
-    /// kana at a time, backspace to a shorter prefix, an exact repeat, a
-    /// switch to an unrelated prompt, and a left-context change (which
-    /// flips the very front of the prompt).
+    /// Logit distance under which two tokens count as tied. Batched and
+    /// single-token evaluation round differently in llama.cpp's quantized
+    /// kernels, which moves a logit by a few hundredths; a wrong token is
+    /// off by whole units.
+    const NEAR_TIE: f32 = 0.5;
+
+    /// The session's output must be the fresh context's, except where it
+    /// took the other side of a tie: at the first token they disagree on,
+    /// the reference logits must score the two picks within [`NEAR_TIE`].
+    fn assert_same_up_to_ties(
+        model: &LlamaCppModel,
+        eos: Option<i32>,
+        session: &[LlamaToken],
+        fresh: &[LlamaToken],
+        label: &str,
+    ) {
+        if session == fresh {
+            return;
+        }
+        let at = common_prefix_len(session, fresh);
+        let logits = model
+            .eval_sequence(&fresh[..at])
+            .expect("reference eval failed");
+        let model_eos = model.model.vocab().eos();
+        // An output that ended here picked the best end-of-sequence token.
+        let end_logit = (0..logits.len())
+            .filter(|&id| model.is_eos_token(LlamaToken(id as i32), eos, model_eos))
+            .map(|id| logits[id])
+            .fold(f32::NEG_INFINITY, f32::max);
+        let picked = |tokens: &[LlamaToken]| {
+            tokens
+                .get(at)
+                .map_or(end_logit, |token| logits[token.0 as usize])
+        };
+        let distance = (picked(session) - picked(fresh)).abs();
+        assert!(
+            distance < NEAR_TIE,
+            "{label}: diverged at token {at} by {distance} logits, not a tie"
+        );
+    }
+
+    /// Generate through the session and through a fresh context, and hold
+    /// the two against each other.
+    fn generate_checked(
+        model: &LlamaCppModel,
+        eos: Option<i32>,
+        katakana: &str,
+        context: &str,
+    ) -> Vec<LlamaToken> {
+        let prompt = build_jinen_prompt(katakana, context);
+        let tokens = model.tokenize(&prompt).expect("tokenize failed");
+        let session = model.generate(&tokens, 20, eos).expect("generate failed");
+        let fresh = model
+            .generate_with_sampler(&tokens, 20, eos, LlamaSampler::greedy())
+            .expect("fresh generate failed");
+        let label = format!("「{katakana}」 ctx 「{context}」");
+        assert_same_up_to_ties(model, eos, &session, &fresh, &label);
+        session[tokens.len()..].to_vec()
+    }
+
+    fn decodes(model: &LlamaCppModel) -> usize {
+        model
+            .lock_greedy_session()
+            .as_ref()
+            .map_or(0, |session| session.decodes)
+    }
+
+    /// The session must produce what a fresh context produces, over the
+    /// call sequences typing actually generates: prompts growing one kana
+    /// at a time, backspace to a shorter prefix, an exact repeat, a switch
+    /// to an unrelated prompt, and a left-context change (which flips the
+    /// very front of the prompt).
     #[test]
     fn matches_fresh_context_across_call_sequences() {
         let Some(model) = load_model() else {
@@ -1262,16 +1434,84 @@ mod kv_reuse_tests {
             ("ハシ", "箸を持つ。"),     // context change
         ];
         for (katakana, context) in cases {
-            let prompt = build_jinen_prompt(katakana, context);
-            let tokens = model.tokenize(&prompt).expect("tokenize failed");
-            let session = model.generate(&tokens, 20, eos).expect("generate failed");
-            let fresh = model
-                .generate_with_sampler(&tokens, 20, eos, LlamaSampler::greedy())
-                .expect("fresh generate failed");
-            assert_eq!(
-                session, fresh,
-                "diverged for 「{katakana}」 ctx 「{context}」"
-            );
+            generate_checked(&model, eos, katakana, context);
         }
+    }
+
+    /// A sentence typed one kana at a time, then deleted the same way: every
+    /// step offers the previous output as a draft, and whether the model
+    /// keeps all of it, part of it or none, the result is still its own.
+    #[test]
+    fn matches_fresh_context_while_typing_a_sentence() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+
+        let typed: Vec<char> = "キョウハテンキガイイノデコウエンヲサンポシタ"
+            .chars()
+            .collect();
+        let grow = 1..=typed.len();
+        let shrink = (typed.len() - 6..typed.len()).rev();
+        for len in grow.chain(shrink) {
+            let katakana: String = typed[..len].iter().collect();
+            generate_checked(&model, eos, &katakana, "昨日は雨でしたが、");
+        }
+    }
+
+    /// The point of the draft: a reading extended by one kana is converted
+    /// in fewer decode calls than it has output tokens, where generating
+    /// token by token takes one call per token and one for the prompt.
+    #[test]
+    fn a_draft_saves_decode_calls() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+
+        generate_checked(&model, eos, "キョウハテンキガイイノデコウエンヲサンポ", "");
+        let before = decodes(&model);
+        let output = generate_checked(
+            &model,
+            eos,
+            "キョウハテンキガイイノデコウエンヲサンポシ",
+            "",
+        );
+        let calls = decodes(&model) - before;
+        assert!(
+            calls < output.len(),
+            "{calls} decode calls for {} output tokens",
+            output.len()
+        );
+    }
+
+    /// An unrelated prompt must not be handed the previous output: it would
+    /// be decoded only to be rejected.
+    #[test]
+    fn an_unrelated_prompt_gets_no_draft() {
+        let Some(model) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let eos = Some(model.eos_token_id().0);
+
+        generate_checked(
+            &model,
+            eos,
+            "キョウハテンキガイイノデコウエンヲサンポシタ",
+            "",
+        );
+        let before = decodes(&model);
+        let output = generate_checked(&model, eos, "ワタシハガクセイデス", "");
+        // Token by token: one call for the prompt, one per output token.
+        assert_eq!(decodes(&model) - before, output.len() + 1);
+    }
+
+    #[test]
+    fn argmax_token_prefers_the_lower_id_on_a_tie() {
+        assert_eq!(argmax_token(&[0.5, 2.0, 2.0, -1.0]), LlamaToken(1));
+        assert_eq!(argmax_token(&[3.0]), LlamaToken(0));
     }
 }
