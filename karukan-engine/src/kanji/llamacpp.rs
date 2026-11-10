@@ -108,6 +108,11 @@ struct GreedySession {
     prompt: Vec<LlamaToken>,
     /// What was generated from it, cached right behind the prompt.
     output: Vec<LlamaToken>,
+    /// The settings the context was built with. The session is shared by
+    /// every wrapper of the model, and one asking for other settings
+    /// rebuilds it.
+    n_ctx: u32,
+    n_threads: u32,
     /// Decode calls made so far, so a test can see the draft saving them.
     #[cfg(test)]
     decodes: usize,
@@ -220,46 +225,48 @@ fn log_sum_exp(logits: &[f32]) -> f32 {
     (sums.iter().sum::<f32>() + tail).ln() + max
 }
 
-/// llama.cpp based GPT-2 model for GGUF inference
-pub struct LlamaCppModel {
-    /// Persistent context for the greedy path. Declared before `model` so it
-    /// drops first: its context borrows the model behind the `Arc`.
+/// A loaded GGUF model with what is derived from it, shared by every
+/// [`LlamaCppModel`] that loaded the same files.
+struct LoadedModel {
+    /// Persistent context for the greedy path. Shared like the model
+    /// itself: it is tens of megabytes of KV and compute buffers, and a
+    /// frontend that keeps one engine per input field would otherwise hold
+    /// one per field. Declared before `model` so it drops first — its
+    /// context borrows the model next to it.
     greedy_session: Mutex<Option<GreedySession>>,
-    /// Shared with every other engine that loaded the same file (see
-    /// `MODEL_CACHE`). The `Arc` keeps the address stable and this field
-    /// keeps it alive for as long as `greedy_session` borrows from it, so it
-    /// must never be replaced after construction.
-    model: Arc<LlamaModel>,
-    n_ctx: u32,
+    /// Never replaced after construction: `greedy_session` borrows it, and
+    /// the `Arc` this struct lives in keeps its address stable.
+    model: LlamaModel,
     /// External HuggingFace tokenizer (always required).
     /// `tokenize()` and `decode()` use this instead of llama.cpp's built-in tokenizer.
-    external_tokenizer: Arc<tokenizers::Tokenizer>,
+    tokenizer: tokenizers::Tokenizer,
     /// Token ids `decode(_, skip_special_tokens=true)` removes before
     /// detokenizing: added tokens with `special: true`, minus the
     /// byte-fallback tokens (see [`is_byte_fallback_token`]).
-    special_token_ids: Arc<HashSet<u32>>,
+    special_token_ids: HashSet<u32>,
+}
+
+/// llama.cpp based model for GGUF inference
+pub struct LlamaCppModel {
+    shared: Arc<LoadedModel>,
+    n_ctx: u32,
     /// Number of threads for inference (0 = use llama.cpp default)
     n_threads: u32,
 }
 
-/// What the model cache shares between engines: the loaded model, its
-/// tokenizer, and the special-token ids derived from that tokenizer.
-type SharedModel = (
-    Arc<LlamaModel>,
-    Arc<tokenizers::Tokenizer>,
-    Arc<HashSet<u32>>,
-);
+/// Loaded models by their (model, tokenizer) paths.
+type ModelCache = HashMap<(String, String), Arc<LoadedModel>>;
 
 /// Process-global cache of loaded GGUF models, keyed by their
 /// (model, tokenizer) paths.
 ///
 /// Karukan creates one engine per input context (window/field) and each
 /// engine loads its own converters; without this cache every new context
-/// reloaded the GGUF from disk (and held a separate copy in memory).
-/// Only the immutable model is shared: every `LlamaCppModel` owns its own
-/// llama contexts (the greedy session, the per-call beam context), so
-/// engines never touch each other's inference state.
-static MODEL_CACHE: OnceLock<Mutex<HashMap<(String, String), SharedModel>>> = OnceLock::new();
+/// reloaded the GGUF from disk (and held a separate copy in memory). The
+/// greedy session is shared along with the model, behind its mutex: what it
+/// remembers of the previous conversion is only ever a head start, so an
+/// engine picking it up after another one costs a prefill, not correctness.
+static MODEL_CACHE: OnceLock<Mutex<ModelCache>> = OnceLock::new();
 
 /// llama.cpp aborts the process when the model file is absent, so check
 /// first and fail as an ordinary error the caller can degrade on.
@@ -289,21 +296,44 @@ impl LlamaCppModel {
             tokenizer_json.as_ref().to_string_lossy().to_string(),
         );
 
-        // Cache hit: reuse the already-loaded model, tokenizer and token ids.
+        // Cache hit: reuse what is already loaded.
         let cache = MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-        if let Some((model, external_tokenizer, special_token_ids)) =
-            cache.lock().unwrap().get(&cache_key).cloned()
-        {
-            return Ok(Self {
-                greedy_session: Mutex::new(None),
-                model,
-                n_ctx,
-                external_tokenizer,
-                special_token_ids,
-                n_threads: 0,
-            });
+        if let Some(shared) = cache.lock().unwrap().get(&cache_key).cloned() {
+            return Ok(Self::wrap(shared, n_ctx));
         }
 
+        let loaded = Arc::new(Self::load(path, tokenizer_json)?);
+        // Two engines can be loading the same model at once. Whichever gets
+        // here first is the copy everyone shares; the other is dropped.
+        let shared = cache
+            .lock()
+            .unwrap()
+            .entry(cache_key)
+            .or_insert(loaded)
+            .clone();
+        Ok(Self::wrap(shared, n_ctx))
+    }
+
+    /// Load the model outside the process-global cache, with a greedy
+    /// session of its own — for tests that count what the session does.
+    #[cfg(test)]
+    fn from_file_unshared<P: AsRef<Path>, T: AsRef<Path>>(
+        path: P,
+        tokenizer_json: T,
+    ) -> Result<Self> {
+        Ok(Self::wrap(Arc::new(Self::load(path, tokenizer_json)?), 256))
+    }
+
+    fn wrap(shared: Arc<LoadedModel>, n_ctx: u32) -> Self {
+        Self {
+            shared,
+            n_ctx,
+            n_threads: 0,
+        }
+    }
+
+    /// Read the GGUF and its external tokenizer from disk.
+    fn load<P: AsRef<Path>, T: AsRef<Path>>(path: P, tokenizer_json: T) -> Result<LoadedModel> {
         ensure_model_file_exists(path.as_ref())?;
         let backend = get_backend()?;
 
@@ -324,49 +354,20 @@ impl LlamaCppModel {
 
         let model = LlamaModel::load_from_file(backend, path.as_ref(), &model_params)
             .map_err(|e| KanjiError::ModelLoad(e.into()))?;
-        Self::finish(model, tokenizer_json, n_ctx, cache_key)
-    }
 
-    /// Load the external tokenizer and construct the model wrapper.
-    /// The loaded resources are cached process-globally under `cache_key`.
-    fn finish<T: AsRef<Path>>(
-        model: LlamaModel,
-        tokenizer_json: T,
-        n_ctx: u32,
-        cache_key: (String, String),
-    ) -> Result<Self> {
-        let external_tokenizer = load_tokenizer(tokenizer_json)?;
-        let special_token_ids: HashSet<u32> = external_tokenizer
+        let tokenizer = load_tokenizer(tokenizer_json)?;
+        let special_token_ids = tokenizer
             .get_added_tokens_decoder()
             .into_iter()
             .filter(|(_, tok)| tok.special && !is_byte_fallback_token(&tok.content))
             .map(|(id, _)| id)
             .collect();
 
-        let model = Arc::new(model);
-        let external_tokenizer = Arc::new(external_tokenizer);
-        let special_token_ids = Arc::new(special_token_ids);
-
-        MODEL_CACHE
-            .get_or_init(|| Mutex::new(HashMap::new()))
-            .lock()
-            .unwrap()
-            .insert(
-                cache_key,
-                (
-                    model.clone(),
-                    external_tokenizer.clone(),
-                    special_token_ids.clone(),
-                ),
-            );
-
-        Ok(Self {
+        Ok(LoadedModel {
             greedy_session: Mutex::new(None),
             model,
-            n_ctx,
-            external_tokenizer,
+            tokenizer,
             special_token_ids,
-            n_threads: 0,
         })
     }
 
@@ -374,12 +375,11 @@ impl LlamaCppModel {
     /// 0 means use llama.cpp default (typically all cores).
     pub fn set_n_threads(&mut self, n: u32) {
         self.n_threads = n;
-        // The session's context was built with the old thread count.
-        *self.lock_greedy_session() = None;
     }
 
     fn lock_greedy_session(&self) -> std::sync::MutexGuard<'_, Option<GreedySession>> {
-        self.greedy_session
+        self.shared
+            .greedy_session
             .lock()
             .unwrap_or_else(|e| e.into_inner())
     }
@@ -392,7 +392,8 @@ impl LlamaCppModel {
     /// New inference context on the global backend.
     fn new_context(&self, params: LlamaContextParams) -> Result<LlamaContext<'_>> {
         let backend = get_backend()?;
-        self.model
+        self.shared
+            .model
             .new_context(backend, params)
             .map_err(inference_err)
     }
@@ -415,7 +416,8 @@ impl LlamaCppModel {
     /// Tokenize a string using the external tokenizer
     pub fn tokenize(&self, text: &str) -> Result<Vec<LlamaToken>> {
         let encoding = self
-            .external_tokenizer
+            .shared
+            .tokenizer
             .encode(text, false)
             .map_err(KanjiError::Inference)?;
         let tokens: Vec<LlamaToken> = encoding
@@ -434,10 +436,11 @@ impl LlamaCppModel {
         let ids: Vec<u32> = tokens
             .iter()
             .map(|t| t.0 as u32)
-            .filter(|id| !(skip_special_tokens && self.special_token_ids.contains(id)))
+            .filter(|id| !(skip_special_tokens && self.shared.special_token_ids.contains(id)))
             .collect();
         let text = self
-            .external_tokenizer
+            .shared
+            .tokenizer
             .decode(&ids, false)
             .map_err(KanjiError::Inference)?;
         Ok(text)
@@ -448,7 +451,7 @@ impl LlamaCppModel {
     /// For byte-level BPE tokens that represent partial UTF-8 sequences,
     /// this returns a hex representation like `<0xE3>` instead of replacement characters.
     pub fn decode_token_for_display(&self, token: LlamaToken) -> String {
-        let bytes = self.model.vocab().token_to_piece(token, true, None);
+        let bytes = self.shared.model.vocab().token_to_piece(token, true, None);
         if bytes.is_empty() {
             // Unknown token type: llama.cpp wrote nothing for it
             return format!("<{}>", token.0);
@@ -501,6 +504,14 @@ impl LlamaCppModel {
         }
 
         let mut guard = self.lock_greedy_session();
+        // The session belongs to the model, not to this wrapper: one built
+        // for another wrapper's settings is rebuilt for these.
+        if guard
+            .as_ref()
+            .is_some_and(|s| (s.n_ctx, s.n_threads) != (self.n_ctx, self.n_threads))
+        {
+            *guard = None;
+        }
         if guard.is_none() {
             *guard = Some(self.new_greedy_session()?);
         }
@@ -530,14 +541,17 @@ impl LlamaCppModel {
             .with_n_batch(self.n_ctx)
             .with_n_ubatch(self.n_ctx);
         let ctx = self.new_context(params)?;
-        // SAFETY: the context borrows the model inside `self.model`'s `Arc`,
-        // whose address is stable and which is never replaced; the session
-        // lives in a field declared before `model`, so it drops first.
+        // SAFETY: the context borrows the model in `self.shared`, and the
+        // session is stored only in that same `LoadedModel`. The `Arc` keeps
+        // the model's address stable, nothing replaces it, and the session's
+        // field is declared before it, so the context drops first.
         let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
         Ok(GreedySession {
             ctx,
             prompt: Vec::new(),
             output: Vec::new(),
+            n_ctx: self.n_ctx,
+            n_threads: self.n_threads,
             #[cfg(test)]
             decodes: 0,
         })
@@ -610,7 +624,7 @@ impl LlamaCppModel {
             session.decodes += 1;
         }
 
-        let model_eos = self.model.vocab().eos();
+        let model_eos = self.shared.model.vocab().eos();
         let mut generated = input_tokens.to_vec();
 
         // Walk the draft. Row `last_prompt_row + i` holds the logits that
@@ -702,7 +716,7 @@ impl LlamaCppModel {
                 .with_n_ubatch(batch_size),
         )?;
 
-        let model_eos = self.model.vocab().eos();
+        let model_eos = self.shared.model.vocab().eos();
         let input_len = input_tokens.len();
 
         // Step 1: Process input tokens for ALL sequences in one batch
@@ -835,7 +849,7 @@ impl LlamaCppModel {
             return Ok(Vec::new());
         }
         let beam_size = beam_size.min(MAX_BEAM_SIZE);
-        let model_eos = self.model.vocab().eos();
+        let model_eos = self.shared.model.vocab().eos();
         let input_len = input_tokens.len();
 
         // Sequence slots 0..beam_size hold the live beams. The scratch slots
@@ -963,7 +977,7 @@ impl LlamaCppModel {
         if beam_size == 0 || max_new_tokens == 0 || input_tokens.is_empty() {
             return Ok(Vec::new());
         }
-        let model_eos = self.model.vocab().eos();
+        let model_eos = self.shared.model.vocab().eos();
 
         let initial_logits = self.eval_sequence(input_tokens)?;
         let top = self.get_top_k_tokens(&initial_logits, beam_size);
@@ -1159,7 +1173,7 @@ impl LlamaCppModel {
     ) -> bool {
         eos_token_id.is_some_and(|eos| token.0 == eos)
             || token == model_eos
-            || self.model.vocab().is_eog(token)
+            || self.shared.model.vocab().is_eog(token)
     }
 
     /// Generate tokens with a custom sampler
@@ -1193,7 +1207,7 @@ impl LlamaCppModel {
         ctx.decode(&mut batch).map_err(inference_err)?;
 
         // Get model's EOS token for comparison
-        let model_eos = self.model.vocab().eos();
+        let model_eos = self.shared.model.vocab().eos();
 
         // Generate new tokens
         for n_cur in (input_tokens.len()..).take(max_new_tokens) {
@@ -1223,7 +1237,7 @@ impl LlamaCppModel {
 
     /// Get the EOS token ID from the model
     pub fn eos_token_id(&self) -> LlamaToken {
-        self.model.vocab().eos()
+        self.shared.model.vocab().eos()
     }
 }
 
@@ -1244,7 +1258,7 @@ impl<'a> NllScorer<'a> {
         // Via the model's own params builder so the configured n_threads
         // applies here too.
         let ctx = model.new_context(model.context_params_with_n_ctx(n_ctx))?;
-        let vocab_size = model.model.n_vocab() as usize;
+        let vocab_size = model.shared.model.n_vocab() as usize;
 
         Ok(Self {
             model,
@@ -1558,7 +1572,9 @@ mod kv_reuse_tests {
         }
         .resolve()
         .ok()?;
-        LlamaCppModel::from_file(&path, &tok_path).ok()
+        // Unshared: these tests count the session's decode calls, and the
+        // shared one is also used by whatever other test runs alongside.
+        LlamaCppModel::from_file_unshared(&path, &tok_path).ok()
     }
 
     /// Logit distance under which two tokens count as tied. Batched and
@@ -1584,7 +1600,7 @@ mod kv_reuse_tests {
         let logits = model
             .eval_sequence(&fresh[..at])
             .expect("reference eval failed");
-        let model_eos = model.model.vocab().eos();
+        let model_eos = model.shared.model.vocab().eos();
         // An output that ended here picked the best end-of-sequence token.
         let end_logit = (0..logits.len())
             .filter(|&id| model.is_eos_token(LlamaToken(id as i32), eos, model_eos))
@@ -1780,6 +1796,52 @@ mod kv_reuse_tests {
         let abandoned =
             model.generate_beam_search_within(&tokens, 20, eos, 3, Some(Instant::now()));
         assert!(matches!(abandoned, Err(KanjiError::Timeout)));
+    }
+
+    /// Engines that load the same files get the same model and the same
+    /// session, not a copy each.
+    #[test]
+    fn wrappers_of_the_same_files_share_the_model_and_its_session() {
+        let source = ModelSource::HuggingFace {
+            repo: "togatogah/jinen-v2-small.gguf".into(),
+            filename: "jinen-v2-small-Q5_K_M.gguf".into(),
+        };
+        let Ok((path, tok_path)) = source.resolve() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let first = LlamaCppModel::from_file(&path, &tok_path).expect("load failed");
+        let second = LlamaCppModel::from_file(&path, &tok_path).expect("load failed");
+        assert!(Arc::ptr_eq(&first.shared, &second.shared));
+    }
+
+    /// The shared session is built for one wrapper's settings. Another
+    /// wrapper with different ones rebuilds it instead of running on a
+    /// context sized or threaded for somebody else.
+    #[test]
+    fn a_wrapper_with_other_settings_rebuilds_the_shared_session() {
+        let Some(first) = load_model() else {
+            eprintln!("model unavailable, skipping");
+            return;
+        };
+        let mut second = LlamaCppModel::wrap(first.shared.clone(), 256);
+        second.set_n_threads(2);
+        let eos = Some(first.eos_token_id().0);
+
+        generate_checked(&first, eos, "キョウハテンキガイイ", "");
+        let built_for = |model: &LlamaCppModel| {
+            model
+                .lock_greedy_session()
+                .as_ref()
+                .map(|session| session.n_threads)
+        };
+        assert_eq!(built_for(&first), Some(0));
+
+        generate_checked(&second, eos, "キョウハテンキガイイノデ", "");
+        assert_eq!(built_for(&second), Some(2));
+        // And back: each wrapper gets the session it asked for.
+        generate_checked(&first, eos, "キョウハテンキガイイノデコウエン", "");
+        assert_eq!(built_for(&first), Some(0));
     }
 
     #[test]
