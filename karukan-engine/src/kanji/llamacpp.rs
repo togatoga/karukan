@@ -266,7 +266,7 @@ fn ensure_model_file_exists(path: &Path) -> Result<()> {
 impl LlamaCppModel {
     /// Load a GGUF model using llama.cpp with an external tokenizer.
     ///
-    /// GPT-2 models use CPU only (Metal has issues with GPT-2).
+    /// Inference runs on the CPU only; no GPU device is attached.
     pub fn from_file<P: AsRef<Path>, T: AsRef<Path>>(path: P, tokenizer_json: T) -> Result<Self> {
         Self::from_file_with_n_ctx(path, tokenizer_json, 256)
     }
@@ -300,8 +300,20 @@ impl LlamaCppModel {
         ensure_model_file_exists(path.as_ref())?;
         let backend = get_backend()?;
 
-        // GPT-2 has Metal issues, use CPU
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(0);
+        // CPU only, and that takes more than keeping the layers off the GPU.
+        // With the default device list llama.cpp still attaches a GPU
+        // backend to every context: on macOS each `new_context` initialized
+        // Metal and reserved a 35 MiB compute buffer on it that no layer
+        // ever used. That is a millisecond of every conversion when the GPU
+        // is idle, and a wait behind whatever owns the GPU when it is not —
+        // a game in the foreground stalled typing. An empty device list
+        // leaves the CPU backend alone. (The models are small enough that
+        // the CPU wins anyway: fully offloaded to Metal, jinen-v2-xsmall
+        // converts in 12 ms against 7 ms.)
+        let model_params = LlamaModelParams::default()
+            .with_n_gpu_layers(0)
+            .with_devices(&[])
+            .map_err(|e| KanjiError::ModelLoad(e.into()))?;
 
         let model = LlamaModel::load_from_file(backend, path.as_ref(), &model_params)
             .map_err(|e| KanjiError::ModelLoad(e.into()))?;
