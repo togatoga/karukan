@@ -211,7 +211,11 @@ impl InputMethodEngine {
         // rebuilt rather than configured after the fact. It carries the
         // width rules too: a keystroke settles at the width in force when
         // it was typed.
-        engine.converters.romaji = RomajiConverter::with_rules(config.symbol, config.width);
+        // A user romaji table replaces the built-in rules altogether.
+        engine.converters.romaji = match &config.romaji_table {
+            Some(table) => RomajiConverter::with_chain_table(table.clone(), config.width),
+            None => RomajiConverter::with_rules(config.symbol, config.width),
+        };
         engine.converters.date = DateRewriter::new(config.date.clone());
         engine.config = config;
         engine
