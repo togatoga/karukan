@@ -224,3 +224,78 @@ fn test_toggle_key_exits_alphabet_during_conversion() {
     engine.process_key(&press('a'));
     assert_eq!(engine.input_buf.reading(), "あいAか");
 }
+
+// --- 半角/全角 (Zenkaku/Hankaku eisu key) tests ---
+
+#[test]
+fn test_eisu_switches_alphabet_back_to_hiragana() {
+    // 半角/全角: the counterpart of 変換 for returning from direct input
+    let mut engine = InputMethodEngine::new();
+
+    // Enter alphabet mode via Shift+A
+    engine.process_key(&press_shift('A'));
+    assert!(engine.mode.current() == InputMode::Alphabet);
+
+    // 半角/全角 press → back to the kana mode before the Alphabet
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert!(engine.mode.current() == InputMode::Hiragana);
+
+    // Clear the composed "A", then type 'a' → 'あ' (hiragana mode)
+    engine.process_key(&press_key(Keysym::RETURN));
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "あ");
+}
+
+#[test]
+fn test_eisu_enters_temporary_alphabet_from_hiragana() {
+    // 半角/全角 from kana: commit what is composed, then the same temporary
+    // Alphabet Shift+letter enters
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "か");
+
+    let result = engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(result.consumed);
+    assert!(engine.mode.current() == InputMode::Alphabet);
+    // The kana the user already typed is committed, not discarded
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "か"))
+    );
+
+    // Typing now goes to direct input
+    engine.process_key(&press('a'));
+    assert_eq!(engine.preedit().unwrap().text(), "a");
+}
+
+#[test]
+fn test_eisu_from_katakana_returns_to_katakana() {
+    // The comeback target is the mode before the temporary Alphabet
+    let mut engine = InputMethodEngine::new();
+
+    engine.process_key(&press('k'));
+    engine.process_key(&press('a'));
+    engine.process_key(&press_ctrl(Keysym::KEY_K));
+    assert!(engine.mode.current() == InputMode::Katakana);
+
+    // Kana → Alphabet → back lands on Katakana, not Hiragana
+    engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(engine.mode.current() == InputMode::Alphabet);
+    engine.process_key(&press_key(Keysym::ZENKAKU_HANKAKU));
+    assert!(engine.mode.current() == InputMode::Katakana);
+}
+
+#[test]
+fn test_eisu_with_modifiers_is_not_consumed() {
+    // A modified chord (Ctrl+半角/全角 etc.) belongs to apps/fcitx5
+    let mut engine = InputMethodEngine::new();
+
+    let result = engine.process_key(&press_ctrl(Keysym::ZENKAKU_HANKAKU));
+    assert!(!result.consumed);
+    assert!(engine.mode.current() != InputMode::Alphabet);
+}
