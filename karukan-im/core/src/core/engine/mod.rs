@@ -23,7 +23,7 @@ pub use types::*;
 use std::collections::HashSet;
 
 use cache::{ConversionCache, ConversionCacheKey, ModelRole};
-use guard::OverloadGuard;
+use guard::{Budget, OverloadGuard};
 use input_buffer::InputBuffer;
 
 #[cfg(test)]

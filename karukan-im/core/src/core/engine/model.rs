@@ -31,6 +31,7 @@ impl InputMethodEngine {
         reading: &str,
         api_context: &str,
         num_candidates: usize,
+        budget: Budget,
     ) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return vec![];
@@ -55,23 +56,29 @@ impl InputMethodEngine {
         // gate may act on.
         let (candidates, main_ms) = match &strategy {
             ConversionStrategy::ParallelBeam { beam_width } => {
-                self.run_parallel_beam(&katakana, api_context, *beam_width)
+                self.run_parallel_beam(&katakana, api_context, *beam_width, budget)
             }
             ConversionStrategy::LightModelOnly => (
-                self.cached_convert(ModelRole::Light, 1, &katakana, api_context)
+                self.cached_convert(ModelRole::Light, 1, &katakana, api_context, budget)
                     .0,
                 None,
             ),
             ConversionStrategy::LightModelBeam { beam_width } => (
-                self.cached_convert(ModelRole::Light, *beam_width, &katakana, api_context)
-                    .0,
+                self.cached_convert(
+                    ModelRole::Light,
+                    *beam_width,
+                    &katakana,
+                    api_context,
+                    budget,
+                )
+                .0,
                 None,
             ),
             ConversionStrategy::MainModelOnly => {
-                self.cached_convert(ModelRole::Main, 1, &katakana, api_context)
+                self.cached_convert(ModelRole::Main, 1, &katakana, api_context, budget)
             }
             ConversionStrategy::MainModelBeam { beam_width } => (
-                self.cached_convert(ModelRole::Main, *beam_width, &katakana, api_context)
+                self.cached_convert(ModelRole::Main, *beam_width, &katakana, api_context, budget)
                     .0,
                 None,
             ),
@@ -91,8 +98,9 @@ impl InputMethodEngine {
     /// cache hit, a resting model, or no such model loaded), so a caller can
     /// tell a measurement from a replay.
     ///
-    /// The call runs against the overload guard's deadline; one that
-    /// overruns it comes back empty and rests the model.
+    /// The call runs against the overload guard's deadline for `budget`; one
+    /// cut off at it comes back empty, and one that ends past it either way
+    /// rests the model.
     ///
     /// Empty results are not cached: they mean a conversion error or an
     /// overrun, and pinning one would keep replaying the failure.
@@ -102,6 +110,7 @@ impl InputMethodEngine {
         beam_width: usize,
         katakana: &str,
         lctx: &str,
+        budget: Budget,
     ) -> (Vec<String>, Option<u64>) {
         // The lookup comes before everything else: a hit needs no model,
         // so it is served while the model rests too.
@@ -118,28 +127,39 @@ impl InputMethodEngine {
             return (Vec::new(), None);
         };
         let key = Self::cache_key(model, beam_width, katakana, lctx);
-        let deadline = self.guard.deadline(start, beam_width);
+        let deadline = self.guard.deadline(start, budget);
         let result = converter.convert_within(katakana, lctx, beam_width, deadline);
-        let elapsed = start.elapsed().as_millis() as u64;
-        let candidates = self.settle_model_call(model, result);
+        let finished = Instant::now();
+        let elapsed = finished.duration_since(start).as_millis() as u64;
+        let candidates = self.settle_model_call(model, result, deadline, finished);
         if !candidates.is_empty() {
             self.conversion_cache.insert(key, candidates.clone());
         }
         (candidates, Some(elapsed))
     }
 
-    /// Reduce a model call to its candidates, telling the overload guard
-    /// how it went: an overrun rests the model, a call that finished clears
-    /// whatever rest it was coming back from. Any other failure yields no
-    /// candidates, as it always has.
+    /// Reduce a model call that ended at `finished` to its candidates,
+    /// telling the overload guard how it went: an overrun rests the model, a
+    /// call that finished in time clears whatever rest it was coming back
+    /// from. A call that returned its answer past `deadline` is an overrun
+    /// too — the answer is kept, the model rests. Any other failure yields
+    /// no candidates, as it always has.
     fn settle_model_call(
         &mut self,
         model: ModelRole,
         result: Result<Vec<String>, KanjiError>,
+        deadline: Option<Instant>,
+        finished: Instant,
     ) -> Vec<String> {
         match result {
             Ok(candidates) => {
-                self.guard.finished_in_time(model);
+                self.guard.settle(model, deadline, finished);
+                if self.guard.is_resting(model, finished) {
+                    warn!(
+                        "convert: {:?} model answered past its time budget, resting it",
+                        model
+                    );
+                }
                 candidates
             }
             Err(KanjiError::Timeout) => {
@@ -147,7 +167,7 @@ impl InputMethodEngine {
                     "convert: {:?} model overran its time budget, resting it",
                     model
                 );
-                self.guard.overran(model, Instant::now());
+                self.guard.overran(model, finished);
                 Vec::new()
             }
             Err(e) => {
@@ -216,6 +236,7 @@ impl InputMethodEngine {
         katakana: &str,
         lctx: &str,
         beam_width: usize,
+        budget: Budget,
     ) -> (Vec<String>, Option<u64>) {
         let main_key = Self::cache_key(ModelRole::Main, 1, katakana, lctx);
         let light_key = Self::cache_key(ModelRole::Light, beam_width, katakana, lctx);
@@ -231,30 +252,36 @@ impl InputMethodEngine {
         let start = Instant::now();
         let run_main = cached_main.is_none() && !self.guard.is_resting(ModelRole::Main, start);
         let run_light = cached_light.is_none() && !self.guard.is_resting(ModelRole::Light, start);
-        // Both halves answer the one Space press, so both get its budget.
-        let deadline = self.guard.deadline(start, beam_width);
+        // Both halves answer the one request, so both get its budget.
+        let deadline = self.guard.deadline(start, budget);
 
         let (computed_main, computed_light) = std::thread::scope(|s| {
             let h_main = run_main.then(|| {
                 s.spawn(|| {
-                    let start = Instant::now();
                     let result = main_converter.convert_within(katakana, lctx, 1, deadline);
-                    (result, start.elapsed().as_millis() as u64)
+                    (result, Instant::now())
                 })
             });
             let h_light = run_light.then(|| {
-                s.spawn(|| light_converter.convert_within(katakana, lctx, beam_width, deadline))
+                s.spawn(|| {
+                    let result =
+                        light_converter.convert_within(katakana, lctx, beam_width, deadline);
+                    (result, Instant::now())
+                })
             });
-            // A half that panicked is a half with no candidates.
+            // A half that panicked is a half with no candidates. Each half
+            // carries the instant it ended: joining waits for the slower
+            // one, and that wait must not count against the faster.
             (
-                h_main.map(|h| h.join().unwrap_or_else(|_| (Ok(Vec::new()), 0))),
-                h_light.map(|h| h.join().unwrap_or_else(|_| Ok(Vec::new()))),
+                h_main.map(|h| h.join().unwrap_or_else(|_| (Ok(Vec::new()), start))),
+                h_light.map(|h| h.join().unwrap_or_else(|_| (Ok(Vec::new()), start))),
             )
         });
 
         let (main_top1, main_ms) = match computed_main {
-            Some((result, elapsed)) => {
-                let result = self.settle_model_call(ModelRole::Main, result);
+            Some((result, finished)) => {
+                let elapsed = finished.duration_since(start).as_millis() as u64;
+                let result = self.settle_model_call(ModelRole::Main, result, deadline, finished);
                 if !result.is_empty() {
                     self.conversion_cache.insert(main_key, result.clone());
                 }
@@ -263,8 +290,8 @@ impl InputMethodEngine {
             None => (cached_main.unwrap_or_default(), None),
         };
         let light = match computed_light {
-            Some(result) => {
-                let result = self.settle_model_call(ModelRole::Light, result);
+            Some((result, finished)) => {
+                let result = self.settle_model_call(ModelRole::Light, result, deadline, finished);
                 if !result.is_empty() {
                     self.conversion_cache.insert(light_key, result.clone());
                 }
@@ -353,7 +380,7 @@ impl InputMethodEngine {
         // the callers. A beam that returns the reading unchanged is a real
         // answer — words that stay in kana (きゃりーぱみゅぱみゅ) convert to
         // themselves — so it rides like any other candidate.
-        self.run_kana_kanji_conversion(&span, &lctx, num_candidates)
+        self.run_kana_kanji_conversion(&span, &lctx, num_candidates, Budget::Space)
             .into_iter()
             .map(|tail| format!("{prefix}{tail}"))
             .collect()

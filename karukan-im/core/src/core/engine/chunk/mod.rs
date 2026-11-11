@@ -170,7 +170,7 @@ impl InputMethodEngine {
     /// Model conversion of one chunk's `reading` given `lctx`, falling back to
     /// the reading itself when the model yields nothing.
     fn convert_chunk(&mut self, reading: &str, lctx: &str) -> String {
-        self.run_kana_kanji_conversion(reading, lctx, 1)
+        self.run_kana_kanji_conversion(reading, lctx, 1, Budget::Live)
             .into_iter()
             .next()
             .unwrap_or_else(|| reading.to_string())

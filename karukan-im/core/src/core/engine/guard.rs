@@ -20,10 +20,22 @@ const FIRST_REST: Duration = Duration::from_secs(2);
 /// Where the doubling stops.
 const LONGEST_REST: Duration = Duration::from_secs(60);
 
-/// A beam search may take this many times the budget of a live conversion:
-/// Space is pressed once and waited for, a live conversion is paid on every
-/// keystroke.
-const BEAM_BUDGET_FACTOR: u32 = 4;
+/// The conversion Space asks for may take this many times the budget of a
+/// live conversion: Space is pressed once and waited for, a live conversion
+/// is paid on every keystroke.
+const SPACE_BUDGET_FACTOR: u32 = 4;
+
+/// Who is waiting for a model call, which decides how long it may take.
+/// It is the caller's intent, not the beam width: with `beam_width = 1` or
+/// a greedy-only strategy the conversion Space asks for is a width-1 call
+/// too, and is still the one the user pressed a key to wait for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Budget {
+    /// A chunk of the live conversion, paid on every keystroke.
+    Live,
+    /// The span Space (or a model view) converts into candidates.
+    Space,
+}
 
 /// One model's rest: until when, and how long it was.
 #[derive(Debug, Clone, Copy, Default)]
@@ -53,16 +65,30 @@ impl OverloadGuard {
         }
     }
 
-    /// When a conversion for `num_candidates` started at `now` has to be
-    /// done. `None` when the guard is off.
-    pub fn deadline(&self, now: Instant, num_candidates: usize) -> Option<Instant> {
-        let budget = self.budget?;
-        let factor = if num_candidates > 1 {
-            BEAM_BUDGET_FACTOR
-        } else {
-            1
+    /// When a conversion started at `now` has to be done. `None` when the
+    /// guard is off.
+    pub fn deadline(&self, now: Instant, budget: Budget) -> Option<Instant> {
+        let factor = match budget {
+            Budget::Live => 1,
+            Budget::Space => SPACE_BUDGET_FACTOR,
         };
-        Some(now + budget * factor)
+        Some(now + self.budget? * factor)
+    }
+
+    /// A call of `model` against `deadline` ended at `finished`: rest the
+    /// model if that was past the deadline, clear its rest otherwise.
+    ///
+    /// Decided by the clock rather than by how the call returned. The
+    /// deadline is only checked between decode calls, so a call whose last
+    /// decode crosses it — a draft accepted whole is a single decode —
+    /// returns its answer like any other. The answer is good and is kept;
+    /// the keystroke still waited longer than the budget for it.
+    pub fn settle(&mut self, model: ModelRole, deadline: Option<Instant>, finished: Instant) {
+        if deadline.is_some_and(|deadline| finished > deadline) {
+            self.overran(model, finished);
+        } else {
+            self.finished_in_time(model);
+        }
     }
 
     /// Whether `model` is resting at `now` and must not be called.
@@ -175,23 +201,46 @@ mod tests {
     }
 
     #[test]
-    fn a_beam_search_gets_a_longer_budget_than_a_live_conversion() {
+    fn space_gets_a_longer_budget_than_a_live_conversion() {
         let guard = OverloadGuard::new(500);
         let now = Instant::now();
         assert_eq!(
-            guard.deadline(now, 1),
+            guard.deadline(now, Budget::Live),
             Some(now + Duration::from_millis(500))
         );
         assert_eq!(
-            guard.deadline(now, 9),
+            guard.deadline(now, Budget::Space),
             Some(now + Duration::from_millis(2000))
         );
     }
 
     #[test]
+    fn a_call_that_ends_past_its_deadline_rests_the_model() {
+        let mut guard = OverloadGuard::new(500);
+        let start = Instant::now();
+        let deadline = guard.deadline(start, Budget::Live);
+
+        guard.settle(MAIN, deadline, start + Duration::from_millis(400));
+        assert!(!guard.is_resting(MAIN, start + Duration::from_millis(400)));
+
+        let late = start + Duration::from_millis(600);
+        guard.settle(MAIN, deadline, late);
+        assert!(guard.is_resting(MAIN, late));
+        assert_eq!(guard.main.until, Some(late + FIRST_REST));
+    }
+
+    #[test]
+    fn a_late_call_without_a_deadline_is_in_time() {
+        let mut guard = OverloadGuard::new(0);
+        let now = Instant::now();
+        guard.settle(MAIN, None, now + Duration::from_secs(10));
+        assert!(!guard.is_resting(MAIN, now + Duration::from_secs(10)));
+    }
+
+    #[test]
     fn a_zero_timeout_turns_the_guard_off() {
         let guard = OverloadGuard::new(0);
-        assert_eq!(guard.deadline(Instant::now(), 1), None);
-        assert_eq!(guard.deadline(Instant::now(), 9), None);
+        assert_eq!(guard.deadline(Instant::now(), Budget::Live), None);
+        assert_eq!(guard.deadline(Instant::now(), Budget::Space), None);
     }
 }
