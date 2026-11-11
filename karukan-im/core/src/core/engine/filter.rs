@@ -169,7 +169,7 @@ impl InputMethodEngine {
             // predictive from the first char (no flood guard).
             CandidateSource::UserDictionary | CandidateSource::Dictionary => self
                 .search_dictionaries(&base, &pending, usize::MAX, usize::MAX, 1, None)
-                .into_iter()
+                .into_candidates()
                 .map(|ac| ac.into_candidate(&base))
                 .collect(),
             CandidateSource::Model => self.model_source_view(reading),
