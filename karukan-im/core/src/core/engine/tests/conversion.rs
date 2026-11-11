@@ -101,9 +101,9 @@ fn test_bare_digit_during_conversion_refines_instead_of_selecting() {
     // Digits are plain text input everywhere: during conversion they extend
     // the reading like any printable char, never select a candidate.
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -118,12 +118,12 @@ fn test_bare_digit_during_conversion_refines_instead_of_selecting() {
 #[test]
 fn test_ctrl_digit_selects_candidate_during_conversion() {
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"あい","candidates":[
             {"surface":"藍","score":2.0},
             {"surface":"愛","score":1.0}
         ]}]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -148,9 +148,9 @@ fn test_ctrl_digit_selects_candidate_while_composing() {
     // commits straight from it — no Space needed first.
     let mut engine = InputMethodEngine::new();
     engine.converters.kanji = None;
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     let result = engine.process_key(&press('i'));
@@ -270,12 +270,12 @@ fn test_ctrl_b_in_conversion_moves_caret_like_left() {
 fn test_shift_space_steps_back_a_candidate() {
     // Shift+Space is prev-candidate, the mirror of Space, like Shift+Tab.
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"あい","candidates":[
             {"surface":"藍","score":2.0},
             {"surface":"愛","score":1.0}
         ]}]"#,
-    ));
+    )));
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));

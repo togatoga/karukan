@@ -1,5 +1,7 @@
 //! Display and preedit construction for the IME engine
 
+use std::time::Instant;
+
 use super::*;
 
 /// Marks the part of the reading the beam produced alternatives for.
@@ -128,6 +130,16 @@ impl InputMethodEngine {
         self.context_line(left, right)
     }
 
+    /// Whether a conversion asked for now would reach no model because the
+    /// overload guard is resting them: the main model, and the light model
+    /// behind it where there is one.
+    pub(super) fn model_is_resting(&self) -> bool {
+        let now = Instant::now();
+        self.guard.is_resting(ModelRole::Main, now)
+            && (self.converters.light_kanji.is_none()
+                || self.guard.is_resting(ModelRole::Light, now))
+    }
+
     /// Get the current mode indicator string
     pub(super) fn mode_indicator(&self) -> String {
         let base = match self.mode.current() {
@@ -144,7 +156,15 @@ impl InputMethodEngine {
         // while typing, so it only rides along in verbose mode, shown
         // verbatim (e.g. ⚡[あ]P:プログラミング) so what is steering the
         // model is visible at a glance.
-        let live = if self.live.enabled { "⚡" } else { "" };
+        // 💤 takes the place of ⚡ while no model would answer: kana that
+        // stays kana needs its reason on screen.
+        let live = if self.model_is_resting() {
+            "💤"
+        } else if self.live.enabled {
+            "⚡"
+        } else {
+            ""
+        };
         let persona = &self.config.persona;
         if persona.is_empty() || !self.config.verbose {
             format!("{live}{base}")

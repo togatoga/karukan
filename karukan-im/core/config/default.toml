@@ -41,10 +41,18 @@ beam_chars = 30
 beam_width = 3
 # メインモデルの推論がこの時間(ms)を超えたらlight_modelに自動切替(0で無効)
 max_latency_ms = 100
+# AI変換 1 回の制限時間(ms)。超えた変換はその打鍵では打ち切り、ひらがなのまま
+# 辞書の候補で入力を続ける。時間切れになったモデルはしばらく休ませ(2秒から、
+# 続けて切れるたび倍、最長60秒)、休みが明けたらもう一度試す。メインモデルだけが
+# 休んでいる間は軽量モデルで変換する。Space での変換にはこの 4 倍まで待つ。
+# ほかの処理(ゲームなど)で PC が重いときに入力が止まるのを防ぐ。0 で無効。
+timeout_ms = 500
 # メインモデル（[models] で定義したキーを指定する）
-model = "jinen-v2-small-q5"
+# 既定は Q8_0。Q5_K_M より大きいが、複数トークンをまとめて評価するときの計算が軽く、
+# 打鍵ごとの変換も Space での変換も速い（精度は同等以上）。
+model = "jinen-v2-small-q8"
 # 軽量モデル（ビームサーチ・自動切替用。[models] のキーを指定する）
-light_model = "jinen-v2-xsmall-q5"
+light_model = "jinen-v2-xsmall-q8"
 # 推論スレッド数（0 = 全コア使用）
 n_threads = 4
 # 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
@@ -57,10 +65,12 @@ live_conversion = true
 #
 # 追加例:
 # [models]
-# jinen-v2-small-q8 = { repo = "togatogah/jinen-v2-small.gguf", filename = "jinen-v2-small-Q8_0.gguf" }
+# jinen-v2-small-q4 = { repo = "togatogah/jinen-v2-small.gguf", filename = "jinen-v2-small-Q4_K_M.gguf" }
 # my-model = "/home/user/models/my-model.gguf"
 
 [models]
+jinen-v2-small-q8 = { repo = "togatogah/jinen-v2-small.gguf", filename = "jinen-v2-small-Q8_0.gguf" }
+jinen-v2-xsmall-q8 = { repo = "togatogah/jinen-v2-xsmall.gguf", filename = "jinen-v2-xsmall-Q8_0.gguf" }
 jinen-v2-small-q5 = { repo = "togatogah/jinen-v2-small.gguf", filename = "jinen-v2-small-Q5_K_M.gguf" }
 jinen-v2-xsmall-q5 = { repo = "togatogah/jinen-v2-xsmall.gguf", filename = "jinen-v2-xsmall-Q5_K_M.gguf" }
 jinen-v1-small-q5 = { repo = "togatogah/jinen-v1-small.gguf", filename = "jinen-v1-small-Q5_K_M.gguf" }

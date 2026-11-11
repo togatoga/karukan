@@ -6,6 +6,7 @@ use super::llamacpp::LlamaCppModel;
 use super::{CONTEXT_TOKEN, INPUT_START_TOKEN, OUTPUT_START_TOKEN};
 use crate::kana::{hiragana_to_katakana, normalize_nfkc};
 use std::path::PathBuf;
+use std::time::Instant;
 
 type Result<T> = super::error::Result<T>;
 
@@ -102,6 +103,19 @@ impl KanaKanjiConverter {
         context: &str,
         num_candidates: usize,
     ) -> Result<Vec<String>> {
+        self.convert_within(reading, context, num_candidates, None)
+    }
+
+    /// [`Self::convert`] with a deadline. A conversion still running when
+    /// it passes is abandoned with [`KanjiError::Timeout`] rather than
+    /// answered late: the caller is a keystroke waiting to be shown.
+    pub fn convert_within(
+        &self,
+        reading: &str,
+        context: &str,
+        num_candidates: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<String>> {
         // Convert hiragana to katakana (model expects katakana input)
         let katakana = hiragana_to_katakana(reading);
 
@@ -116,7 +130,9 @@ impl KanaKanjiConverter {
 
         if num_candidates == 1 {
             // Single candidate: use greedy decoding (faster)
-            let output_tokens = self.model.generate(&tokens, MAX_NEW_TOKENS, eos)?;
+            let output_tokens =
+                self.model
+                    .generate_within(&tokens, MAX_NEW_TOKENS, eos, deadline)?;
             let generated = &output_tokens[tokens.len()..];
             let text = self.model.decode(generated, true)?;
             let clean = clean_model_output(&text);
@@ -126,9 +142,13 @@ impl KanaKanjiConverter {
             }
         } else {
             // Multiple candidates: use beam search
-            let results =
-                self.model
-                    .generate_beam_search(&tokens, MAX_NEW_TOKENS, eos, num_candidates)?;
+            let results = self.model.generate_beam_search_within(
+                &tokens,
+                MAX_NEW_TOKENS,
+                eos,
+                num_candidates,
+                deadline,
+            )?;
 
             for (output_tokens, _score) in results {
                 let text = self.model.decode(&output_tokens, true)?;

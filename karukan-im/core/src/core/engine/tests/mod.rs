@@ -18,6 +18,7 @@ mod katakana;
 mod learning;
 mod live_conversion;
 mod mode_toggle;
+mod overload;
 mod passthrough;
 mod pending_romaji;
 mod persona;

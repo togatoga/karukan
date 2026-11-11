@@ -203,6 +203,11 @@ pub struct ConversionSettings {
     /// Maximum acceptable latency in milliseconds for auto-suggest (0 = disabled)
     /// When a main model conversion exceeds this, the engine adaptively switches to light_model
     pub max_latency_ms: u64,
+    /// Time budget in milliseconds for one live conversion (0 = no limit).
+    /// A model that overruns it is abandoned for that keystroke — the
+    /// reading stays kana, with dictionary candidates — and rested before
+    /// it is tried again. A Space conversion gets four times as long
+    pub timeout_ms: u64,
     /// Number of threads for llama.cpp inference (0 = all cores, llama.cpp default)
     pub n_threads: u32,
     /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
@@ -615,14 +620,14 @@ num_candidates = 3
     #[test]
     fn test_default_models_resolve() {
         let settings = Settings::default();
-        assert_eq!(settings.conversion.model, "jinen-v2-small-q5");
-        assert_eq!(settings.conversion.light_model, "jinen-v2-xsmall-q5");
+        assert_eq!(settings.conversion.model, "jinen-v2-small-q8");
+        assert_eq!(settings.conversion.light_model, "jinen-v2-xsmall-q8");
         let source = settings.model_source(&settings.conversion.model).unwrap();
         assert_eq!(
             source,
             ModelSource::HuggingFace {
                 repo: "togatogah/jinen-v2-small.gguf".to_string(),
-                filename: "jinen-v2-small-Q5_K_M.gguf".to_string(),
+                filename: "jinen-v2-small-Q8_0.gguf".to_string(),
             }
         );
         for key in settings.models.keys() {

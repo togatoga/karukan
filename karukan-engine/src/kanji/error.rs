@@ -22,6 +22,10 @@ pub enum KanjiError {
 
     #[error("inference failed")]
     Inference(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    /// The conversion ran past the deadline it was given and was abandoned.
+    #[error("conversion ran out of time")]
+    Timeout,
 }
 
 pub type Result<T> = std::result::Result<T, KanjiError>;

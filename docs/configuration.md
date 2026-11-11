@@ -12,14 +12,15 @@ chunk_alphabets = 0             # Chunk に残せる英字の数（0 = 英字は
 strategy = "adaptive"           # 変換ストラテジー（adaptive / light / main）
 num_candidates = 9              # 変換候補数（Space押下時）
 n_threads = 4                   # 推論スレッド数（0 = 全コア使用）
-model = "jinen-v2-small-q5"     # メインモデル（[models] のキーを指定）
-light_model = "jinen-v2-xsmall-q5"  # 軽量モデル（ビームサーチ・長文用。[models] のキーを指定）
+model = "jinen-v2-small-q8"     # メインモデル（[models] のキーを指定）
+light_model = "jinen-v2-xsmall-q8"  # 軽量モデル（ビームサーチ・長文用。[models] のキーを指定）
 use_context = true              # Surrounding Textを変換に使用する
 context_chars = 10              # 変換に使う前後テキストの最大文字数
 persona = ""                    # 変換ペルソナ（例: "プログラミング"。[変換ペルソナ](persona.md) 参照）
 beam_chars = 30                 # 別候補を出す範囲の文字数（Chunk単位で後ろからまとめる）
 beam_width = 3                  # 別候補の本数
 max_latency_ms = 100            # メインモデルの許容レイテンシ（ms）。超過時は軽量モデルに自動切替（0 = 無効）
+timeout_ms = 500                # AI変換 1 回の制限時間（ms）。超えたら打ち切り、ひらがなと辞書で入力を続ける（0 = 無効。[PC が重いとき](#pc-が重いとき) 参照）
 dict_path = "/path/to/dict.bin" # システム辞書パス（省略時はデータディレクトリの dict.bin。[Dictionary](dictionary.md) 参照）
 
 [learning]
@@ -56,27 +57,31 @@ phrases = [                    # フレーズ一覧（書くと既定一覧ご�
 - 文字列: ローカルの GGUF ファイルのパス。`tokenizer.json` は GGUF と同じディレクトリに置きます
 - `{ repo = "...", filename = "..." }`: Hugging Face のリポジトリと GGUF ファイル名。初回起動時にバックグラウンドで自動ダウンロードされます。`tokenizer.json` は同じリポジトリから読み込みます
 
-既定で以下の4モデルが定義済みです（ユーザーの `config.toml` の `[models]` はキー単位でマージされ、同じキーは上書き、既定のエントリはそのまま残ります）。
+既定で以下の6モデルが定義済みです（ユーザーの `config.toml` の `[models]` はキー単位でマージされ、同じキーは上書き、既定のエントリはそのまま残ります）。
 
 | モデルキー | ベースモデル | パラメータ数 | Accuracy@1 (NFKC) |
 |---------|-----------|-----------|------:|
-| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf)（デフォルト） | Qwen3 | 109M | 86.0% |
+| [`jinen-v2-small-q8`](https://huggingface.co/togatogah/jinen-v2-small.gguf)（デフォルト） | Qwen3 | 109M | 86.5% |
+| [`jinen-v2-xsmall-q8`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf)（軽量モデルのデフォルト） | Qwen3 | 36M | 79.0% |
+| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | 86.0% |
 | [`jinen-v2-xsmall-q5`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | 79.0% |
 | [`jinen-v1-small-q5`](https://huggingface.co/togatogah/jinen-v1-small.gguf) | GPT-2 | 90M | 76.5% |
 | [`jinen-v1-xsmall-q5`](https://huggingface.co/togatogah/jinen-v1-xsmall.gguf) | GPT-2 | 26M | 71.0% |
+
+`-q8` は Q8_0、`-q5` は Q5_K_M で量子化したものです。Q8_0 はファイルが大きい（small で 117MB と 81MB、xsmall で 39MB と 28MB）代わりに、複数のトークンをまとめて評価するときの計算が軽く、打鍵ごとの変換も Space での変換も速くなります。メモリやダウンロードの量を抑えたい場合は `-q5` を指定してください。
 
 自作モデルを使うには `[models]` にエントリを追加して `model` から参照します。
 
 ```toml
 [conversion]
-model = "jinen-v2-small-q8"
+model = "jinen-v2-small-q4"
 
 [models]
-jinen-v2-small-q8 = { repo = "togatogah/jinen-v2-small.gguf", filename = "jinen-v2-small-Q8_0.gguf" }
+jinen-v2-small-q4 = { repo = "togatogah/jinen-v2-small.gguf", filename = "jinen-v2-small-Q4_K_M.gguf" }
 my-model = "/home/user/models/my-model.gguf"
 ```
 
-既定のモデルを差し替えるには同じキーに書きます（`jinen-v2-small-q5 = "/path/to/model.gguf"`）。不正なエントリは起動時のログと、そのモデルを使うときのエラーに出ます。
+既定のモデルを差し替えるには同じキーに書きます（`jinen-v2-small-q8 = "/path/to/model.gguf"`）。不正なエントリは起動時のログと、そのモデルを使うときのエラーに出ます。
 
 設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
 
@@ -122,7 +127,7 @@ verbose = false                 # 補助テキストに詳細を出す（Ctrl+Sh
 |------|-----|--------|
 | ビームサーチの対象 | `🎯 うえ 2/30` | 変換中の読みの表示が入れ替わる。🎯 の後ろ（`うえ`）にだけ別候補が出る。それより前は表示中の変換のまま。`2/30` は対象の文字数と `beam_chars` の値 |
 | 推論時間 | `推論: 41ms key: 45ms` | モデルの呼び出しにかかった時間と、その打鍵の処理全体にかかった時間。キャッシュに当たった場合、推論は `0ms` になる |
-| モデル名 | `jinen-v2-small-q5` | 表示中の候補を出したモデル（`[models]` のキー） |
+| モデル名 | `jinen-v2-small-q8` | 表示中の候補を出したモデル（`[models]` のキー） |
 | モデルに渡した文脈 | `lctx: 昨日は` | 変換時に前方の文脈としてモデルへ渡した文字列（[ペルソナ](persona.md) は含まない）。ターミナルのインデントのような空白だけの文脈は捨てるので表示されない |
 | ペルソナ | `⚡[あ]P:プログラミング` | モード表示に、モデルへ渡している `persona` の実効値が付く |
 
@@ -150,6 +155,27 @@ strategy = "light"
 ## Performance Tuning
 
 CPU高負荷時（Rustビルド中など）にかな漢字変換が遅くなる場合は、`n_threads` を小さくするとレスポンスが改善します。
+
+## PC が重いとき
+
+ゲームやビルドなどで PC が重く、AI変換が打鍵に追いつかないときでも、入力そのものは止まりません。AI変換 1 回には制限時間（`timeout_ms`、既定 500ms）があり、超えた変換はその打鍵では打ち切られます。読みはひらがなのまま表示され、学習・辞書の候補はこれまでどおり出ます。Space を押せば辞書の候補から選べます。
+
+時間切れになったモデルはしばらく休みます。
+
+| 状況 | 動作 |
+|------|------|
+| メインモデルが時間切れ | メインモデルを休ませ、軽量モデルで変換を続ける |
+| 軽量モデルも時間切れ | AI変換を休み、ひらがなと辞書の候補で入力を続ける。補助テキストのモード表示が `⚡[あ]` から `💤[あ]` に変わる |
+| 休みが明けた | 次の変換で 1 回だけ試す。間に合えば元に戻り、また時間切れなら休みを倍にする |
+
+休む時間は 2 秒から始まり、続けて時間切れになるたびに倍になります（最長 60 秒）。休んでいる間も、すでに変換済みの部分はそのまま表示されます。
+
+Space での変換は打鍵ごとの変換より時間がかかるので、`timeout_ms` の 4 倍まで待ちます。
+
+```toml
+[conversion]
+timeout_ms = 500   # 0 にすると制限なし（これまでの動作）
+```
 
 ## Learning Cache
 

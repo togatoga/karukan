@@ -107,7 +107,9 @@ karukan-engine 自体はモデルの一覧を持ちません。`ModelSource`（H
 
 | モデルキー | ベースモデル | パラメータ数 | 量子化 | Accuracy@1 (NFKC) | デフォルト |
 |------------|-----------|-----------|--------------|------:|---------|
-| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | Yes |
+| [`jinen-v2-small-q8`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | Q8_0 | 86.5% | Yes |
+| [`jinen-v2-xsmall-q8`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | Q8_0 | 79.0% | Yes (light) |
+| [`jinen-v2-small-q5`](https://huggingface.co/togatogah/jinen-v2-small.gguf) | Qwen3 | 109M | Q5_K_M | 86.0% | |
 | [`jinen-v2-xsmall-q5`](https://huggingface.co/togatogah/jinen-v2-xsmall.gguf) | Qwen3 | 36M | Q5_K_M | 79.0% | |
 | [`jinen-v1-small-q5`](https://huggingface.co/togatogah/jinen-v1-small.gguf) | GPT-2 | 90M | Q5_K_M | 76.5% | |
 | [`jinen-v1-xsmall-q5`](https://huggingface.co/togatogah/jinen-v1-xsmall.gguf) | GPT-2 | 26M | Q5_K_M | 71.0% | |

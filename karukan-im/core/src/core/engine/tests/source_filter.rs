@@ -279,12 +279,12 @@ fn test_dictionary_view_prefix_matches_from_one_char() {
     // The dictionary views are full browsers: predictive matches kick in
     // from the very first char, unlike the mixed list's 2-char guard.
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[
         {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
         {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
     ]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -309,12 +309,12 @@ fn test_typing_narrows_within_the_filtered_view() {
     // fzf-style: typing while a source view is active keeps the view and
     // narrows it with the grown reading.
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[
         {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
         {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
     ]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -341,12 +341,12 @@ fn test_backspace_widens_within_the_filtered_view() {
     // The mirror of typing-refine: Backspace shrinks the reading and the
     // view re-expands; emptying the buffer exits cleanly.
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[
         {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
         {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
     ]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -742,12 +742,12 @@ fn test_dictionary_view_merges_both_dictionaries_user_first() {
     let mut engine = InputMethodEngine::new();
     // Deterministic model result (a cache hit stands in for the model).
     seed_model_cache(&mut engine, "アイ", "", &["合い"]);
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}]"#,
-    ));
-    engine.dicts.system = Some(dict_from_json(
+    )));
+    engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
         r#"[{"reading":"あい","candidates":[{"surface":"藍","score":1.0},{"surface":"愛","score":2.0}]}]"#,
-    ));
+    )));
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -1162,12 +1162,12 @@ fn test_filtered_view_aux_shows_what_is_being_typed() {
     // selected candidate's own reading, which for a predictive entry runs
     // past what was typed and left no sign of the actual input.
     let mut engine = InputMethodEngine::new();
-    engine.dicts.user = Some(dict_from_json(
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
         r#"[
         {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1.0}]},
         {"reading":"わせだだいがく","candidates":[{"surface":"早稲田大学","score":1.0}]}
     ]"#,
-    ));
+    )));
     for c in ['w', 'a', 's', 'e', 'd', 'a'] {
         engine.process_key(&press(c));
     }
