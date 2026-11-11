@@ -180,6 +180,9 @@ fn run_typing_sim(
 
     lat_ms.sort_by(|a, b| a.total_cmp(b));
     let n = lat_ms.len();
+    if n == 0 {
+        anyhow::bail!("no keystrokes to time: the benchmark has no item with a reading");
+    }
     let total: f64 = lat_ms.iter().sum();
     let median = lat_ms[n / 2];
     let p95 = lat_ms[((n as f64 * 0.95) as usize).min(n - 1)];
