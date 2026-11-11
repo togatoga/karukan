@@ -182,47 +182,11 @@ fn top_k_logits(logits: &[f32], k: usize) -> Vec<(usize, f32)> {
     top
 }
 
-/// e^x for x <= 0, within a few ulp of `f32::exp`.
-///
-/// Branch-free and call-free, so a loop over it vectorizes. `f32::exp` is a
-/// libm call per element, and the normalizer below takes one per vocabulary
-/// entry, per beam, per step.
-#[inline(always)]
-fn exp_nonpositive(x: f32) -> f32 {
-    // ln 2 split in two so that `k * LN2_HI` is exact.
-    const LN2_HI: f32 = 0.693_359_4;
-    const LN2_LO: f32 = -2.121_944_4e-4;
-    // e^-87 is far below anything a sum that holds e^0 can register, and
-    // stopping there keeps 2^k a normal number.
-    let x = x.max(-87.0);
-    // x = k ln 2 + r with |r| <= ln 2 / 2. `x` is never positive, so
-    // truncating `x / ln 2 - 0.5` rounds to the nearest integer.
-    let k = (x * std::f32::consts::LOG2_E - 0.5) as i32;
-    let kf = k as f32;
-    let r = x - kf * LN2_HI - kf * LN2_LO;
-    // e^r by its Taylor series through r^6: the next term is under 2e-7.
-    let series = 1.0
-        + r * (1.0
-            + r * (0.5
-                + r * (1.0 / 6.0 + r * (1.0 / 24.0 + r * (1.0 / 120.0 + r * (1.0 / 720.0))))));
-    series * f32::from_bits(((k + 127) as u32) << 23)
-}
-
-/// ln Σ e^x over `logits`: the log-softmax normalizer.
+/// ln Σ e^x over `logits`: the log-softmax normalizer. The maximum is
+/// taken out first so no term overflows.
 fn log_sum_exp(logits: &[f32]) -> f32 {
-    const LANES: usize = 8;
     let max = max_logit(logits);
-    // One partial sum per lane. A single running sum has to add in order,
-    // which would keep the whole loop scalar.
-    let mut sums = [0.0f32; LANES];
-    let (chunks, tail) = logits.as_chunks::<LANES>();
-    for chunk in chunks {
-        for (sum, &x) in sums.iter_mut().zip(chunk) {
-            *sum += exp_nonpositive(x - max);
-        }
-    }
-    let tail: f32 = tail.iter().map(|&x| exp_nonpositive(x - max)).sum();
-    (sums.iter().sum::<f32>() + tail).ln() + max
+    logits.iter().map(|&x| (x - max).exp()).sum::<f32>().ln() + max
 }
 
 /// A loaded GGUF model with what is derived from it, shared by every
@@ -1462,25 +1426,7 @@ mod beam_search_tests {
 
 #[cfg(test)]
 mod log_sum_exp_tests {
-    use super::{exp_nonpositive, log_sum_exp};
-
-    #[test]
-    fn exp_nonpositive_tracks_exp() {
-        // 0 down past the clamp, in steps that land on no special value.
-        for step in 0..=9000 {
-            let x = -(step as f32) * 0.0101;
-            let exact = x.exp();
-            let got = exp_nonpositive(x);
-            if x >= -87.0 {
-                let relative = ((got - exact) / exact).abs();
-                assert!(relative < 5e-7, "e^{x}: {got} vs {exact} ({relative})");
-            } else {
-                assert!(got <= 1.7e-38, "e^{x} past the clamp: {got}");
-            }
-        }
-        assert_eq!(exp_nonpositive(0.0), 1.0);
-        assert!(exp_nonpositive(f32::NEG_INFINITY) <= 1.7e-38);
-    }
+    use super::log_sum_exp;
 
     /// A logit row shaped like the model's: one clear winner, the rest
     /// spread over some thirty units below it.
@@ -1499,7 +1445,7 @@ mod log_sum_exp_tests {
 
     #[test]
     fn log_sum_exp_matches_the_f64_sum() {
-        // Lengths around the lane width, and a vocabulary-sized row.
+        // Short rows and a vocabulary-sized one.
         for len in [1, 7, 8, 9, 31, 32_003] {
             let row = logits(len);
             let exact = row.iter().map(|&x| f64::from(x).exp()).sum::<f64>().ln();
