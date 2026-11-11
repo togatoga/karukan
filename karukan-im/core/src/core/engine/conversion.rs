@@ -21,6 +21,23 @@ const MAX_PREDICTIVE_SUGGESTIONS: usize = 3;
 /// single key would flood the list from a large dictionary
 const MIN_PREDICTIVE_PREFIX_CHARS: usize = 2;
 
+/// What the dictionaries hold for a reading, by how each entry matched.
+/// Both lists run user dictionary first, then system.
+pub(super) struct DictionaryHits {
+    /// Entries registered under the typed reading itself.
+    exact: Vec<AnnotatedCandidate>,
+    /// Entries whose reading extends it (けいざい → 経済移民): longer words
+    /// the user may not have meant. Each carries its full reading.
+    predictive: Vec<AnnotatedCandidate>,
+}
+
+impl DictionaryHits {
+    /// Every hit in display order: the exact matches, then the predictive.
+    pub(super) fn into_candidates(self) -> impl Iterator<Item = AnnotatedCandidate> {
+        self.exact.into_iter().chain(self.predictive)
+    }
+}
+
 /// How the unresolved romaji tail constrains the predictive lookup.
 enum TailConstraint {
     /// No tail: prediction is unconstrained
@@ -182,8 +199,9 @@ impl InputMethodEngine {
             .with_action(EngineAction::UpdateAuxText(aux))
     }
 
-    /// Dictionary candidates for a reading: user dict first, then system,
-    /// exact matches then predictive (prefix-extending) ones, deduped.
+    /// Dictionary candidates for a reading: exact matches and predictive
+    /// (prefix-extending) ones, each user dict first, then system, deduped
+    /// across all four. `limit` caps the two lists together.
     ///
     /// `pending` narrows the predictive lookup to readings the romaji tail
     /// can still become (わせ + `d` keeps わせだ…, drops わせり…);
@@ -197,7 +215,7 @@ impl InputMethodEngine {
         predictive_limit: usize,
         min_prefix_chars: usize,
         only: Option<CandidateSource>,
-    ) -> Vec<AnnotatedCandidate> {
+    ) -> DictionaryHits {
         let dicts = [
             (self.dicts.user.as_ref(), CandidateSource::UserDictionary),
             (self.dicts.system.as_ref(), CandidateSource::Dictionary),
@@ -205,7 +223,8 @@ impl InputMethodEngine {
         .into_iter()
         .filter(|(_, source)| only.is_none_or(|o| o == *source))
         .collect::<Vec<_>>();
-        let mut candidates = Vec::new();
+        let mut exact = Vec::new();
+        let mut predictive = Vec::new();
         let mut seen = HashSet::new();
 
         // Exact matches, user dictionary first — only when no romaji tail
@@ -219,11 +238,11 @@ impl InputMethodEngine {
                 continue;
             };
             for cand in result.candidates {
-                if candidates.len() >= limit {
+                if exact.len() >= limit {
                     break;
                 }
                 if seen.insert(cand.surface.clone()) {
-                    candidates.push(AnnotatedCandidate::new(cand.surface.clone(), source));
+                    exact.push(AnnotatedCandidate::new(cand.surface.clone(), source));
                 }
             }
         }
@@ -250,12 +269,12 @@ impl InputMethodEngine {
                     TailConstraint::Dead => unreachable!("checked above"),
                 };
                 for m in matches {
-                    if budget == 0 || candidates.len() >= limit {
+                    if budget == 0 || exact.len() + predictive.len() >= limit {
                         break;
                     }
                     if seen.insert(m.candidate.surface.clone()) {
                         budget -= 1;
-                        candidates.push(
+                        predictive.push(
                             AnnotatedCandidate::new(m.candidate.surface.clone(), source)
                                 .with_reading(Some(m.reading.to_string())),
                         );
@@ -264,7 +283,7 @@ impl InputMethodEngine {
             }
         }
 
-        candidates
+        DictionaryHits { exact, predictive }
     }
 
     /// Classify the unresolved romaji tail for predictive lookup.
@@ -281,7 +300,14 @@ impl InputMethodEngine {
     }
 
     /// Build the mixed candidate list, deduped in priority order:
-    /// Learning → User Dictionary → Model → System Dictionary → Fallback.
+    /// Learning → User Dictionary (exact) → Model → System Dictionary
+    /// (exact) → predictive dictionary matches → Fallback.
+    ///
+    /// Only an exact match is an answer to what was typed, so only those
+    /// sit around the model. A predictive match is a longer word the user
+    /// may not have meant, and follows every exact one whichever dictionary
+    /// it came from: with a user dictionary of several hundred thousand
+    /// words, けいざい would otherwise open on 経済移民 with 経済 pages away.
     ///
     /// `base`/`pending` split the reading for the dictionary lookup (the
     /// unresolved romaji tail narrows prediction).
@@ -302,7 +328,6 @@ impl InputMethodEngine {
         let hiragana = reading.to_string();
         let katakana = karukan_engine::hiragana_to_katakana(reading);
 
-        // Priority: Learning → User Dictionary → Model → System Dictionary → Fallback
         let mut builder = CandidateBuilder::new();
 
         // 1. Learning cache candidates (highest priority).
@@ -319,20 +344,21 @@ impl InputMethodEngine {
             }
         }
 
-        // 2. User dictionary candidates (system dictionary follows the model
-        //    in step 4, so the two are split here).
-        let (user_dict, system_dict): (Vec<_>, Vec<_>) = self
-            .search_dictionaries(
-                base,
-                pending,
-                usize::MAX,
-                usize::MAX,
-                MIN_PREDICTIVE_PREFIX_CHARS,
-                None,
-            )
+        // 2. Exact user dictionary matches: what the user registered for
+        //    this very reading outranks the model.
+        let dictionary = self.search_dictionaries(
+            base,
+            pending,
+            usize::MAX,
+            usize::MAX,
+            MIN_PREDICTIVE_PREFIX_CHARS,
+            None,
+        );
+        let (user_exact, system_exact): (Vec<_>, Vec<_>) = dictionary
+            .exact
             .into_iter()
             .partition(|ac| ac.source == CandidateSource::UserDictionary);
-        for ac in user_dict {
+        for ac in user_exact {
             builder.push(ac);
         }
 
@@ -352,12 +378,17 @@ impl InputMethodEngine {
             }
         }
 
-        // 4. System dictionary candidates
-        for ac in system_dict {
+        // 4. Exact system dictionary matches
+        for ac in system_exact {
             builder.push(ac);
         }
 
-        // 5/6. Hiragana/katakana fallback + rewriter variants. Emoji mode
+        // 5. Predictive matches, user dictionary first
+        for ac in dictionary.predictive {
+            builder.push(ac);
+        }
+
+        // 6/7. Hiragana/katakana fallback + rewriter variants. Emoji mode
         // shows rewriter (emoji) candidates only — no kana pair, like an
         // emoji picker; Enter in Composing still commits the literal query.
         if self.mode.current() != InputMode::Emoji {
@@ -381,7 +412,7 @@ impl InputMethodEngine {
             );
         }
 
-        // 7. Back-fill descriptions. Symbol names are Fallback-only —
+        // 8. Back-fill descriptions. Symbol names are Fallback-only —
         //    model/dict/learning candidates must not inherit labels like
         //    「金 = 部首」 — while width annotations (`[全]カタカナ`) apply to
         //    any pure-kana candidate that still has none. The single-kanji
@@ -484,7 +515,7 @@ impl InputMethodEngine {
             MIN_PREDICTIVE_PREFIX_CHARS,
             None,
         )
-        .into_iter()
+        .into_candidates()
         .map(|ac| ac.into_candidate(reading))
         .collect()
     }
