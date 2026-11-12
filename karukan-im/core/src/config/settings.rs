@@ -20,6 +20,12 @@ use tracing::{debug, error, warn};
 /// Default configuration TOML embedded from config/default.toml
 const DEFAULT_CONFIG_TOML: &str = include_str!("../../config/default.toml");
 
+/// The config file, in the config directory.
+pub const CONFIG_FILE: &str = "config.toml";
+
+/// The user's romaji table, beside the config file.
+pub const ROMAJI_TABLE: &str = "romaji.tsv";
+
 /// Configuration settings for the IME
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -215,7 +221,7 @@ pub struct ConversionSettings {
 }
 
 /// Learning cache settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LearningSettings {
     /// Whether learning is enabled
     pub enabled: bool,
@@ -298,7 +304,7 @@ impl Settings {
 
     /// Get the configuration file path
     pub fn config_file() -> Option<PathBuf> {
-        Self::config_dir().map(|dir| dir.join("config.toml"))
+        Self::config_dir().map(|dir| dir.join(CONFIG_FILE))
     }
 
     /// Get the user dictionary directory path.
@@ -341,15 +347,30 @@ impl Settings {
             error!("config.toml not loaded, using defaults: {e:#}");
             Self::default()
         });
-        settings.romaji_table = Self::load_romaji_table();
+        settings.romaji_table =
+            Self::config_dir().and_then(|dir| Self::load_romaji_table(&dir.join(ROMAJI_TABLE)));
         settings
     }
 
-    /// Load `romaji.tsv` (azooKey/hazkey format) from the config directory.
-    /// `None` when it is absent or has no rules: the built-in rules apply.
-    pub fn load_romaji_table() -> Option<Arc<ChainTable>> {
-        let path = Self::config_dir()?.join("romaji.tsv");
-        let tsv = fs::read_to_string(&path).ok()?;
+    /// Everything a config directory holds: `config.toml` (the defaults
+    /// when it is absent) and the romaji table beside it. Unlike
+    /// [`Self::load_or_default`] a broken config.toml is an error, so a
+    /// reload can keep what is running instead of resetting it.
+    pub fn load_from_dir(dir: &Path) -> Result<Self> {
+        let config_file = dir.join(CONFIG_FILE);
+        let mut settings = if config_file.exists() {
+            Self::load_from(&config_file)?
+        } else {
+            Self::default()
+        };
+        settings.romaji_table = Self::load_romaji_table(&dir.join(ROMAJI_TABLE));
+        Ok(settings)
+    }
+
+    /// Load a romaji table (azooKey/hazkey format) from `path`. `None` when
+    /// it is absent or has no rules: the built-in rules apply.
+    pub fn load_romaji_table(path: &Path) -> Option<Arc<ChainTable>> {
+        let tsv = fs::read_to_string(path).ok()?;
         let table = ChainTable::parse_tsv(&tsv);
         if table.is_empty() {
             warn!("{path:?} has no rules, using the built-in romaji rules");

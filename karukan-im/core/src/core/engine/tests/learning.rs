@@ -219,13 +219,11 @@ fn init_learning_cache_applies_configured_surface_cap() {
     // max_surface_chars, the 6-char surface (over the configured 5, under
     // the default 50) gets recorded and this fails.
     let mut engine = InputMethodEngine::new();
-    engine.init_learning_cache(
-        true,
-        LearningConfig {
-            max_entries: 10_000,
-            max_surface_chars: 5,
-        },
-    );
+    engine.init_learning_cache(&crate::config::settings::LearningSettings {
+        enabled: true,
+        max_entries: 10_000,
+        max_surface_chars: 5,
+    });
     let cache = engine.learning.as_mut().expect("learning enabled");
 
     let before = cache.entry_count();
