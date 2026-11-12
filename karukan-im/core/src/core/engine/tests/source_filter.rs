@@ -367,6 +367,31 @@ fn test_backspace_widens_within_the_filtered_view() {
 }
 
 #[test]
+fn test_ctrl_h_widens_within_the_filtered_view() {
+    // Ctrl+H follows the same filtered-view branch as Backspace, not the
+    // plain cancel: the view stays open and the reading shrinks.
+    let mut engine = InputMethodEngine::new();
+    engine.dicts.user = Some(std::sync::Arc::new(dict_from_json(
+        r#"[
+        {"reading":"あ","candidates":[{"surface":"亜","score":1.0}]},
+        {"reading":"あい","candidates":[{"surface":"藍","score":1.0}]}
+    ]"#,
+    )));
+
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📝（候補なし）
+    engine.process_key(&press_ctrl(Keysym::KEY_T)); // 📚: [藍]
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_H));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains("[変換:📚]"), "aux was: {aux}");
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert_eq!(shown_texts(&engine), vec!["亜", "藍"]);
+}
+
+#[test]
 fn test_learning_filter_shows_full_history() {
     // The mixed list caps learning entries at 3; the narrowed learning view
     // is a history browser and shows them all.

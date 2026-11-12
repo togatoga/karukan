@@ -230,6 +230,9 @@ impl InputMethodEngine {
                 // the same way). Unbound it would leak to the application,
                 // where a terminal reads Ctrl+M as a bare Enter.
                 Keysym::KEY_M | Keysym::KEY_M_UPPER => return self.commit_composing(),
+                // Ctrl+H: delete, like Backspace (mozc's MS-IME keymap).
+                // Not bound in Empty, so the application keeps its own Ctrl+H.
+                Keysym::KEY_H | Keysym::KEY_H_UPPER => return self.backspace_composing(),
                 // Ctrl+A: move to beginning (Emacs-style Home)
                 Keysym::KEY_A | Keysym::KEY_A_UPPER => return self.move_caret_home(),
                 // Ctrl+B: move left (Emacs-style Left)

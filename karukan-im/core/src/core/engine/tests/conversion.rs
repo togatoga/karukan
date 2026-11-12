@@ -335,3 +335,44 @@ fn test_ctrl_m_passes_through_when_empty() {
     assert!(!result.consumed);
     assert!(matches!(engine.state(), InputState::Empty));
 }
+
+#[test]
+fn test_ctrl_h_deletes_like_backspace_while_composing() {
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_H));
+    assert!(result.consumed, "Ctrl+H must not leak to the application");
+    assert_eq!(engine.preedit().unwrap().text(), "あ");
+
+    // The uppercase keysym some environments fold Shift into works too.
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_H_UPPER));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Empty));
+}
+
+#[test]
+fn test_ctrl_h_cancels_conversion_like_backspace() {
+    // Plain Backspace, not Ctrl+Backspace: the learned entry must survive.
+    let mut engine = engine_with_learned("あい", "愛");
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_H));
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Composing { .. }));
+    assert_eq!(engine.preedit().unwrap().text(), "あい");
+
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(engine.candidates().unwrap().selected_text(), Some("愛"));
+}
+
+#[test]
+fn test_ctrl_h_passes_through_when_empty() {
+    let mut engine = InputMethodEngine::new();
+    let result = engine.process_key(&press_ctrl(Keysym::KEY_H));
+    assert!(!result.consumed);
+}

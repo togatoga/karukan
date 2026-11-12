@@ -624,6 +624,14 @@ impl InputMethodEngine {
             }
             // Backspace cancels back to the composition, like Escape.
             Keysym::BACKSPACE => self.cancel_conversion(),
+            // Ctrl+H deletes like Backspace, matching mozc's MS-IME keymap.
+            Keysym::KEY_H | Keysym::KEY_H_UPPER if key.modifiers.control_key => {
+                if self.state.filter().is_some() {
+                    self.refine_through_composing(key)
+                } else {
+                    self.cancel_conversion()
+                }
+            }
             // Caret keys drop back to editing, the same way a caret move
             // ends the live-conversion display while composing: the
             // conversion (and its source filter) dissolves and the raw
