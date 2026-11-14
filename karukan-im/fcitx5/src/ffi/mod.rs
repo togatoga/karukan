@@ -115,7 +115,9 @@ impl KarukanEngine {
     fn new() -> Self {
         let settings = Settings::load_or_default();
         let config = EngineConfig::from_settings(&settings);
-        let engine = InputMethodEngine::with_config(config);
+        let mut engine = InputMethodEngine::with_config(config);
+        // config.toml edits apply without restarting fcitx5.
+        engine.watch_config_file(&settings);
         Self {
             engine,
             settings,

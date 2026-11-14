@@ -23,6 +23,7 @@ mod passthrough;
 mod pending_romaji;
 mod persona;
 mod predictive;
+mod reload;
 mod rewriter;
 mod single_kanji;
 mod source_filter;

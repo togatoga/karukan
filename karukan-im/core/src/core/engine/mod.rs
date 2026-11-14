@@ -15,6 +15,7 @@ mod input;
 mod input_buffer;
 mod mode;
 mod model;
+mod reload;
 mod strategy;
 mod types;
 
@@ -168,6 +169,15 @@ pub struct InputMethodEngine {
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
     /// then (or if loading failed) the engine runs dictionary/kana-only.
     model_loading: Option<std::sync::mpsc::Receiver<init::LoadedConverters>>,
+    /// Whether this engine loads models at all — set by init, so an engine
+    /// built without it (tests) never starts a load on a config reload.
+    models_enabled: bool,
+    /// The models last asked for; `None` before init and while the
+    /// settings name no usable main model.
+    model_plan: Option<init::ModelPlan>,
+    /// The config directory watched for hot reload; `None` (tests, an
+    /// engine built from a hand-made config) turns reloading off.
+    config_watch: Option<reload::ConfigWatch>,
 }
 
 impl InputMethodEngine {
@@ -197,15 +207,26 @@ impl InputMethodEngine {
             dicts: Dictionaries::default(),
             learning: None,
             model_loading: None,
+            models_enabled: false,
+            model_plan: None,
+            config_watch: None,
         }
     }
 
     /// Create with configuration
-    pub fn with_config(mut config: EngineConfig) -> Self {
+    pub fn with_config(config: EngineConfig) -> Self {
         let mut engine = Self {
             live: LiveConversion::new(config.live_conversion),
             ..Self::new()
         };
+        engine.install_config(config);
+        engine
+    }
+
+    /// Make `config` the one in force, rebuilding what is derived from it.
+    /// Shared by construction and config reload, so a setting cannot be
+    /// applied at startup and missed on reload.
+    fn install_config(&mut self, mut config: EngineConfig) {
         // The persona is normalized once — NFKC (the prompt is NFKC'd
         // anyway, so `Ｐｒｏｇｒａｍｍｉｎｇ` would otherwise be shown,
         // cached and capped as full-width but read as ASCII), trimmed,
@@ -218,14 +239,16 @@ impl InputMethodEngine {
         // width rules too: a keystroke settles at the width in force when
         // it was typed.
         // A user romaji table replaces the built-in rules altogether.
-        engine.converters.romaji = match &config.romaji_table {
+        self.converters.romaji = match &config.romaji_table {
             Some(table) => RomajiConverter::with_chain_table(table.clone(), config.width),
             None => RomajiConverter::with_rules(config.symbol, config.width),
         };
-        engine.converters.date = DateRewriter::new(config.date.clone());
-        engine.guard = OverloadGuard::new(config.timeout_ms);
-        engine.config = config;
-        engine
+        self.converters.date = DateRewriter::new(config.date.clone());
+        // A guard with the same budget keeps the rests it has handed out.
+        if config.timeout_ms != self.config.timeout_ms {
+            self.guard = OverloadGuard::new(config.timeout_ms);
+        }
+        self.config = config;
     }
 
     /// Conversion (inference) time of the last `process_key` /
@@ -628,6 +651,11 @@ impl InputMethodEngine {
         // Only process key presses
         if !key.is_press {
             return EngineResult::not_consumed();
+        }
+
+        // Pick up an edited config between compositions, never inside one.
+        if matches!(self.state, InputState::Empty) {
+            self.reload_config_if_changed();
         }
 
         // Ctrl+Shift+L: toggle live conversion (works in all states)
