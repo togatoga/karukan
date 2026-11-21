@@ -52,19 +52,22 @@ impl InputMethodEngine {
         )
     }
 
+    /// The setting the selected candidate flips, if it is a command.
+    pub(super) fn selected_command(&self) -> Option<Command> {
+        // Commands only ever sit in a conversion's own list.
+        let selected = self
+            .state
+            .candidates()?
+            .selected()
+            .filter(|c| c.source == Some(CandidateSource::Command))?;
+        Command::for_reading(selected.reading.as_deref()?)
+    }
+
     /// The selected candidate is a command: flip its setting, end the
     /// composition without committing, and say what changed on the aux
     /// line. None when the selection is not a command.
     pub(super) fn run_selected_command(&mut self) -> Option<EngineResult> {
-        // Commands only ever sit in a conversion's own list.
-        let reading = self
-            .state
-            .candidates()?
-            .selected()
-            .filter(|c| c.source == Some(CandidateSource::Command))?
-            .reading
-            .clone()?;
-        let command = Command::for_reading(&reading)?;
+        let command = self.selected_command()?;
         match command {
             Command::Verbose => self.config.verbose = !self.config.verbose,
         }
@@ -74,10 +77,12 @@ impl InputMethodEngine {
         } else {
             "オフ"
         };
+        // An empty list rather than HideCandidates: on macOS the candidate
+        // panel is what draws the aux line.
         Some(
             EngineResult::consumed()
                 .with_action(EngineAction::UpdatePreedit(Preedit::new()))
-                .with_action(EngineAction::HideCandidates)
+                .with_action(EngineAction::ShowCandidates(CandidateList::new(Vec::new())))
                 .with_action(EngineAction::UpdateAuxText(format!(
                     "{}: {state}",
                     command.name()

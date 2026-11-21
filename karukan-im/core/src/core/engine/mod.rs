@@ -704,6 +704,13 @@ impl InputMethodEngine {
                 self.end_composition();
                 text
             }
+            // The frontends commit this way when focus leaves. A selected
+            // command is not typed as its label, and since no confirmation
+            // could be seen, the setting is left as it was.
+            InputState::Conversion { .. } if self.selected_command().is_some() => {
+                self.end_composition();
+                String::new()
+            }
             InputState::Conversion { .. } => {
                 let (text, reading) = self
                     .selected_conversion_info()

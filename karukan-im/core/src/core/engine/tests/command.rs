@@ -97,9 +97,63 @@ fn other_readings_offer_no_setting() {
 
 #[test]
 fn ctrl_shift_v_is_left_to_the_application() {
-    // A terminal pastes with it; no chord is taken for the setting.
+    // A terminal pastes with it; no chord is taken for the setting, with
+    // nothing typed or in the middle of typing.
     let mut engine = InputMethodEngine::new();
     let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_V_UPPER));
     assert!(!result.consumed);
+
+    type_keys(&mut engine, "ai");
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_V_UPPER));
+    assert!(!result.consumed);
     assert!(!engine.config.verbose);
+}
+
+#[test]
+fn the_confirmation_comes_in_an_empty_panel() {
+    // On macOS the candidate panel is what draws the aux line, so hiding it
+    // would hide the confirmation too.
+    let mut engine = InputMethodEngine::new();
+    convert(&mut engine, "debaggumo-do");
+    engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    let shows_empty = result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::ShowCandidates(list) if list.is_empty()));
+    let hides = result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::HideCandidates));
+    assert!(shows_empty && !hides, "{:?}", result.actions);
+}
+
+#[test]
+fn deleting_a_learned_candidate_keeps_the_setting() {
+    // Ctrl+Backspace rebuilds the list in place; the setting stays second.
+    let mut engine = engine_with_learned("でばっぐもーど", "でばっぐモード");
+    let list = convert(&mut engine, "debaggumo-do");
+    assert_eq!(list.candidates()[0].source, Some(CandidateSource::Learning));
+
+    engine.process_key(&press_ctrl(Keysym::BACKSPACE));
+    let rows = engine.candidates().expect("still converting").candidates();
+    assert!(
+        !rows
+            .iter()
+            .any(|c| c.source == Some(CandidateSource::Learning)),
+        "{rows:?}"
+    );
+    assert_eq!(rows[1].source, Some(CandidateSource::Command), "{rows:?}");
+}
+
+#[test]
+fn leaving_the_field_types_nothing_and_keeps_the_setting() {
+    // The frontends commit through commit() when focus leaves. The label is
+    // never typed, and an unconfirmed setting stays as it was.
+    let mut engine = InputMethodEngine::new();
+    convert(&mut engine, "debaggumo-do");
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(engine.commit(), "");
+    assert!(!engine.config.verbose);
+    assert!(matches!(engine.state(), InputState::Empty));
 }
