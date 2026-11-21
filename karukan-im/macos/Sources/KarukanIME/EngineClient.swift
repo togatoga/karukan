@@ -40,7 +40,7 @@ class EngineClient {
             }
             self.serverProcess.resetBackoff()
             NSLog(
-                "KarukanIME: engine initialized (protocol v\(result.protocolVersion), model=\(result.modelName))"
+                "KarukanIME: engine \(result.engineVersion ?? "unknown") initialized (protocol v\(result.protocolVersion), model=\(result.modelName))"
             )
         }
     }

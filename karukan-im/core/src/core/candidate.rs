@@ -20,6 +20,8 @@ pub enum CandidateSource {
     Rewriter,
     /// Date/time candidate rendered from the clock (`[date]` phrases)
     Date,
+    /// The running build's version, for ばーじょん
+    Version,
     /// Hiragana/katakana fallback
     Fallback,
     /// F9/F10 alphanumeric transliteration of the keystrokes
@@ -37,6 +39,7 @@ impl CandidateSource {
             CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
             CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
             CandidateSource::Date => "\u{1F4C5} \u{65E5}\u{4ED8}",     // 📅 日付
+            CandidateSource::Version => "\u{1F3F7} \u{30D0}\u{30FC}\u{30B8}\u{30E7}\u{30F3}", // 🏷 バージョン
             CandidateSource::Transliteration => "\u{1F524} \u{82F1}\u{6570}", // 🔤 英数
             CandidateSource::Fallback => "",
         }
@@ -54,6 +57,7 @@ impl CandidateSource {
             CandidateSource::Rewriter => "\u{1F504}",        // 🔄
             CandidateSource::Date => "\u{1F4C5}",            // 📅
             CandidateSource::Transliteration => "\u{1F524}", // 🔤
+            CandidateSource::Version => "\u{1F3F7}",         // 🏷
             CandidateSource::Fallback => "",
         }
     }
@@ -65,14 +69,14 @@ impl CandidateSource {
     }
 
     /// Whether committing a candidate from this source is recorded in the
-    /// learning cache. Date/time candidates are rendered from the clock, so
-    /// a recorded one would resurface later as a stale date; a recorded
-    /// romaji spelling (`kai` for かい) would head every later conversion of
-    /// its kana reading.
+    /// learning cache. Date/time candidates are rendered from the clock and
+    /// the version from the build, so a recorded one would resurface later
+    /// as a stale date or a stale version; a recorded romaji spelling (`kai`
+    /// for かい) would head every later conversion of its kana reading.
     pub fn is_learnable(&self) -> bool {
         !matches!(
             self,
-            CandidateSource::Date | CandidateSource::Transliteration
+            CandidateSource::Date | CandidateSource::Version | CandidateSource::Transliteration
         )
     }
 }

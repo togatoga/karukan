@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(fcitx5-karukan VERSION 0.1.0)
+# The version lives once, in the workspace Cargo.toml. Reconfigure when it
+# changes, so an existing build directory picks up a new version too.
+set(KARUKAN_CARGO_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/../../../Cargo.toml")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${KARUKAN_CARGO_MANIFEST}")
+file(READ "${KARUKAN_CARGO_MANIFEST}" KARUKAN_CARGO_TOML)
+if(NOT KARUKAN_CARGO_TOML MATCHES "\nversion = \"([0-9]+\\.[0-9]+\\.[0-9]+)\"")
+    message(FATAL_ERROR "no workspace version in Cargo.toml")
+endif()
+set(KARUKAN_VERSION "${CMAKE_MATCH_1}")
+
+project(fcitx5-karukan VERSION ${KARUKAN_VERSION})
 
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -86,8 +96,9 @@ install(TARGETS karukan DESTINATION "${FCITX_INSTALL_ADDONDIR}")
 # Install Rust library alongside the addon
 install(FILES "${KARUKAN_RUST_LIB}" DESTINATION "${FCITX_INSTALL_ADDONDIR}")
 
-# Install addon config
-install(FILES karukan-addon.conf.in DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon"
+# Install addon config, carrying the version fcitx5-diagnose reports
+configure_file(karukan-addon.conf.in "${CMAKE_CURRENT_BINARY_DIR}/karukan-addon.conf" @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/karukan-addon.conf" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon"
     RENAME karukan.conf)
 
 # Install input method config

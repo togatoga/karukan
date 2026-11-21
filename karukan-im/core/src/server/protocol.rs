@@ -127,6 +127,8 @@ pub struct SurroundingTextParams {
 #[derive(Debug, Serialize)]
 pub struct InitResult {
     pub protocol_version: u32,
+    /// The engine build (`0.1.0+g1396bb2`), for logs and bug reports.
+    pub engine_version: &'static str,
     pub model_name: String,
 }
 

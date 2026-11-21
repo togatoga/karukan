@@ -156,6 +156,7 @@ impl ImServer {
         }
         serde_json::to_value(InitResult {
             protocol_version: PROTOCOL_VERSION,
+            engine_version: karukan_engine::VERSION,
             model_name: self.engine.model_name(),
         })
         .map_err(internal_error)

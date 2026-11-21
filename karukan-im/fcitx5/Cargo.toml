@@ -1,6 +1,6 @@
 [package]
 name = "karukan-fcitx5"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 description = "fcitx5 addon for the Karukan Japanese IME (Linux)"
 license.workspace = true

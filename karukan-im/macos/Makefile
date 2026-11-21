@@ -5,6 +5,8 @@ CARGO_MANIFEST = ../../Cargo.toml
 CARGO_TARGET = ../../target
 DATA_DIR = $(HOME)/Library/Application Support/com.karukan.karukan-im
 DICT_URL = https://github.com/togatoga/karukan/releases/latest/download/dict.tgz
+# The version lives once, in the workspace Cargo.toml.
+VERSION := $(shell sed -n 's/^version = "\([0-9.]*\)"$$/\1/p' $(CARGO_MANIFEST) | head -n 1)
 
 .PHONY: all build build-universal bundle install install-dict install-models test fmt lint clean
 
@@ -40,6 +42,7 @@ bundle: build
 	mkdir -p $(APP)/Contents/MacOS
 	mkdir -p $(APP)/Contents/Resources
 	cp Info.plist $(APP)/Contents/
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(APP)/Contents/Info.plist
 	cp .build/release/KarukanIME $(APP)/Contents/MacOS/
 	cp $(CARGO_TARGET)/release/karukan-imserver $(APP)/Contents/MacOS/
 	cp -r resources/* $(APP)/Contents/Resources/

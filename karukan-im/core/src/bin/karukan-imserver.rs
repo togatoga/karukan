@@ -6,7 +6,8 @@
 //! frontend should close the child's stdin (or send `save_learning`) before
 //! terminating it.
 //!
-//! `--prefetch-models` downloads every conversion model defined in the
+//! `--version` prints the build (`karukan-imserver 0.1.0+g1396bb2`) and
+//! exits. `--prefetch-models` downloads every conversion model defined in the
 //! config's `[models]` table into the HuggingFace cache and exits (used by
 //! `make install` to avoid a multi-minute download on first launch).
 
@@ -37,6 +38,11 @@ fn prefetch_models() -> anyhow::Result<()> {
 }
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--version") {
+        println!("karukan-imserver {}", karukan_engine::VERSION);
+        return;
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -57,7 +63,11 @@ fn main() {
     let stdin = std::io::stdin().lock();
     let mut stdout = std::io::stdout().lock();
 
-    tracing::info!("karukan-imserver started (pid={})", std::process::id());
+    tracing::info!(
+        "karukan-imserver {} started (pid={})",
+        karukan_engine::VERSION,
+        std::process::id()
+    );
 
     for line in stdin.lines() {
         let line = match line {
