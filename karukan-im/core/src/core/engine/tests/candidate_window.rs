@@ -64,10 +64,6 @@ fn test_shortcuts_open_no_window() {
     let mut engine = conversion_window_engine();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    let live_off = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
-    assert!(!opens_window(&live_off), "live off: {:?}", live_off.actions);
-    let live_on = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
-    assert!(!opens_window(&live_on), "live on: {:?}", live_on.actions);
     engine.process_key(&press_ctrl(Keysym::KEY_K));
     assert_eq!(engine.mode.current(), InputMode::Katakana);
     let back = engine.process_key(&press_key(Keysym::HENKAN));
@@ -108,8 +104,7 @@ fn test_live_conversion_off_changes_nothing() {
     // Without live conversion the preedit stays kana and Space converts,
     // the classic shape: the window still waits for the conversion.
     let mut engine = conversion_window_engine();
-    engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
-    assert!(!engine.live.enabled);
+    engine.live.enabled = false;
     engine.process_key(&press('a'));
     let result = engine.process_key(&press('i'));
     assert!(!opens_window(&result), "{:?}", result.actions);

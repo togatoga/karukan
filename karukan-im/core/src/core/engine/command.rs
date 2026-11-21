@@ -1,5 +1,5 @@
 //! Settings switched by typing their name. Converting the reading of a
-//! setting (でばっぐもーど) offers a 【…をオン】/【…をオフ】 candidate;
+//! setting (でばっぐもーど, らいぶへんかん) offers a 【…をオン】/【…をオフ】 candidate;
 //! choosing it flips the setting and inputs nothing. No key chord is
 //! taken from the application for these.
 
@@ -10,6 +10,8 @@ use super::*;
 pub(super) enum Command {
     /// The aux line's debug details (`[display] verbose`).
     Verbose,
+    /// Live conversion (`[conversion] live_conversion`).
+    LiveConversion,
 }
 
 impl Command {
@@ -17,6 +19,7 @@ impl Command {
     pub(super) fn for_reading(reading: &str) -> Option<Self> {
         match reading {
             "でばっぐもーど" | "でばっくもーど" => Some(Self::Verbose),
+            "らいぶへんかん" => Some(Self::LiveConversion),
             _ => None,
         }
     }
@@ -24,6 +27,7 @@ impl Command {
     fn name(self) -> &'static str {
         match self {
             Self::Verbose => "デバッグモード",
+            Self::LiveConversion => "ライブ変換",
         }
     }
 }
@@ -32,6 +36,7 @@ impl InputMethodEngine {
     fn is_on(&self, command: Command) -> bool {
         match command {
             Command::Verbose => self.config.verbose,
+            Command::LiveConversion => self.live.enabled,
         }
     }
 
@@ -67,6 +72,7 @@ impl InputMethodEngine {
         let command = Command::for_reading(&reading)?;
         match command {
             Command::Verbose => self.config.verbose = !self.config.verbose,
+            Command::LiveConversion => self.live.enabled = !self.live.enabled,
         }
         self.end_composition();
         let state = if self.is_on(command) {

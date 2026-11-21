@@ -7,23 +7,16 @@ use crate::core::keycode::Keysym;
 // XKB keysyms for common keys (u32 aliases for the JSON payloads below)
 const XKB_KEY_K: u32 = Keysym::KEY_K.0;
 const XKB_KEY_A: u32 = Keysym::KEY_A.0;
-const XKB_KEY_LOWER_L: u32 = Keysym::KEY_L.0;
 const XKB_KEY_RETURN: u32 = Keysym::RETURN.0;
 const XKB_KEY_ESCAPE: u32 = Keysym::ESCAPE.0;
 const XKB_KEY_SPACE: u32 = Keysym::SPACE.0;
 
 fn test_server() -> ImServer {
-    let mut server = ImServer::with_settings(Settings::default());
-    // Disable live conversion (Ctrl+Shift+L) so the preedit stays as
-    // hiragana; live conversion would require a loaded model.
-    request(
-        &mut server,
-        json!({"jsonrpc":"2.0","id":0,"method":"process_key","params":{
-            "keysym": XKB_KEY_LOWER_L,
-            "modifiers": {"control": true, "shift": true}
-        }}),
-    );
-    server
+    // Live conversion off, so the preedit stays as hiragana; live
+    // conversion would require a loaded model.
+    let mut settings = Settings::default();
+    settings.conversion.live_conversion = false;
+    ImServer::with_settings(settings)
 }
 
 /// Send a request value and return the parsed response.

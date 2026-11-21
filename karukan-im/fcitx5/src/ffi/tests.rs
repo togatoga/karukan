@@ -13,16 +13,7 @@ const XKB_KEY_RETURN: u32 = 0xff0d;
 const XKB_KEY_ESCAPE: u32 = 0xff1b;
 const XKB_KEY_BACKSPACE: u32 = 0xff08;
 const XKB_KEY_SHIFT_L: u32 = 0xffe1;
-const XKB_KEY_LOWER_L: u32 = 0x6c;
 const SHIFT_MASK: u32 = karukan_im::core::keycode::KeyModifiers::SHIFT_MASK;
-const CONTROL_MASK: u32 = karukan_im::core::keycode::KeyModifiers::CONTROL_MASK;
-
-/// Send Ctrl+Shift+L to disable live conversion. Tests that exercise the
-/// manual hiragana flow rely on the preedit staying as hiragana, so they
-/// turn live conversion off before typing.
-fn disable_live_conversion(e: &TestEngine) {
-    e.press_with(XKB_KEY_LOWER_L, CONTROL_MASK | SHIFT_MASK);
-}
 
 /// RAII wrapper around a raw `KarukanEngine` pointer.
 /// Automatically frees the engine on drop, preventing leaks in tests.
@@ -33,8 +24,19 @@ impl TestEngine {
     /// with verbose mode on: the context tests read the aux line, which
     /// only carries the debug details then.
     fn new() -> Self {
+        Self::with(|_| {})
+    }
+
+    /// With live conversion off, for the tests of the manual hiragana flow:
+    /// they rely on the preedit staying as hiragana.
+    fn without_live_conversion() -> Self {
+        Self::with(|settings| settings.conversion.live_conversion = false)
+    }
+
+    fn with(adjust: impl FnOnce(&mut Settings)) -> Self {
         let mut settings = Settings::default();
         settings.display.verbose = true;
+        adjust(&mut settings);
         Self(Box::into_raw(Box::new(KarukanEngine::with_settings(
             settings,
         ))))
@@ -160,8 +162,7 @@ fn test_romaji_to_hiragana() {
 
 #[test]
 fn test_commit_composing() {
-    let e = TestEngine::new();
-    disable_live_conversion(&e);
+    let e = TestEngine::without_live_conversion();
 
     // Type "ai" -> "あい"
     e.press(XKB_KEY_A);
@@ -176,8 +177,7 @@ fn test_commit_composing() {
 
 #[test]
 fn test_backspace() {
-    let e = TestEngine::new();
-    disable_live_conversion(&e);
+    let e = TestEngine::without_live_conversion();
 
     // Type "ai" -> "あい"
     e.press(XKB_KEY_A);
@@ -194,8 +194,7 @@ fn test_backspace() {
 
 #[test]
 fn test_escape_cancel() {
-    let e = TestEngine::new();
-    disable_live_conversion(&e);
+    let e = TestEngine::without_live_conversion();
 
     // Type "ai"
     e.press(XKB_KEY_A);
@@ -451,8 +450,7 @@ fn test_ffi_shift_a_produces_uppercase_a() {
 
 #[test]
 fn test_ffi_shift_a_after_hiragana() {
-    let e = TestEngine::new();
-    disable_live_conversion(&e);
+    let e = TestEngine::without_live_conversion();
 
     // Type "あ"
     e.press(XKB_KEY_A);
