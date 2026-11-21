@@ -12,7 +12,8 @@
   <url type="homepage">https://github.com/togatoga/karukan</url>
   <url type="bugtracker">https://github.com/togatoga/karukan/issues</url>
   <url type="vcs-browser">https://github.com/togatoga/karukan</url>
+  <!-- scripts/version.sh adds a line here on each release. -->
   <releases>
-    <release version="0.1.0" date="2025-01-01"></release>
+    <release version="0.1.0" date="2026-02-23"/>
   </releases>
 </component>
