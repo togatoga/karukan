@@ -21,14 +21,6 @@ fn rest_the_model(engine: &mut InputMethodEngine) {
     engine.guard.overran(ModelRole::Main, Instant::now());
 }
 
-fn type_keys(engine: &mut InputMethodEngine, keys: &str) -> EngineResult {
-    let mut result = EngineResult::consumed();
-    for ch in keys.chars() {
-        result = engine.process_key(&press(ch));
-    }
-    result
-}
-
 #[test]
 fn a_resting_model_is_shown_in_place_of_the_live_mark() {
     let mut engine = live_engine();

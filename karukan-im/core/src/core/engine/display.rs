@@ -13,17 +13,6 @@ const BEAM_SPAN_LABEL: &str = "🎯";
 pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Backspaceで履歴から削除";
 
 impl InputMethodEngine {
-    /// Build display text from the element array.
-    /// In katakana mode, kana parts are converted to katakana.
-    pub(super) fn build_input_display(&self) -> String {
-        let display = self.input_buf.display();
-        if self.mode.current() == InputMode::Katakana {
-            karukan_engine::hiragana_to_katakana(&display)
-        } else {
-            display
-        }
-    }
-
     /// The current live-conversion text: the concatenated converted text of
     /// the chunks while the live display is shown, empty otherwise. Derived
     /// on demand — the string is never stored, so it cannot go stale against
@@ -49,12 +38,18 @@ impl InputMethodEngine {
         let live_at_end =
             !live.is_empty() && self.input_buf.cursor() == self.input_buf.char_count();
         let (display, caret) = if live_at_end {
-            let buffer = self.input_buf.pending();
+            // A tail converted ahead (the ん of a lone n) is already in the
+            // live text; any other tail is shown as typed.
+            let buffer = if self.settled_tail().is_some() {
+                String::new()
+            } else {
+                self.input_buf.pending()
+            };
             let display = format!("{}{}", live, buffer);
             let caret = display.chars().count();
             (display, caret)
         } else {
-            (self.build_input_display(), self.input_buf.cursor())
+            (self.input_buf.display(), self.input_buf.cursor())
         };
         let mut preedit = Preedit::with_text_underlined(&display);
         preedit.set_caret(caret);
@@ -70,8 +65,25 @@ impl InputMethodEngine {
         if live.is_empty() || self.input_buf.cursor() != self.input_buf.char_count() {
             return String::new();
         }
+        if self.settled_tail().is_some() {
+            return live;
+        }
         let pending = self.input_buf.pending();
         format!("{}{}", live, self.converters.romaji.convert_flush(&pending))
+    }
+
+    /// What the pending tail will settle as if the input ends here, when
+    /// that is kana rather than the keys themselves: the ん of a lone `n`.
+    /// Live conversion converts it ahead, so `nihon` shows 日本 and the
+    /// next key still changes it. None for a tail that would stay keys
+    /// (`ky`) and while the caret is away from the end.
+    pub(super) fn settled_tail(&self) -> Option<String> {
+        if self.input_buf.cursor() != self.input_buf.char_count() {
+            return None;
+        }
+        let pending = self.input_buf.pending();
+        let settled = self.converters.romaji.convert_flush(&pending);
+        (!pending.is_empty() && settled != pending).then_some(settled)
     }
 
     /// Format an `lctx: … rctx: …` line from explicit left/right context
@@ -144,7 +156,6 @@ impl InputMethodEngine {
     pub(super) fn mode_indicator(&self) -> String {
         let base = match self.mode.current() {
             InputMode::Alphabet => "[A]",
-            InputMode::Katakana => "[カ]",
             InputMode::Hiragana => "[あ]",
             // ☺ (U+263A, Unicode 1.1 / 1993) — the oldest smiley-face
             // codepoint in Unicode; gives emoji mode an unambiguous

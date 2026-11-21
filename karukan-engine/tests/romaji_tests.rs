@@ -234,11 +234,12 @@ fn test_real_words() {
         ("annninndouhu", "あんにんどうふ"),
     ]);
 
-    // "karukan" (single n at end): trailing 'n' stays pending (ambiguous),
-    // and flushing outputs it as-is
+    // "karukan" (single n at end): trailing 'n' stays pending while typing
+    // (ambiguous: a vowel could still follow)
     assert_eq!(text("karukan"), "かるか");
     assert_eq!(pending("karukan"), "n");
-    assert_eq!(flushed("karukan"), "かるかn");
+    // Once the input ends there, the lone n can only have meant ん.
+    assert_eq!(flushed("karukan"), "かるかん");
 
     // "karukann" (nn at end) -> "かるかん" immediately (nn converts right away)
     assert_eq!(text("karukann"), "かるかん");

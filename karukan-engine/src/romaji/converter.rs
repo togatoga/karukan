@@ -13,6 +13,33 @@ pub struct Converted {
     pub text: String,
     /// Unresolved trailing input that may still extend to a longer rule
     pub pending: String,
+    /// `text` split by the rule that wrote it, each piece with the keys
+    /// that fired it (`kyo` → きょ, `k` → っ in `kka`). Concatenated, the
+    /// texts are `text` and the keys are the consumed input, lowercased as
+    /// the rules match it (`Ka` → か ← `ka`).
+    pub spans: Vec<Span>,
+}
+
+/// One fired rule (or one passed-through key): what it wrote and the
+/// keys that wrote it, lowercased.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Span {
+    pub text: String,
+    pub keys: String,
+}
+
+/// A chain table's text as one span keyed by itself: the table rewrites
+/// its own outputs and keeps its live tail as display text, so the keys
+/// behind it are not known, and F9/F10 leave it as written rather than
+/// show keys never typed.
+fn text_as_keys(text: &str) -> Vec<Span> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    vec![Span {
+        text: text.to_string(),
+        keys: text.to_string(),
+    }]
 }
 
 /// Stateless romaji-to-hiragana converter.
@@ -89,55 +116,67 @@ impl RomajiConverter {
             return Converted {
                 text: text.to_string(),
                 pending: pending.to_string(),
+                spans: text_as_keys(text),
             };
         }
-        let mut scratch = Scratch {
-            trie: &self.trie,
-            buffer: String::new(),
-            output: String::new(),
-        };
-        for ch in raw.chars() {
-            scratch.push(ch);
+        let mut state = ConvertState::new(&self.trie);
+        for key in raw.chars() {
+            state.push(key);
         }
         Converted {
-            text: scratch.output,
-            pending: scratch.buffer,
+            text: state.spans.iter().map(|s| s.text.as_str()).collect(),
+            pending: state.pending.into_iter().collect(),
+            spans: state.spans,
         }
     }
 
     /// Force-convert leftover pending input (`ltu` → っ); characters with no
-    /// rule pass through literally (a trailing `n` stays `n`).
+    /// rule pass through literally (`k` stays `k`). A lone trailing `n`
+    /// settles as what `nn` types (ん), since nothing else could have
+    /// been meant once the input ends there.
     pub fn flush_pending(&self, pending: &str) -> String {
+        self.flush_spans(pending)
+            .into_iter()
+            .map(|s| s.text)
+            .collect()
+    }
+
+    /// [`Self::flush_pending`], split by the rule that wrote each piece.
+    pub fn flush_spans(&self, pending: &str) -> Vec<Span> {
         if self.chain.is_some() {
-            return pending.to_string();
+            return text_as_keys(pending);
         }
-        let mut buffer = pending.to_string();
-        let mut result = String::new();
-
-        while !buffer.is_empty() {
-            let search = self.trie.search_longest(&buffer);
-            if let Some(h) = search.output {
-                result.push_str(h);
-                buffer.drain(..search.matched_len);
-            } else {
-                result.push(buffer.remove(0));
-            }
-        }
-
-        result
+        let mut state = ConvertState::new(&self.trie);
+        state.pending = pending.chars().collect();
+        state.flush();
+        state.spans
     }
 
     /// Convert then flush the leftover: the committed form of `raw`, at the
     /// configured width. [`Self::convert`] leaves the width alone because
     /// part of its output is still live keystrokes; here everything settles.
     pub fn convert_flush(&self, raw: &str) -> String {
+        self.convert_flush_spans(raw)
+            .into_iter()
+            .map(|s| s.text)
+            .collect()
+    }
+
+    /// [`Self::convert_flush`], split by the rule that wrote each piece.
+    pub fn convert_flush_spans(&self, raw: &str) -> Vec<Span> {
         if self.chain.is_some() {
             // Runs reaching here are already evaluated live tails.
-            return raw.to_string();
+            return text_as_keys(raw);
         }
-        let Converted { mut text, pending } = self.convert(raw);
-        text.push_str(&self.flush_pending(&pending));
-        self.width.apply_str(&text)
+        let Converted { pending, spans, .. } = self.convert(raw);
+        spans
+            .into_iter()
+            .chain(self.flush_spans(&pending))
+            .map(|s| Span {
+                text: self.width.apply_str(&s.text),
+                keys: s.keys,
+            })
+            .collect()
     }
 
     /// Whether `ch` can begin a conversion rule (`k`, `y`, `n` — a later
@@ -162,10 +201,7 @@ impl RomajiConverter {
         if pending.is_empty() {
             return Vec::new();
         }
-        let Some(node) = pending
-            .chars()
-            .try_fold(&self.trie, |node, ch| node.children.get(&ch))
-        else {
+        let Some(node) = self.trie.walk(pending.chars()) else {
             return Vec::new();
         };
         node.outputs()
@@ -182,151 +218,129 @@ impl Default for RomajiConverter {
     }
 }
 
-/// Working state for one `convert` call.
-struct Scratch<'a> {
+/// Keys typed so far and the rules they fired, while a run of keys is
+/// converted.
+///
+/// Each key is added to `pending`, then rules fire for as long as the
+/// pending keys decide one:
+///
+/// 1. `n` before a key that cannot continue it is ん (`nk` → ん + `k`),
+///    and a doubled consonant letter is っ (`kk` → っ + `k`; `''` is
+///    not). These two look at the next key, so no rule table entry can
+///    express them.
+/// 2. While the pending keys could still grow into a longer rule (`k`,
+///    `ky`), nothing fires: the next key decides.
+/// 3. Otherwise the longest rule they start with fires (`kya` → きゃ), or,
+///    when none does, the first key passes through as itself (`1`).
+///
+/// Positions and lengths count characters, never bytes.
+struct ConvertState<'a> {
     trie: &'a TrieNode,
-    buffer: String,
-    output: String,
+    /// Keys not yet consumed by a rule.
+    pending: Vec<char>,
+    /// The rules fired so far, in order.
+    spans: Vec<Span>,
 }
 
-impl Scratch<'_> {
-    /// Push a character and attempt conversion
-    fn push(&mut self, ch: char) {
-        // Handle uppercase by converting to lowercase
-        let ch = ch.to_ascii_lowercase();
-
-        // Add to buffer
-        self.buffer.push(ch);
-
-        // Try to convert
-        self.try_convert();
-    }
-
-    /// Recursively process the buffer left after a conversion.
-    fn convert_remainder(&mut self) {
-        if !self.buffer.is_empty() {
-            self.try_convert();
+impl<'a> ConvertState<'a> {
+    fn new(trie: &'a TrieNode) -> Self {
+        Self {
+            trie,
+            pending: Vec::new(),
+            spans: Vec::new(),
         }
     }
 
-    /// Try to convert the current buffer
-    fn try_convert(&mut self) {
-        // Special case: "nn" + another character
-        // "nn" is ALWAYS treated as a single ん, regardless of what follows.
-        // This matches IME behavior where "nn" is the deliberate way to enter ん.
-        // Examples:
-        // - "nna" -> "んa" (nn -> ん, a continues in buffer)
-        // - "nni" -> "んi" (nn -> ん, i continues in buffer)
-        // - "nnk" -> "んk" (nn -> ん, k continues in buffer)
-        let chars: Vec<char> = self.buffer.chars().collect();
-        let char_count = chars.len();
-        if char_count >= 3 && chars[0] == 'n' && chars[1] == 'n' {
-            // "nn" is always a single ん, rest is processed separately
-            self.buffer.drain(..2);
-            self.output.push('ん');
-            return self.convert_remainder();
+    /// Add one key, then fire every rule it decides.
+    fn push(&mut self, key: char) {
+        self.pending.push(key.to_ascii_lowercase());
+        while self.fire_next() {}
+    }
+
+    /// Fire rules for whatever is pending without waiting for more keys:
+    /// the input has ended (`ky` settles as `k` + `y`). A lone `n` could
+    /// only have meant ん once nothing follows, so it settles as what `nn`
+    /// types.
+    fn flush(&mut self) {
+        if self.pending == ['n']
+            && let Some(n) = self
+                .trie
+                .walk(['n', 'n'])
+                .and_then(|node| node.output.as_deref())
+        {
+            self.fire(n, 1);
         }
+        while !self.pending.is_empty() {
+            self.fire_longest();
+        }
+    }
 
-        // Special case: 'n' before consonant -> ん
-        if char_count >= 2 {
-            let last = chars[char_count - 1];
-            let second_last = chars[char_count - 2];
+    /// Fire the next rule the pending keys decide. False when there is
+    /// nothing to fire yet.
+    fn fire_next(&mut self) -> bool {
+        if self.pending.is_empty() {
+            return false;
+        }
+        if let Some(text) = self.next_key_rule() {
+            self.fire(text, 1);
+            return true;
+        }
+        if self.is_rule_prefix() {
+            return false;
+        }
+        self.fire_longest();
+        true
+    }
 
-            // N before consonant rule: 'n' + consonant (including 'n') -> ん + consonant
-            // Exception: exactly "nn" (length 2) should wait for next char
-            if second_last == 'n'
-                && !matches!(last, 'a' | 'i' | 'u' | 'e' | 'o' | 'y' | '\'')
-                && !(char_count == 2 && last == 'n')
-            // Exclude exactly "nn"
+    /// Step 1: ん for `n` before a key that cannot continue it, っ for a
+    /// doubled consonant. Either way the first key is consumed and the
+    /// second stays for the next rule.
+    fn next_key_rule(&self) -> Option<&'static str> {
+        match self.pending[..] {
+            ['n', next] if !matches!(next, 'a' | 'i' | 'u' | 'e' | 'o' | 'y' | '\'' | 'n') => {
+                Some("ん")
+            }
+            [first, second]
+                if first == second
+                    && first.is_ascii_alphabetic()
+                    && !matches!(first, 'a' | 'i' | 'u' | 'e' | 'o' | 'n') =>
             {
-                // Convert the 'n' at position len-2 to 'ん'
-                // Keep everything before that position plus the last character
-                let prefix: String = chars.iter().take(char_count - 2).collect();
-                self.buffer = format!("{}{}", prefix, last);
-                self.output.push('ん');
-                return self.convert_remainder();
+                Some("っ")
             }
+            _ => None,
+        }
+    }
 
-            // Double consonant rule: same consonant twice (except 'n') -> っ + consonant.
-            // Only when the pair is the whole buffer; with a longer prefix
-            // (`ty` + `y`) decomposition below keeps the prefix alive, so
-            // `tyy` becomes tっ+y instead of silently dropping the t.
-            if char_count == 2
-                && last == second_last
-                && !matches!(last, 'a' | 'i' | 'u' | 'e' | 'o' | 'n')
-            {
-                // Convert to sokuon and keep the last consonant
-                self.buffer = last.to_string();
-                self.output.push('っ');
-                return;
+    /// Step 2: the pending keys are the start of a longer rule (`k` of
+    /// `ka`, `ky` of `kya`).
+    fn is_rule_prefix(&self) -> bool {
+        self.trie
+            .walk(self.pending.iter().copied())
+            .is_some_and(|node| !node.children.is_empty())
+    }
+
+    /// Step 3: fire the longest rule the pending keys start with, or pass
+    /// the first key through when none matches.
+    fn fire_longest(&mut self) {
+        let trie = self.trie;
+        let rule = trie.search_longest(self.pending.iter().copied());
+        match rule.output {
+            Some(text) => self.fire(text, rule.matched_len),
+            None => {
+                let key = self.pending[0].to_string();
+                self.fire(&key, 1);
             }
         }
+    }
 
-        // Search for longest match
-        let search = self.trie.search_longest(&self.buffer);
-
-        if let Some(hiragana) = search.output {
-            // Found a match
-            if search.has_continuation && search.matched_len == self.buffer.len() {
-                // This is a valid conversion, but there might be longer matches
-                // Wait for more input unless it's "n'" or "nn"
-                if self.buffer == "n'" || self.buffer == "nn" {
-                    // Special case: always convert n' and nn immediately
-                    self.output.push_str(hiragana);
-                    self.buffer.clear();
-                }
-                // Otherwise, wait for more input
-            } else {
-                // Convert and keep remainder in buffer
-                self.output.push_str(hiragana);
-                self.buffer.drain(..search.matched_len);
-                self.convert_remainder();
-            }
-        } else if search.matched_len == 0 {
-            // No match at all
-            // Check if the first character could start a valid conversion
-            let Some(first_char) = self.buffer.chars().next() else {
-                return;
-            };
-            let first_char_has_children = self.trie.children.contains_key(&first_char);
-
-            if first_char_has_children {
-                // Check if the current buffer could still lead to a match
-                // by walking the trie to see if we're on a valid path
-                let mut node = self.trie;
-                let mut on_valid_path = true;
-                for ch in self.buffer.chars() {
-                    if let Some(child) = node.children.get(&ch) {
-                        node = child;
-                    } else {
-                        on_valid_path = false;
-                        break;
-                    }
-                }
-
-                if on_valid_path {
-                    // We're on a valid path in the trie, keep buffering
-                    return;
-                }
-            }
-
-            // First character doesn't start any rule, or buffer is not on valid path
-            let first_search = self.trie.search_longest(&first_char.to_string());
-
-            if let Some(hiragana) = first_search.output {
-                // First character has a valid conversion, use it
-                self.output.push_str(hiragana);
-                self.buffer.drain(..first_search.matched_len);
-                self.convert_remainder();
-            } else {
-                // No possible match, pass through the first character
-                self.buffer.remove(0);
-                self.output.push(first_char);
-
-                // Try to convert remainder after pass-through
-                self.convert_remainder();
-            }
-        }
+    /// The first `count` pending keys wrote `text`: consume them and
+    /// record the span.
+    fn fire(&mut self, text: &str, count: usize) {
+        let keys = self.pending.drain(..count).collect();
+        self.spans.push(Span {
+            text: text.to_string(),
+            keys,
+        });
     }
 }
 
@@ -391,7 +405,10 @@ mod tests {
         assert_eq!(c.flush_pending("k"), "k");
         assert_eq!(c.flush_pending("ltu"), "っ");
         assert_eq!(c.convert_flush("k"), "k");
-        assert_eq!(c.convert_flush("kan"), "かn");
+        assert_eq!(c.convert_flush("kan"), "かん");
+        assert_eq!(c.convert_flush("n"), "ん");
+        // Only a lone n: a longer tail is still a typo to keep visible.
+        assert_eq!(c.convert_flush("kany"), "かny");
     }
 
     #[test]
@@ -549,5 +566,118 @@ mod tests {
         assert_eq!(type_chain(&c, "."), ("。".to_string(), "".to_string()));
         assert!(!c.starts_rule('d'));
         assert_eq!(c.convert_flush("ｄ"), "ｄ");
+    }
+}
+
+#[cfg(test)]
+mod span_tests {
+    use super::*;
+
+    fn spans(raw: &str) -> Vec<(String, String)> {
+        RomajiConverter::new()
+            .convert(raw)
+            .spans
+            .into_iter()
+            .map(|s| (s.text, s.keys))
+            .collect()
+    }
+
+    fn pair(text: &str, keys: &str) -> (String, String) {
+        (text.to_string(), keys.to_string())
+    }
+
+    #[test]
+    fn each_rule_carries_its_keys() {
+        assert_eq!(spans("kyoha"), [pair("きょ", "kyo"), pair("は", "ha")]);
+        assert_eq!(
+            spans("sinnbunn"),
+            [
+                pair("し", "si"),
+                pair("ん", "nn"),
+                pair("ぶ", "bu"),
+                pair("ん", "nn")
+            ]
+        );
+    }
+
+    #[test]
+    fn context_rules_take_the_key_they_consumed() {
+        // っ is the first k of `kk`, ん the n of `nk`.
+        assert_eq!(spans("kka"), [pair("っ", "k"), pair("か", "ka")]);
+        assert_eq!(
+            spans("kanka"),
+            [pair("か", "ka"), pair("ん", "n"), pair("か", "ka")]
+        );
+    }
+
+    #[test]
+    fn doubled_apostrophe_is_not_a_sokuon() {
+        // `t'` starts `t'i`; when it does not complete, `''` passes through
+        // like any other keys, as it does after `k`.
+        let c = RomajiConverter::new();
+        assert_eq!(
+            c.convert_flush("t''"),
+            c.convert_flush("t").to_string() + "＇＇"
+        );
+        assert_eq!(c.convert("t''").text, "t''");
+        assert_eq!(c.convert("k''").text, "k''");
+        assert_eq!(c.convert("tta").text, "った");
+    }
+
+    #[test]
+    fn passthrough_keys_are_their_own_span() {
+        assert_eq!(spans("a1k"), [pair("あ", "a"), pair("1", "1")]);
+    }
+
+    #[test]
+    fn spans_concatenate_to_text_and_consumed_input() {
+        let c = RomajiConverter::new();
+        for raw in [
+            "kyouhaiitenkidesune",
+            "tyottomatte",
+            "a,b.c",
+            "nnn",
+            "xtu",
+            "yk1",
+            // Keys outside ASCII take more than one byte: positions count
+            // characters, so they must not shift what is cut around them.
+            "k¥a",
+            "¥kyo",
+            "nｋa",
+            "ka€n",
+        ] {
+            let out = c.convert(raw);
+            let text: String = out.spans.iter().map(|s| s.text.as_str()).collect();
+            let keys: String = out.spans.iter().map(|s| s.keys.as_str()).collect();
+            assert_eq!(text, out.text, "{raw}");
+            assert_eq!(format!("{keys}{}", out.pending), raw, "{raw}");
+        }
+    }
+
+    #[test]
+    fn keys_are_recorded_lowercased() {
+        // Rules match case-insensitively, and the keys are kept as matched.
+        // The IME lowercases every key before converting, so nothing it
+        // types is lost; an uppercase key starts alphabet input instead.
+        assert_eq!(spans("Ka"), [pair("か", "ka")]);
+        assert_eq!(spans("KYo"), [pair("きょ", "kyo")]);
+    }
+
+    #[test]
+    fn flush_spans_settle_what_is_left() {
+        // What `convert` leaves pending is the start of a rule that never
+        // finished (`ky` of `kya`), so it settles key by key.
+        let c = RomajiConverter::new();
+        let flushed = |pending: &str| -> Vec<_> {
+            c.flush_spans(pending)
+                .into_iter()
+                .map(|s| (s.text, s.keys))
+                .collect()
+        };
+        assert_eq!(c.convert("kaky").pending, "ky");
+        assert_eq!(flushed("ky"), [pair("k", "k"), pair("y", "y")]);
+        // A lone n settles as ん, keyed by the n that was typed.
+        assert_eq!(flushed("n"), [pair("ん", "n")]);
+        assert!(flushed("").is_empty());
     }
 }

@@ -70,14 +70,6 @@ fn candidate_description(result: &EngineResult, text: &str) -> Option<String> {
     })
 }
 
-fn type_keys(engine: &mut InputMethodEngine, keys: &str) -> EngineResult {
-    let mut result = EngineResult::not_consumed();
-    for ch in keys.chars() {
-        result = engine.process_key(&press(ch));
-    }
-    result
-}
-
 #[test]
 fn typed_symbols_come_out_at_the_configured_width() {
     // Both what a rule produced (？！) and what passed through (`(` has no

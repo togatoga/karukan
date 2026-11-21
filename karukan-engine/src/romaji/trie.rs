@@ -49,13 +49,20 @@ impl TrieNode {
         .filter_map(|node| node.output.as_deref())
     }
 
-    /// Search for the longest matching prefix in the trie
-    pub fn search_longest(&self, input: &str) -> SearchResult<'_> {
+    /// The node `keys` lead to, if they are a path in the trie.
+    pub fn walk(&self, keys: impl IntoIterator<Item = char>) -> Option<&TrieNode> {
+        keys.into_iter()
+            .try_fold(self, |node, ch| node.children.get(&ch))
+    }
+
+    /// Search for the longest matching prefix in the trie. Lengths are
+    /// counted in characters.
+    pub fn search_longest(&self, input: impl IntoIterator<Item = char>) -> SearchResult<'_> {
         let mut node = self;
         let mut last_match: Option<(usize, &str)> = None;
         let mut has_continuation = false;
 
-        for (idx, ch) in input.chars().enumerate() {
+        for (idx, ch) in input.into_iter().enumerate() {
             if let Some(child) = node.children.get(&ch) {
                 node = child;
                 if let Some(ref output) = node.output {
@@ -98,11 +105,11 @@ mod tests {
         trie.insert("ka", "か");
         trie.insert("ki", "き");
 
-        let result = trie.search_longest("ka");
+        let result = trie.search_longest("ka".chars());
         assert_eq!(result.matched_len, 2);
         assert_eq!(result.output.unwrap(), "か");
 
-        let result = trie.search_longest("ki");
+        let result = trie.search_longest("ki".chars());
         assert_eq!(result.matched_len, 2);
         assert_eq!(result.output.unwrap(), "き");
     }
@@ -114,7 +121,7 @@ mod tests {
         trie.insert("ka", "か");
         trie.insert("kya", "きゃ");
 
-        let result = trie.search_longest("kya");
+        let result = trie.search_longest("kya".chars());
         assert_eq!(result.matched_len, 3);
         assert_eq!(result.output.unwrap(), "きゃ");
         assert!(!result.has_continuation);
@@ -126,7 +133,7 @@ mod tests {
         trie.insert("ka", "か");
         trie.insert("kan", "かん");
 
-        let result = trie.search_longest("ka");
+        let result = trie.search_longest("ka".chars());
         assert_eq!(result.matched_len, 2);
         assert_eq!(result.output.unwrap(), "か");
         assert!(result.has_continuation); // "kan" is a longer match

@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use tracing::debug;
 
 use super::filter::source_for_key;
+use super::transliterate::Transliteration;
 use super::*;
 
 /// Maximum number of learning candidates to show
@@ -612,6 +613,11 @@ impl InputMethodEngine {
         // navigate and Alt+Return must not commit.
         if key.modifiers.alt_key {
             return EngineResult::not_consumed();
+        }
+        if let Some(form) = Transliteration::for_key(key)
+            && self.mode.current() != InputMode::Emoji
+        {
+            return self.transliterate(form);
         }
         match key.keysym {
             Keysym::RETURN => self.commit_conversion(),

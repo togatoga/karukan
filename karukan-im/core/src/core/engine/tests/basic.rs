@@ -108,21 +108,6 @@ fn double_space_in_empty_hiragana_commits_two_fullwidth_spaces() {
 }
 
 #[test]
-fn space_in_empty_katakana_follows_the_setting() {
-    // Katakana is kana input, so it takes the same space as hiragana.
-    let mut engine = fullwidth_space_engine();
-    engine.mode.set(InputMode::Katakana);
-
-    let result = engine.process_key(&press_key(Keysym::SPACE));
-    let committed = result.actions.iter().find_map(|a| match a {
-        EngineAction::Commit(t) => Some(t.clone()),
-        _ => None,
-    });
-    assert_eq!(committed.as_deref(), Some("\u{3000}"));
-    assert!(matches!(engine.state(), InputState::Empty));
-}
-
-#[test]
 fn space_in_empty_alphabet_passes_through() {
     // Direct input takes the ASCII space whatever the setting says.
     let mut engine = fullwidth_space_engine();

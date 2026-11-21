@@ -200,12 +200,13 @@ impl InputMethodEngine {
                 }
                 view
             }
-            // Fallback, Date and Version have no slot in the cycle: the kana
-            // pair rides the rewriter view's tail, dates and the version its
-            // head.
-            CandidateSource::Fallback | CandidateSource::Date | CandidateSource::Version => {
-                Vec::new()
-            }
+            // Fallback, Date, Version and Transliteration have no slot in the
+            // cycle: the kana pair rides the rewriter view's tail, dates and
+            // the version its head, and F9/F10 own the transliterations.
+            CandidateSource::Fallback
+            | CandidateSource::Date
+            | CandidateSource::Version
+            | CandidateSource::Transliteration => Vec::new(),
         }
     }
 

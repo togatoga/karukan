@@ -1,6 +1,7 @@
 //! Composing input handling (Empty and Composing states)
 
 use super::filter::source_for_key;
+use super::transliterate::Transliteration;
 use super::*;
 
 /// Append candidates to `target`, skipping duplicates by text.
@@ -72,7 +73,7 @@ impl InputMethodEngine {
         // text is derived from the chunks (`live_text`), which
         // `chunked_auto_suggest` just rebuilt — candidates[0] is that same
         // concatenation.
-        if self.live.enabled && self.mode.current() != InputMode::Katakana {
+        if self.live.enabled {
             self.live.shown = true;
             return self.suggest_result(candidates, &reading);
         }
@@ -200,7 +201,7 @@ impl InputMethodEngine {
     pub(super) fn space_char(&self) -> char {
         match self.mode.current() {
             InputMode::Alphabet | InputMode::Emoji => ' ',
-            InputMode::Hiragana | InputMode::Katakana => match self.config.space {
+            InputMode::Hiragana => match self.config.space {
                 SpaceStyle::Full => '\u{3000}',
                 SpaceStyle::Half => ' ',
             },
@@ -219,13 +220,17 @@ impl InputMethodEngine {
 
     /// Process key in hiragana input state
     pub(super) fn process_key_composing(&mut self, key: &KeyEvent) -> EngineResult {
+        if let Some(form) = Transliteration::for_key(key)
+            && self.mode.current() != InputMode::Emoji
+        {
+            return self.transliterate(form);
+        }
+
         // Handle Ctrl+key shortcuts
         if key.modifiers.control_key {
             match key.keysym {
                 // Ctrl+J: start a new live-conversion chunk at the caret
                 Keysym::KEY_J | Keysym::KEY_J_UPPER => return self.insert_chunk_break(),
-                // Ctrl+K: enter katakana mode
-                Keysym::KEY_K | Keysym::KEY_K_UPPER => return self.enter_katakana_mode(),
                 // Ctrl+M: commit, like Enter (mozc's MS-IME keymap binds it
                 // the same way). Unbound it would leak to the application,
                 // where a terminal reads Ctrl+M as a bare Enter.
@@ -295,14 +300,8 @@ impl InputMethodEngine {
                         || (key.modifiers.shift_key && ch.is_ascii_alphabetic());
 
                     if is_shift_alpha && self.mode.current() != InputMode::Alphabet {
-                        // Bake katakana before switching so preedit doesn't
-                        // revert; in kana mode the live romaji stays live so
-                        // typing next to it can still combine
-                        if self.mode.current() == InputMode::Katakana {
-                            self.settle_romaji();
-                            self.bake_katakana();
-                        }
-                        // Shift-alphabet is a temporary per-word mode:
+                        // The live romaji stays live so typing next to it
+                        // can still combine. Shift-alphabet is a temporary per-word mode:
                         // ModeState remembers the mode to restore on
                         // commit/cancel, so the next word returns to the
                         // prior mode (issue #37).
@@ -329,11 +328,7 @@ impl InputMethodEngine {
     /// the moment they press `:`.
     pub(super) fn start_emoji_mode(&mut self) -> EngineResult {
         self.clear_composition();
-        // Remember where the user was so commit/cancel/erase-to-empty
-        // can drop them back into the same mode (e.g. Katakana stays
-        // Katakana). ModeState guards against clobbering the saved mode
-        // on re-entry just in case start_emoji_mode is ever called while
-        // already in Emoji mode.
+        // Commit/cancel/erase-to-empty end it back in Hiragana.
         self.mode.enter_temporary(InputMode::Emoji);
         self.input_buf.push_direct(':');
         self.refresh_input_state()
@@ -371,8 +366,8 @@ impl InputMethodEngine {
 
     /// Resolve what committing the composition produces, as (reading, text).
     /// Settles pending romaji as a side effect. Emoji mode commits the first
-    /// emoji candidate (falling back to the literal query), katakana mode
-    /// commits katakana, live conversion commits the converted text.
+    /// emoji candidate (falling back to the literal query), live conversion
+    /// commits the converted text.
     pub(super) fn resolve_composing_commit(&mut self) -> (String, String) {
         // Resolve the live text before settling: it needs the pending run
         let live_text = self.live_text_with_pending();
@@ -381,8 +376,6 @@ impl InputMethodEngine {
         let text = if self.mode.current() == InputMode::Emoji {
             self.first_emoji_candidate(&reading)
                 .unwrap_or_else(|| reading.clone())
-        } else if self.mode.current() == InputMode::Katakana {
-            karukan_engine::hiragana_to_katakana(&reading)
         } else if !live_text.is_empty() {
             live_text
         } else {
