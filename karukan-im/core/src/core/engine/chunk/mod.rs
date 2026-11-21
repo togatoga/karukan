@@ -28,7 +28,8 @@ impl InputMethodEngine {
     /// Input no longer than one chunk — the common case — is a single
     /// whole-buffer model call.
     pub(super) fn chunked_auto_suggest(&mut self) -> Option<String> {
-        let full_reading = self.input_buf.reading();
+        let mut full_reading = self.input_buf.reading();
+        full_reading.extend(self.settled_tail());
         if full_reading.is_empty() {
             self.chunks.clear();
             return None;
