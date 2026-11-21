@@ -638,8 +638,11 @@ impl InputMethodEngine {
             return self.toggle_live_conversion();
         }
 
-        // Ctrl+Shift+V: toggle the verbose aux line (works in all states)
-        if key.modifiers.control_key
+        // Ctrl+Shift+V: toggle the verbose aux line while typing or
+        // converting. With nothing typed it is the terminal's paste, so it
+        // passes through.
+        if !matches!(self.state, InputState::Empty)
+            && key.modifiers.control_key
             && key.modifiers.shift_key
             && (key.keysym == Keysym::KEY_V || key.keysym == Keysym::KEY_V_UPPER)
         {

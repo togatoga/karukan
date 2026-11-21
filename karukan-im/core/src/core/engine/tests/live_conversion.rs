@@ -468,3 +468,23 @@ fn test_ctrl_shift_l_shows_aux_text() {
     );
     assert!(has_aux);
 }
+
+#[test]
+fn test_ctrl_shift_v_passes_through_when_empty() {
+    // With nothing typed, Ctrl+Shift+V is the terminal's paste.
+    let mut engine = InputMethodEngine::new();
+    let verbose = engine.config.verbose;
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_V_UPPER));
+    assert!(!result.consumed);
+    assert_eq!(engine.config.verbose, verbose);
+}
+
+#[test]
+fn test_ctrl_shift_v_toggles_verbose_while_composing() {
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    let verbose = engine.config.verbose;
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_V_UPPER));
+    assert!(result.consumed);
+    assert_eq!(engine.config.verbose, !verbose);
+}

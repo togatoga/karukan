@@ -71,16 +71,15 @@ impl InputMethodEngine {
         let mode = if self.config.verbose { "ON" } else { "OFF" };
         debug!("Verbose display toggled: {}", mode);
         // Re-render the line the user is looking at, so the change shows now
-        // rather than on the next keystroke. Nothing is being typed in the
-        // Empty state, so there the toggle reports itself instead.
+        // rather than on the next keystroke. Never reached in Empty: there
+        // the chord passes through as paste.
         let aux = match &self.state {
             InputState::Conversion {
                 reading,
                 candidates,
                 ..
             } => self.format_aux_conversion(reading, candidates),
-            InputState::Composing { .. } => self.format_aux_suggest(),
-            InputState::Empty => format!("詳細表示: {mode}"),
+            InputState::Composing { .. } | InputState::Empty => self.format_aux_suggest(),
         };
         EngineResult::consumed().with_action(EngineAction::UpdateAuxText(aux))
     }
