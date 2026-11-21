@@ -212,8 +212,6 @@ pub(crate) enum InputMode {
     /// Hiragana mode (default) — romaji is converted to hiragana
     #[default]
     Hiragana,
-    /// Katakana mode — preedit displays katakana instead of hiragana
-    Katakana,
     /// Alphabet (direct input) mode — characters bypass romaji conversion
     Alphabet,
     /// Emoji shortcode mode — entered by typing `:` from Empty. Behaves
@@ -222,63 +220,35 @@ pub(crate) enum InputMode {
     Emoji,
 }
 
-/// Current [`InputMode`] plus the mode to come back to when a *temporary*
-/// mode (Emoji, Alphabet) ends. `comeback` always holds the last
-/// non-temporary mode and equals `current` while none is active, so
-/// exiting is an unconditional `current = comeback` — even a hop between
-/// two temporary modes exits to the user's real kana mode. Fields are
-/// private so every transition maintains the invariant.
+/// Current [`InputMode`]. Hiragana is the only lasting mode; Alphabet and
+/// Emoji last one composition and end back in Hiragana. Kana in another
+/// script is a conversion (F6–F8, Ctrl+K), not a mode.
 #[derive(Debug, Default)]
 pub(crate) struct ModeState {
-    /// Current input mode.
     current: InputMode,
-    /// The last non-temporary mode; what [`ModeState::exit_temporary`]
-    /// restores. Equal to `current` whenever `current` is not temporary.
-    comeback: InputMode,
 }
 
 impl ModeState {
-    /// Whether `mode` is a temporary, per-composition mode.
-    fn is_temporary(mode: InputMode) -> bool {
-        matches!(mode, InputMode::Emoji | InputMode::Alphabet)
-    }
-
     /// The current input mode.
     pub(crate) fn current(&self) -> InputMode {
         self.current
     }
 
-    /// Switch directly to `mode`. The user explicitly picked it, so it
-    /// also becomes the comeback target.
-    pub(crate) fn set(&mut self, mode: InputMode) {
-        debug_assert!(
-            !Self::is_temporary(mode),
-            "temporary mode {mode:?} must be entered via enter_temporary"
-        );
-        self.current = mode;
-        self.comeback = mode;
-    }
-
-    /// Enter a *temporary* mode, remembering the current one for
-    /// [`ModeState::exit_temporary`]. A hop between two temporary modes
-    /// keeps the original comeback target.
+    /// Enter a per-composition mode (Alphabet or Emoji).
     pub(crate) fn enter_temporary(&mut self, mode: InputMode) {
         debug_assert!(
-            Self::is_temporary(mode),
-            "enter_temporary called with non-temporary mode {mode:?}"
+            mode != InputMode::Hiragana,
+            "enter_temporary called with {mode:?}"
         );
-        if !Self::is_temporary(self.current) {
-            self.comeback = self.current;
-        }
         self.current = mode;
     }
 
-    /// End any temporary mode: come back to the last non-temporary mode.
-    /// No-op when none is active, so the commit/cancel/erase exit sites
-    /// call it unconditionally. This is what returns the next word to kana
-    /// without an explicit toggle key (issue #37).
+    /// End any temporary mode, back to Hiragana. No-op when none is
+    /// active, so the commit/cancel/erase exit sites call it
+    /// unconditionally. This is what returns the next word to kana without
+    /// an explicit toggle key (issue #37).
     pub(crate) fn exit_temporary(&mut self) {
-        self.current = self.comeback;
+        self.current = InputMode::Hiragana;
     }
 }
 

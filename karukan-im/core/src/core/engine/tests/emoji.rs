@@ -289,54 +289,6 @@ fn backspacing_to_empty_exits_emoji_mode() {
 }
 
 #[test]
-fn backspacing_to_empty_restores_pre_emoji_katakana_mode() {
-    // Same exit path as the empty-backspace case, but verifies the
-    // pre-emoji mode is *restored* rather than forced back to Hiragana.
-    // A user typing in Katakana who pops into emoji and bails out
-    // should land back in Katakana.
-    let mut engine = InputMethodEngine::new();
-    engine.mode.set(InputMode::Katakana);
-
-    engine.process_key(&press_colon());
-    assert_eq!(engine.mode.current(), InputMode::Emoji);
-    for ch in ['s', 'm', 'i', 'l', 'e'] {
-        engine.process_key(&press(ch));
-    }
-
-    for _ in 0..6 {
-        engine.process_key(&press_key(Keysym::BACKSPACE));
-    }
-    assert!(matches!(engine.state(), InputState::Empty));
-    assert_eq!(engine.mode.current(), InputMode::Katakana);
-}
-
-#[test]
-fn commit_emoji_restores_pre_emoji_katakana_mode() {
-    let mut engine = InputMethodEngine::new();
-    engine.mode.set(InputMode::Katakana);
-
-    engine.process_key(&press_colon());
-    for ch in ['s', 'm', 'i', 'l', 'e'] {
-        engine.process_key(&press(ch));
-    }
-    engine.process_key(&press_key(Keysym::RETURN));
-    assert_eq!(engine.mode.current(), InputMode::Katakana);
-}
-
-#[test]
-fn escape_emoji_restores_pre_emoji_katakana_mode() {
-    let mut engine = InputMethodEngine::new();
-    engine.mode.set(InputMode::Katakana);
-
-    engine.process_key(&press_colon());
-    for ch in ['s', 'm', 'i', 'l', 'e'] {
-        engine.process_key(&press(ch));
-    }
-    engine.process_key(&press_key(Keysym::ESCAPE));
-    assert_eq!(engine.mode.current(), InputMode::Katakana);
-}
-
-#[test]
 fn colon_in_hiragana_does_not_enter_emoji_when_already_composing() {
     // A `:` typed in the middle of an existing hiragana composition is
     // just punctuation, not an emoji trigger — emoji mode only starts

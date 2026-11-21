@@ -70,8 +70,8 @@ fn test_shortcuts_open_no_window() {
     assert!(!opens_window(&live_off), "live off: {:?}", live_off.actions);
     let live_on = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
     assert!(!opens_window(&live_on), "live on: {:?}", live_on.actions);
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
-    assert_eq!(engine.mode.current(), InputMode::Katakana);
+    engine.process_key(&press_shift('A'));
+    assert_eq!(engine.mode.current(), InputMode::Alphabet);
     let back = engine.process_key(&press_key(Keysym::HENKAN));
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
     assert!(!opens_window(&back), "mode toggle: {:?}", back.actions);
