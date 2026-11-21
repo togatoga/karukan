@@ -20,6 +20,8 @@ pub enum CandidateSource {
     Rewriter,
     /// Date/time candidate rendered from the clock (`[date]` phrases)
     Date,
+    /// A setting switched by typing its name (【デバッグモードをオン】)
+    Command,
     /// Hiragana/katakana fallback
     Fallback,
 }
@@ -35,6 +37,7 @@ impl CandidateSource {
             CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
             CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
             CandidateSource::Date => "\u{1F4C5} \u{65E5}\u{4ED8}",     // 📅 日付
+            CandidateSource::Command => "\u{2699} \u{8A2D}\u{5B9A}",   // ⚙ 設定
             CandidateSource::Fallback => "",
         }
     }
@@ -50,6 +53,7 @@ impl CandidateSource {
             CandidateSource::Dictionary => "\u{1F4DA}",     // 📚
             CandidateSource::Rewriter => "\u{1F504}",       // 🔄
             CandidateSource::Date => "\u{1F4C5}",           // 📅
+            CandidateSource::Command => "\u{2699}",         // ⚙
             CandidateSource::Fallback => "",
         }
     }
@@ -62,9 +66,10 @@ impl CandidateSource {
 
     /// Whether committing a candidate from this source is recorded in the
     /// learning cache. Date/time candidates are rendered from the clock, so
-    /// a recorded one would resurface later as a stale date.
+    /// a recorded one would resurface later as a stale date; a command
+    /// inputs no text at all.
     pub fn is_learnable(&self) -> bool {
-        !matches!(self, CandidateSource::Date)
+        !matches!(self, CandidateSource::Date | CandidateSource::Command)
     }
 }
 

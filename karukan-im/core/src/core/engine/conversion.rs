@@ -143,6 +143,12 @@ impl InputMethodEngine {
             );
         }
 
+        // A setting typed by name sits second: the plain conversion stays
+        // first, so writing the word itself is unchanged.
+        if let Some(command) = self.command_candidate(&reading) {
+            candidates.insert(candidates.len().min(1), command);
+        }
+
         if candidates.is_empty() {
             // No candidates: stay composing, untouched (emoji queries with
             // no match land here)
@@ -795,6 +801,9 @@ impl InputMethodEngine {
 
     /// Commit the current conversion
     fn commit_conversion(&mut self) -> EngineResult {
+        if let Some(result) = self.run_selected_command() {
+            return result;
+        }
         let Some((text, reading)) = self.selected_conversion_info() else {
             return EngineResult::not_consumed();
         };

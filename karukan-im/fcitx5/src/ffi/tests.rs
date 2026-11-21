@@ -7,9 +7,6 @@ use std::ptr;
 
 // XKB keysyms for common keys
 const XKB_KEY_A: u32 = 0x61;
-const XKB_KEY_V: u32 = 0x76;
-/// X11 ShiftMask | ControlMask
-const MOD_CTRL_SHIFT: u32 = 1 | 4;
 const XKB_KEY_I: u32 = 0x69;
 const XKB_KEY_K: u32 = 0x6b;
 const XKB_KEY_RETURN: u32 = 0xff0d;
@@ -32,13 +29,15 @@ fn disable_live_conversion(e: &TestEngine) {
 struct TestEngine(*mut KarukanEngine);
 
 impl TestEngine {
+    /// An engine on the shipped settings, not the machine's config file,
+    /// with verbose mode on: the context tests read the aux line, which
+    /// only carries the debug details then.
     fn new() -> Self {
-        let ptr = karukan_engine_new();
-        assert!(!ptr.is_null());
-        // The context tests read the aux line, which only carries the
-        // debug details in verbose mode (Ctrl+Shift+V).
-        karukan_engine_process_key(ptr, XKB_KEY_V, MOD_CTRL_SHIFT, 0);
-        Self(ptr)
+        let mut settings = Settings::default();
+        settings.display.verbose = true;
+        Self(Box::into_raw(Box::new(KarukanEngine::with_settings(
+            settings,
+        ))))
     }
 
     fn ptr(&self) -> *mut KarukanEngine {

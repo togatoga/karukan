@@ -5,6 +5,7 @@
 
 mod cache;
 mod chunk;
+mod command;
 mod conversion;
 mod cursor;
 mod display;
@@ -332,6 +333,12 @@ impl InputMethodEngine {
         if candidates.select_on_page(digit).is_none() {
             return EngineResult::consumed();
         }
+        if let Some(result) = self.run_selected_command() {
+            return result;
+        }
+        let Some(candidates) = self.shown_candidates_mut() else {
+            return EngineResult::consumed();
+        };
         let Some(selected) = candidates.selected() else {
             return EngineResult::consumed();
         };
@@ -636,17 +643,6 @@ impl InputMethodEngine {
             && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
         {
             return self.toggle_live_conversion();
-        }
-
-        // Ctrl+Shift+V: toggle the verbose aux line while typing or
-        // converting. With nothing typed it is the terminal's paste, so it
-        // passes through.
-        if !matches!(self.state, InputState::Empty)
-            && key.modifiers.control_key
-            && key.modifiers.shift_key
-            && (key.keysym == Keysym::KEY_V || key.keysym == Keysym::KEY_V_UPPER)
-        {
-            return self.toggle_verbose();
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)
