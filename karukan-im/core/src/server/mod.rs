@@ -40,7 +40,13 @@ impl ImServer {
     /// Create a server with settings loaded from config.toml (or defaults).
     pub fn new() -> Self {
         let settings = Settings::load_or_default();
-        Self::with_settings(settings)
+        let mut server = Self::with_settings(settings);
+        // config.toml edits apply without restarting the server. Only here:
+        // `with_settings` takes settings that need not be the file's.
+        if let Some(settings) = &server.settings {
+            server.engine.watch_config_file(settings);
+        }
+        server
     }
 
     pub fn with_settings(settings: Settings) -> Self {

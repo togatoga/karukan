@@ -83,7 +83,16 @@ my-model = "/home/user/models/my-model.gguf"
 
 既定のモデルを差し替えるには同じキーに書きます（`jinen-v2-small-q8 = "/path/to/model.gguf"`）。不正なエントリは起動時のログと、そのモデルを使うときのエラーに出ます。
 
-設定変更後はfcitx5の再起動（macOSは `killall KarukanIME`）で反映されます。
+モデルの変更（`model` / `light_model` / `strategy` / `n_threads` / `[models]`）も再起動なしで反映されます。新しいモデルは裏で読み込まれ（初めて使うモデルはダウンロードも）、読み込みが終わるまではそれまでのモデルが変換を続けます。読み込みに失敗した場合もそれまでのモデルのままです。
+
+## 設定の反映
+
+`config.toml` のすべての項目と [`romaji.tsv`](romaji-table.md) は、保存すると**次に打ち始めた言葉から**反映されます。fcitx5 の再起動も `killall KarukanIME` も要りません。入力中（未確定の文字がある間）は切り替わらず、その入力が確定かキャンセルで終わってから反映されます。
+
+- `dict_path` を変えるとシステム辞書を読み直し、`[learning]` を変えると学習履歴をいったん保存して新しい上限で読み直します（`enabled = false` にすると保存して学習を止めます）
+- 書きかけなどで `config.toml` が読めないときは、それまでの設定のまま動き続けます（ログに理由が出ます）。直して保存すれば反映されます
+- `live_conversion` と `verbose` は、実行中に `Ctrl+Shift+L` / `Ctrl+Shift+V` で切り替えた状態を保ちます。設定ファイルのその値を書き換えたときだけ、書き換えた値になります
+- ユーザー辞書（`user_dicts/`）や `dict.bin` の中身の差し替えは設定の変更ではないので、これまでどおり再起動（fcitx5 の再起動、macOS は `killall KarukanIME`）で反映されます
 
 ## Live Conversion
 

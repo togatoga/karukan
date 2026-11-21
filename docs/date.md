@@ -77,4 +77,4 @@ phrases = [
 
 ## 設定の反映
 
-設定変更後は fcitx5 の再起動（macOS は `killall KarukanIME`）で反映されます。
+保存すると、次に打ち始めた言葉から反映されます（再起動は不要。[設定の反映](configuration.md#設定の反映) 参照）。

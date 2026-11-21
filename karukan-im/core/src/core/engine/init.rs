@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use karukan_engine::ModelSource;
 use tracing::debug;
 
-use crate::config::settings::StrategyMode;
+use crate::config::settings::{LearningSettings, StrategyMode};
 
 use super::*;
 
@@ -41,28 +41,76 @@ fn create_converter((name, source): &NamedSource, n_threads: u32) -> Result<Kana
     Ok(converter)
 }
 
-/// Load the conversion models. Runs on the background loading thread — it
-/// may block on a model download, which must stay off the key-event thread.
-/// A light-model failure is non-fatal (beam search is simply unavailable).
-fn load_converters(
+/// Which models an engine loads, and how: everything `load_converters`
+/// needs, resolved from the settings. Two settings with the same plan load
+/// the same converters, so comparing plans is how a config reload tells
+/// whether the models have to be loaded again.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct ModelPlan {
+    /// The model in the main slot.
     main: NamedSource,
+    /// The model in the light slot, if the strategy keeps one.
     light: Option<NamedSource>,
+    /// Inference threads (0 = llama.cpp's default).
     n_threads: u32,
-) -> Result<LoadedConverters> {
-    let kanji = create_converter(&main, n_threads)?;
-    tracing::info!("Main model loaded: {}", kanji.model_display_name());
+}
 
-    let light_kanji = light.and_then(|source| match create_converter(&source, n_threads) {
-        Ok(converter) => {
-            tracing::info!("Beam model loaded: {}", converter.model_display_name());
-            Some(converter)
-        }
-        Err(e) => {
-            tracing::warn!("Failed to initialize beam model: {e:#}");
-            None
-        }
-    });
-    Ok(LoadedConverters { kanji, light_kanji })
+impl ModelPlan {
+    /// The plan `settings` asks for. `None` when the main model's entry is
+    /// broken (logged): the engine then runs without a model. A broken
+    /// light model only costs the beam.
+    pub(super) fn from_settings(settings: &Settings) -> Option<Self> {
+        let conv = &settings.conversion;
+        // Light runs the light model alone in the main slot; only Adaptive
+        // keeps a separate light model for beam search.
+        let (main_key, light_key) = match conv.strategy {
+            StrategyMode::Light => (&conv.light_model, None),
+            StrategyMode::Main => (&conv.model, None),
+            StrategyMode::Adaptive => (&conv.model, Some(&conv.light_model)),
+        };
+        let named = |key: &String| settings.model_source(key).map(|s| (key.clone(), s));
+        let main = named(main_key)
+            .inspect_err(|e| {
+                tracing::error!("invalid model settings, continuing without model: {e:#}")
+            })
+            .ok()?;
+        let light = light_key.and_then(|key| {
+            named(key)
+                .inspect_err(|e| {
+                    tracing::warn!("invalid light_model settings, beam search unavailable: {e:#}")
+                })
+                .ok()
+        });
+        Some(Self {
+            main,
+            light,
+            n_threads: conv.n_threads,
+        })
+    }
+
+    /// Load the models. Runs on the background loading thread — it may
+    /// block on a model download, which must stay off the key-event thread.
+    /// A light-model failure is non-fatal (beam search is simply
+    /// unavailable).
+    fn load(&self) -> Result<LoadedConverters> {
+        let kanji = create_converter(&self.main, self.n_threads)?;
+        tracing::info!("Main model loaded: {}", kanji.model_display_name());
+
+        let light_kanji =
+            self.light
+                .as_ref()
+                .and_then(|source| match create_converter(source, self.n_threads) {
+                    Ok(converter) => {
+                        tracing::info!("Beam model loaded: {}", converter.model_display_name());
+                        Some(converter)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to initialize beam model: {e:#}");
+                        None
+                    }
+                });
+        Ok(LoadedConverters { kanji, light_kanji })
+    }
 }
 
 impl InputMethodEngine {
@@ -86,64 +134,66 @@ impl InputMethodEngine {
 
         self.init_system_dictionary(settings.conversion.dict_path.as_deref());
         self.init_user_dictionaries();
-        self.init_learning_cache(
-            settings.learning.enabled,
-            LearningConfig {
-                max_entries: settings.learning.max_entries,
-                max_surface_chars: settings.learning.max_surface_chars,
-            },
-        );
+        self.init_learning_cache(&settings.learning);
 
         self.spawn_model_loading(settings);
         Ok(())
     }
 
-    /// Load the conversion models on a background thread; never blocks.
+    /// Start loading the models `settings` asks for; never blocks. Called
+    /// once, at init: later changes go through [`Self::reload_models`].
+    pub(super) fn spawn_model_loading(&mut self, settings: &Settings) {
+        if self.converters.kanji.is_some() || self.model_loading.is_some() {
+            return;
+        }
+        self.models_enabled = true;
+        self.model_plan = ModelPlan::from_settings(settings);
+        self.load_planned_models();
+    }
+
+    /// A config reload: load the models again if `settings` asks for other
+    /// ones than the plan in force — another model, strategy (which decides
+    /// which model sits in which slot), `[models]` entry or thread count.
+    /// The current converters keep answering until the new ones arrive, and
+    /// stay if those fail to load. Does nothing on an engine that never
+    /// loaded models (`init_from_settings` not called).
+    pub(super) fn reload_models(&mut self, settings: &Settings) {
+        if !self.models_enabled {
+            return;
+        }
+        let plan = ModelPlan::from_settings(settings);
+        if plan == self.model_plan {
+            return;
+        }
+        self.model_plan = plan;
+        self.load_planned_models();
+    }
+
+    /// Load `model_plan` on a background thread.
     ///
     /// The result arrives through the `model_loading` channel and is
     /// installed by `poll_loaded_models` on the next key event. A failure is
     /// logged on the loader thread and surfaces here only as a disconnected
-    /// channel: the engine keeps running without a model.
-    fn spawn_model_loading(&mut self, settings: &Settings) {
-        if self.converters.kanji.is_some() || self.model_loading.is_some() {
+    /// channel: the engine keeps running with the converters it has. A load
+    /// still in flight is superseded — its receiver is dropped here, so
+    /// whatever it produces goes nowhere.
+    fn load_planned_models(&mut self) {
+        self.model_loading = None;
+        let Some(plan) = self.model_plan.clone() else {
             return;
-        }
-
-        let conv = &settings.conversion;
-        // Light runs the light model alone in the main slot; only Adaptive
-        // keeps a separate light model for beam search.
-        let (main_key, light_key) = match conv.strategy {
-            StrategyMode::Light => (&conv.light_model, None),
-            StrategyMode::Main => (&conv.model, None),
-            StrategyMode::Adaptive => (&conv.model, Some(&conv.light_model)),
         };
-        let named = |key: &String| settings.model_source(key).map(|s| (key.clone(), s));
-        let main = match named(main_key) {
-            Ok(source) => source,
-            Err(e) => {
-                tracing::error!("invalid model settings, continuing without model: {e:#}");
-                return;
-            }
-        };
-        let light = light_key.and_then(|key| {
-            named(key)
-                .inspect_err(|e| {
-                    tracing::warn!("invalid light_model settings, beam search unavailable: {e:#}")
-                })
-                .ok()
-        });
-        let n_threads = conv.n_threads;
 
         let (tx, rx) = mpsc::channel();
         self.model_loading = Some(rx);
         let spawned = std::thread::Builder::new()
             .name("karukan-model-load".to_string())
             .spawn(move || {
-                match load_converters(main, light, n_threads) {
-                    // A dead receiver just means the engine was dropped.
+                match plan.load() {
+                    // A dead receiver means the engine was dropped, or
+                    // asked for other models meanwhile.
                     Ok(loaded) => drop(tx.send(loaded)),
                     Err(e) => {
-                        tracing::error!("model loading failed, continuing without model: {e:#}");
+                        tracing::error!("model loading failed, continuing without it: {e:#}");
                     }
                 }
             });
@@ -166,6 +216,12 @@ impl InputMethodEngine {
                 self.converters.kanji = Some(loaded.kanji);
                 self.converters.light_kanji = loaded.light_kanji;
                 self.model_loading = None;
+                // What the previous models answered, and how fast, says
+                // nothing about these: the cache is keyed by slot, not by
+                // model file.
+                self.conversion_cache = ConversionCache::default();
+                self.guard = OverloadGuard::new(self.config.timeout_ms);
+                self.metrics.adaptive_use_light_model = false;
                 tracing::info!("Karukan init complete: {}", self.model_name());
             }
             Err(mpsc::TryRecvError::Empty) => {}
@@ -216,10 +272,14 @@ impl InputMethodEngine {
     /// `config.max_surface_chars` caps the surface length `record` accepts;
     /// entries already on disk are loaded regardless (they can be removed
     /// with Ctrl+Delete or by eviction).
-    pub fn init_learning_cache(&mut self, enabled: bool, config: LearningConfig) {
-        if !enabled || self.learning.is_some() {
+    pub fn init_learning_cache(&mut self, settings: &LearningSettings) {
+        if !settings.enabled || self.learning.is_some() {
             return;
         }
+        let config = LearningConfig {
+            max_entries: settings.max_entries,
+            max_surface_chars: settings.max_surface_chars,
+        };
 
         let cache = match Settings::learning_file() {
             Some(path) if path.exists() => match LearningCache::load(&path, config) {
