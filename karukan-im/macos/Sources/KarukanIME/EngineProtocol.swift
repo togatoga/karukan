@@ -24,6 +24,8 @@ struct CandidateItem: Decodable {
 
 struct InitResult: Decodable {
     let protocolVersion: Int
+    /// Absent from an older engine, so optional.
+    let engineVersion: String?
     let modelName: String
 }
 

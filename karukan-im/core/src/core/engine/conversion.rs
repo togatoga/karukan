@@ -410,6 +410,12 @@ impl InputMethodEngine {
                     .with_description(description),
             );
         }
+        for (variant, description) in self.version_variants(reading) {
+            builder.push(
+                AnnotatedCandidate::new(variant, CandidateSource::Version)
+                    .with_description(description),
+            );
+        }
         // Rewriters run on the typed reading only; running them on other
         // sources' candidates would emit variants nobody asked for.
         for (variant, description) in self.rewriter_variants(reading) {
@@ -567,6 +573,18 @@ impl InputMethodEngine {
         self.converters.date.rewrite(reading)
     }
 
+    /// `Karukan-0.1.0+g1396bb2` for ばーじょん, so a bug report can name
+    /// the exact build by typing it. None in emoji mode, like the dates.
+    pub(super) fn version_variants(&self, reading: &str) -> Vec<RewriteOutput> {
+        if self.mode.current() == InputMode::Emoji || !VERSION_READINGS.contains(&reading) {
+            return Vec::new();
+        }
+        vec![(
+            format!("Karukan-{}", karukan_engine::VERSION),
+            Some("バージョン".to_string()),
+        )]
+    }
+
     /// Build rule-based rewriter variants for the reading itself (e.g. for
     /// symbol input `「` → `『`, `【`, `（`, ...), date/time candidates first.
     /// Used in the auto-suggest path so users see mozc-style symbol variants
@@ -583,6 +601,11 @@ impl InputMethodEngine {
         self.date_variants(reading)
             .into_iter()
             .map(as_candidate(CandidateSource::Date))
+            .chain(
+                self.version_variants(reading)
+                    .into_iter()
+                    .map(as_candidate(CandidateSource::Version)),
+            )
             .chain(
                 self.rewriter_variants(reading)
                     .into_iter()
@@ -988,3 +1011,6 @@ impl InputMethodEngine {
             .with_action(EngineAction::UpdateAuxText(aux))
     }
 }
+
+/// Readings that convert to the running build's version.
+const VERSION_READINGS: [&str; 3] = ["ばーじょん", "ゔぁーじょん", "う゛ぁーじょん"];

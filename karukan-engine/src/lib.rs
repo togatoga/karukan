@@ -6,6 +6,11 @@ pub mod rewriter;
 pub mod romaji;
 pub mod width;
 
+/// The karukan version this build came from: the workspace version plus
+/// the commit (`0.1.0+g1396bb2`), or whatever a packager set in
+/// `KARUKAN_VERSION`. Stamped by `build.rs`.
+pub const VERSION: &str = env!("KARUKAN_VERSION");
+
 pub use dict::{Candidate as DictCandidate, DictEntry, Dictionary, LookupResult, PredictiveMatch};
 pub use kana::{
     contains_kana, hiragana_to_katakana, is_pure_full_katakana, is_pure_hiragana,

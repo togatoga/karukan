@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 /// optionally scores each (reading, surface) pair using a jinen model,
 /// and outputs JSON compatible with `dict-build`.
 #[derive(Parser)]
-#[command(name = "sudachi-dict")]
+#[command(name = "sudachi-dict", version = karukan_engine::VERSION)]
 #[command(about = "Build scored JSON dictionary from Sudachi CSV files")]
 struct Cli {
     /// Input Sudachi CSV files

@@ -1,6 +1,6 @@
 [package]
 name = "karukan-im"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 description = "Japanese IME engine shared by the fcitx5 and macOS frontends"
 license.workspace = true

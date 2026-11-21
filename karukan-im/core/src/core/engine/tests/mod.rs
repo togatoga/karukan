@@ -30,6 +30,7 @@ mod source_filter;
 mod strategy;
 mod surrounding;
 mod transliterate;
+mod version;
 mod width;
 
 /// Engine seeded with a learning entry `reading → surface`, no kanji model.

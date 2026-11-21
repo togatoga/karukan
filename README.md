@@ -44,6 +44,16 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 - **Linux (fcitx5)**: [karukan-fcitx5 の README](karukan-im/fcitx5/README.md#install) を参照
 - **macOS**: [karukan-macos の README](karukan-im/macos/README.md) を参照
 
+## バージョンの確認
+
+「ばーじょん」と入力して変換すると、動いているビルドのバージョンが候補に出ます。不具合を報告するときは、これを確定して貼ってください。
+
+```
+ばーじょん → Karukan-0.1.0+g1396bb2
+```
+
+`+g` の後ろはビルド元のコミットです。パッケージで入れた場合は、パッケージ作成者が付けたバージョンが出ます。確定しても学習履歴には記録されません。
+
 ## ドキュメント
 
 - [キーバインド一覧](docs/key-bindings.md) — 共通キーバインドと Linux / macOS 固有キー
