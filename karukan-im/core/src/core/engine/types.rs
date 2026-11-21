@@ -271,7 +271,7 @@ pub(in crate::core) struct ComposingChunk {
 /// against them.
 #[derive(Debug, Clone, Default)]
 pub(in crate::core) struct LiveConversion {
-    /// Whether live conversion is enabled (らいぶへんかん switches it)
+    /// Whether live conversion is enabled (toggled via Ctrl+Shift+L)
     pub enabled: bool,
     /// Whether the live suggestion is currently shown in the preedit.
     /// Cleared by gestures that fall back to the kana display (cursor moves,

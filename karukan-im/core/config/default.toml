@@ -55,7 +55,7 @@ model = "jinen-v2-small-q8"
 light_model = "jinen-v2-xsmall-q8"
 # 推論スレッド数（0 = 全コア使用）
 n_threads = 4
-# 起動時にライブ変換を有効にする（「らいぶへんかん」と打って変換すると実行中も切り替えられる）
+# 起動時にライブ変換を有効にする（Ctrl+Shift+L で実行中も切替可能）
 live_conversion = true
 # ユーザー辞書: ~/.local/share/karukan-im/user_dicts/ に辞書ファイルを配置（Mozc TSV or KRKN binary）
 

@@ -358,7 +358,85 @@ fn test_shift_space_inserts_the_configured_space_into_a_composition() {
     }
 }
 
-// --- Live conversion setting ---
+// --- Ctrl+Shift+L live conversion toggle tests ---
+
+#[test]
+fn test_ctrl_shift_l_toggles_live_conversion() {
+    let mut engine = InputMethodEngine::new();
+    assert!(!engine.live.enabled);
+
+    // Ctrl+Shift+L → toggle ON
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    assert!(result.consumed);
+    assert!(engine.live.enabled);
+
+    // Ctrl+Shift+L again → toggle OFF
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    assert!(result.consumed);
+    assert!(!engine.live.enabled);
+}
+
+#[test]
+fn test_ctrl_shift_l_lowercase_toggles() {
+    let mut engine = InputMethodEngine::new();
+    assert!(!engine.live.enabled);
+
+    // Ctrl+Shift+l (lowercase keysym) → toggle ON
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
+    assert!(result.consumed);
+    assert!(engine.live.enabled);
+}
+
+#[test]
+fn test_toggle_on_during_composing_applies_immediately() {
+    // Toggling live conversion ON while composing should immediately attempt
+    // live conversion against the current input buffer instead of waiting for
+    // another keystroke. With no model loaded, run_auto_suggest falls back to
+    // the reading itself (which equals input_buf.text), so live.text stays
+    // empty — but the preedit must still be refreshed in a single action set.
+    let mut engine = InputMethodEngine::new();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    assert!(!engine.live.enabled);
+
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    assert!(result.consumed);
+    assert!(engine.live.enabled);
+
+    // The toggle must produce a preedit refresh, not only an aux update.
+    let has_preedit = result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::UpdatePreedit(_)));
+    assert!(
+        has_preedit,
+        "toggling ON during composing should refresh preedit immediately"
+    );
+}
+
+#[test]
+fn test_toggle_off_during_composing_clears_live_text() {
+    // Toggling OFF while live conversion is showing should revert the preedit
+    // back to hiragana without requiring another keystroke.
+    let mut engine = make_live_conversion_engine();
+    engine.process_key(&press('a'));
+    engine.process_key(&press('i'));
+    set_live_text(&mut engine, "愛");
+
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    assert!(result.consumed);
+    assert!(!engine.live.enabled);
+    assert!(engine.live_text().is_empty());
+
+    let preedit_text = result.actions.iter().find_map(|a| {
+        if let EngineAction::UpdatePreedit(p) = a {
+            Some(p.text().to_string())
+        } else {
+            None
+        }
+    });
+    assert_eq!(preedit_text.as_deref(), Some("あい"));
+}
 
 #[test]
 fn test_engine_config_live_conversion_enabled() {
@@ -369,6 +447,26 @@ fn test_engine_config_live_conversion_enabled() {
     };
     let engine = InputMethodEngine::with_config(config);
     assert!(engine.live.enabled);
+}
+
+#[test]
+fn test_ctrl_shift_l_shows_aux_text() {
+    let mut engine = InputMethodEngine::new();
+
+    // Ctrl+Shift+L → check aux text shows "ライブ変換: ON"
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let has_aux = result
+        .actions
+        .iter()
+        .any(|a| matches!(a, EngineAction::UpdateAuxText(text) if text.contains("ライブ変換: ON")));
+    assert!(has_aux);
+
+    // Ctrl+Shift+L again → "ライブ変換: OFF"
+    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
+    let has_aux = result.actions.iter().any(
+        |a| matches!(a, EngineAction::UpdateAuxText(text) if text.contains("ライブ変換: OFF")),
+    );
+    assert!(has_aux);
 }
 
 /// Live conversion with the model's answers for にほ… fixed.

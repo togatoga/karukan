@@ -4,7 +4,7 @@
 
 ```toml
 [conversion]
-live_conversion = true          # ライブ変換を起動時に有効化（「らいぶへんかん」で実行中も切替。既定ON）
+live_conversion = true          # ライブ変換を起動時に有効化（Ctrl+Shift+L で実行中も切替。既定ON）
 chunk_chars = 30                # 一度にAI変換する Chunk の最大文字数（[Chunk](chunking.md) 参照）
 chunk_symbols = 1               # Chunk に残せる記号（、。！？など）の数
 chunk_digits = 0                # Chunk に残せる数字の桁数（0 = 数字はAI変換にかけない）
@@ -87,7 +87,7 @@ my-model = "/home/user/models/my-model.gguf"
 
 ## Live Conversion
 
-入力と同時にかな漢字変換の結果をプリエディットへリアルタイム表示します（Spaceを押さずに変換が進む）。「らいぶへんかん」と打って変換し、2 番目の候補【ライブ変換をオフ】/【ライブ変換をオン】を選ぶと切り替えられます。既定では `live_conversion = true` で有効です。
+入力と同時にかな漢字変換の結果をプリエディットへリアルタイム表示します（Spaceを押さずに変換が進む）。`Ctrl+Shift+L` でON/OFFを切り替えられ、既定では `live_conversion = true` で有効です。
 
 入力の最後の `n` は「ん」として変換して表示します。`nihon` と打った時点で「日本」と出ます。続けて打てば、その打鍵で結果が変わります（`nihoni` なら「に」になる）。
 

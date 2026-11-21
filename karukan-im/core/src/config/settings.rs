@@ -210,7 +210,7 @@ pub struct ConversionSettings {
     pub timeout_ms: u64,
     /// Number of threads for llama.cpp inference (0 = all cores, llama.cpp default)
     pub n_threads: u32,
-    /// Enable live conversion at startup (らいぶへんかん switches it at runtime)
+    /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
     pub live_conversion: bool,
 }
 

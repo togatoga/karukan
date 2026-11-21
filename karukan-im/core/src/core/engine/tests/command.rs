@@ -103,30 +103,3 @@ fn ctrl_shift_v_is_left_to_the_application() {
     assert!(!result.consumed);
     assert!(!engine.config.verbose);
 }
-
-#[test]
-fn live_conversion_is_switched_by_its_name() {
-    let mut engine = InputMethodEngine::with_config(EngineConfig {
-        live_conversion: true,
-        ..EngineConfig::default()
-    });
-    let list = convert(&mut engine, "raibuhenkann");
-    assert_eq!(list.candidates()[1].text, "【ライブ変換をオフ】");
-    engine.process_key(&press_key(Keysym::SPACE));
-    let result = engine.process_key(&press_key(Keysym::RETURN));
-    assert!(!commits(&result), "{:?}", result.actions);
-    assert!(!engine.live.enabled);
-    assert_eq!(last_aux_text(&result).as_deref(), Some("ライブ変換: オフ"));
-
-    let list = convert(&mut engine, "raibuhenkann");
-    assert_eq!(list.candidates()[1].text, "【ライブ変換をオン】");
-}
-
-#[test]
-fn ctrl_shift_l_is_left_to_the_application() {
-    let mut engine = InputMethodEngine::new();
-    let enabled = engine.live.enabled;
-    let result = engine.process_key(&press_ctrl_shift(Keysym::KEY_L_UPPER));
-    assert!(!result.consumed);
-    assert_eq!(engine.live.enabled, enabled);
-}

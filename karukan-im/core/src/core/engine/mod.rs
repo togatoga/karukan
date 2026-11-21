@@ -14,6 +14,7 @@ mod guard;
 mod init;
 mod input;
 mod input_buffer;
+mod mode;
 mod model;
 mod strategy;
 mod transliterate;
@@ -623,6 +624,14 @@ impl InputMethodEngine {
         // Only process key presses
         if !key.is_press {
             return EngineResult::not_consumed();
+        }
+
+        // Ctrl+Shift+L: toggle live conversion (works in all states)
+        if key.modifiers.control_key
+            && key.modifiers.shift_key
+            && (key.keysym == Keysym::KEY_L || key.keysym == Keysym::KEY_L_UPPER)
+        {
+            return self.toggle_live_conversion();
         }
 
         // Reset adaptive model flag when starting a new word (first key in Empty state)
