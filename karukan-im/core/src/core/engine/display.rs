@@ -13,17 +13,6 @@ const BEAM_SPAN_LABEL: &str = "🎯";
 pub(super) const LEARNING_DELETE_HINT: &str = "Ctrl+Backspaceで履歴から削除";
 
 impl InputMethodEngine {
-    /// Build display text from the element array.
-    /// In katakana mode, kana parts are converted to katakana.
-    pub(super) fn build_input_display(&self) -> String {
-        let display = self.input_buf.display();
-        if self.mode.current() == InputMode::Katakana {
-            karukan_engine::hiragana_to_katakana(&display)
-        } else {
-            display
-        }
-    }
-
     /// The current live-conversion text: the concatenated converted text of
     /// the chunks while the live display is shown, empty otherwise. Derived
     /// on demand — the string is never stored, so it cannot go stale against
@@ -54,7 +43,7 @@ impl InputMethodEngine {
             let caret = display.chars().count();
             (display, caret)
         } else {
-            (self.build_input_display(), self.input_buf.cursor())
+            (self.input_buf.display(), self.input_buf.cursor())
         };
         let mut preedit = Preedit::with_text_underlined(&display);
         preedit.set_caret(caret);
@@ -144,7 +133,6 @@ impl InputMethodEngine {
     pub(super) fn mode_indicator(&self) -> String {
         let base = match self.mode.current() {
             InputMode::Alphabet => "[A]",
-            InputMode::Katakana => "[カ]",
             InputMode::Hiragana => "[あ]",
             // ☺ (U+263A, Unicode 1.1 / 1993) — the oldest smiley-face
             // codepoint in Unicode; gives emoji mode an unambiguous

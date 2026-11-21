@@ -29,23 +29,57 @@
 //! typing the remaining keystrokes fresh: removing こ from `ytko`
 //! re-exposes the live elements (`o` → 「yと」, again 「よ」), and
 //! removing the `1` from `yt1t` evaluates `ytt` → 「yっt」.
+//!
+//! **Keys.** A settled character also records the keys that typed it, for
+//! F9/F10 (`si` stays `si`, never `shi`). The converter reports each rule
+//! it fired as a [`Span`] (きょ ← `kyo`), and every character a span wrote
+//! points at that span. A span's keys count while all its characters still
+//! stand together. Once an edit breaks them up (deleting ょ, typing between
+//! き and ょ), the keys can no longer be divided among what is left, so
+//! those characters stand for themselves and F9/F10 leave them as kana
+//! rather than show keys that were never typed. Edits need not know any of
+//! this: [`InputBuffer::keystrokes`] tells a whole span from a broken one
+//! when it reads them.
+
+use std::rc::Rc;
 
 use karukan_engine::RomajiConverter;
+use karukan_engine::romaji::Span;
 
 /// One display character of the composition.
-#[derive(Clone, Copy)]
 enum Element {
     /// A keystroke not yet consumed by a conversion rule
     Romaji(char),
     /// A settled character: fired rule output (`ko` → こ), passthrough
     /// (`1`), or direct input — excluded from romaji evaluation
-    Converted(char),
+    /// `span` is the rule that wrote it, shared by every character it
+    /// wrote (「き」 and 「ょ」 both point at きょ ← `kyo`).
+    Converted { ch: char, span: Rc<Span> },
 }
 
 impl Element {
     fn ch(&self) -> char {
         match self {
-            Element::Romaji(ch) | Element::Converted(ch) => *ch,
+            Element::Romaji(ch) | Element::Converted { ch, .. } => *ch,
+        }
+    }
+
+    /// Direct input: the character is its own key.
+    fn direct(ch: char) -> Self {
+        Element::Converted {
+            ch,
+            span: Rc::new(Span {
+                text: ch.to_string(),
+                keys: ch.to_string(),
+            }),
+        }
+    }
+
+    /// The span that wrote this settled character.
+    fn span(&self) -> Option<&Rc<Span>> {
+        match self {
+            Element::Converted { span, .. } => Some(span),
+            Element::Romaji(_) => None,
         }
     }
 
@@ -99,7 +133,7 @@ impl InputBuffer {
     /// Record a direct-input keystroke (alphabet/emoji mode) at the caret,
     /// settled as-is.
     pub fn push_direct(&mut self, ch: char) {
-        self.elements.insert(self.cursor, Element::Converted(ch));
+        self.elements.insert(self.cursor, Element::direct(ch));
         self.cursor += 1;
     }
 
@@ -108,10 +142,8 @@ impl InputBuffer {
     #[cfg(test)]
     pub fn insert(&mut self, text: &str) {
         let count = text.chars().count();
-        self.elements.splice(
-            self.cursor..self.cursor,
-            text.chars().map(Element::Converted),
-        );
+        self.elements
+            .splice(self.cursor..self.cursor, text.chars().map(Element::direct));
         self.cursor += count;
     }
 
@@ -194,7 +226,7 @@ impl InputBuffer {
         for element in &self.elements {
             match element {
                 Element::Romaji(ch) => run.push(*ch),
-                Element::Converted(ch) => {
+                Element::Converted { ch, .. } => {
                     if !run.is_empty() {
                         reading.push_str(&romaji.convert_flush(&run));
                         run.clear();
@@ -234,17 +266,6 @@ impl InputBuffer {
         self.cursor = self.elements.len().saturating_sub(from_end);
     }
 
-    /// Convert every settled element to katakana permanently. Called when
-    /// leaving katakana mode so the preedit doesn't revert.
-    pub fn bake_katakana(&mut self) {
-        for element in &mut self.elements {
-            if let Element::Converted(ch) = element {
-                let katakana = karukan_engine::hiragana_to_katakana(&ch.to_string());
-                *ch = katakana.chars().next().unwrap_or(*ch);
-            }
-        }
-    }
-
     /// Move the caret to a display position (also its element index).
     pub fn set_cursor(&mut self, pos: usize) {
         self.cursor = pos.min(self.elements.len());
@@ -260,6 +281,32 @@ impl InputBuffer {
     /// Full composition display.
     pub fn display(&self) -> String {
         self.elements.iter().map(Element::ch).collect()
+    }
+
+    /// What was typed, keystroke for keystroke (`kyouha` for 「きょうは」).
+    /// A span whose characters still stand together gives its keys; the
+    /// characters of a broken one give themselves (「きょ」 minus ょ → き).
+    pub fn keystrokes(&self) -> String {
+        let mut out = String::new();
+        let mut rest = &self.elements[..];
+        while let Some(first) = rest.first() {
+            let Some(span) = first.span() else {
+                out.push(first.ch());
+                rest = &rest[1..];
+                continue;
+            };
+            let together = rest
+                .iter()
+                .take_while(|e| e.span().is_some_and(|s| Rc::ptr_eq(s, span)))
+                .count();
+            if together == span.text.chars().count() {
+                out.push_str(&span.keys);
+            } else {
+                out.extend(rest[..together].iter().map(Element::ch));
+            }
+            rest = &rest[together..];
+        }
+        out
     }
 
     pub fn char_count(&self) -> usize {
@@ -313,8 +360,22 @@ fn flush_run(out: &mut Vec<Element>, run: &mut String, romaji: &RomajiConverter)
     if run.is_empty() {
         return;
     }
-    out.extend(romaji.convert_flush(run).chars().map(Element::Converted));
+    for span in romaji.convert_flush_spans(run) {
+        out.extend(settled(span));
+    }
     run.clear();
+}
+
+/// The settled characters a span wrote, each pointing at the span.
+fn settled(span: Span) -> Vec<Element> {
+    let span = Rc::new(span);
+    span.text
+        .chars()
+        .map(|ch| Element::Converted {
+            ch,
+            span: Rc::clone(&span),
+        })
+        .collect()
 }
 
 /// Evaluate a run of romaji keystrokes: convert the whole run and record
@@ -334,13 +395,16 @@ fn flush_run(out: &mut Vec<Element>, run: &mut String, romaji: &RomajiConverter)
 fn evaluate_run(run: &str, romaji: &RomajiConverter) -> Vec<Element> {
     let converted = romaji.convert(run);
     converted
-        .text
-        .chars()
-        .map(|c| {
-            if romaji.starts_rule(c) {
-                Element::Romaji(c)
+        .spans
+        .into_iter()
+        .flat_map(|span| {
+            if span.text.chars().all(|c| romaji.starts_rule(c)) {
+                span.text.chars().map(Element::Romaji).collect()
             } else {
-                Element::Converted(romaji.settle_char(c))
+                settled(Span {
+                    text: span.text.chars().map(|c| romaji.settle_char(c)).collect(),
+                    keys: span.keys,
+                })
             }
         })
         .chain(converted.pending.chars().map(Element::Romaji))

@@ -109,25 +109,6 @@ fn test_henkan_switches_alphabet_to_hiragana() {
 }
 
 #[test]
-fn test_henkan_switches_katakana_to_hiragana_and_bakes_preedit() {
-    let mut engine = InputMethodEngine::new();
-
-    // Compose "か", enter katakana mode via Ctrl+K
-    engine.process_key(&press('k'));
-    engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
-    assert!(engine.mode.current() == InputMode::Katakana);
-    assert_eq!(engine.preedit().unwrap().text(), "カ");
-
-    // 変換 press → back to hiragana; the katakana preedit must stay
-    // katakana (baked), not revert to hiragana display
-    let result = engine.process_key(&press_key(Keysym::HENKAN));
-    assert!(result.consumed);
-    assert!(engine.mode.current() == InputMode::Hiragana);
-    assert_eq!(engine.preedit().unwrap().text(), "カ");
-}
-
-#[test]
 fn test_henkan_noop_in_hiragana_passes_through() {
     let mut engine = InputMethodEngine::new();
     assert!(engine.mode.current() == InputMode::Hiragana);
@@ -162,34 +143,6 @@ fn test_modified_henkan_chord_is_not_hijacked() {
     let result = engine.process_key(&press_ctrl(Keysym::HENKAN));
     assert!(!result.consumed);
     assert!(engine.mode.current() == InputMode::Alphabet);
-}
-
-#[test]
-fn test_toggle_key_is_inert_during_conversion() {
-    // Regression: toggling mid-Conversion used to katakana-bake the
-    // conversion reading (Katakana mode) and defeat the Emoji-mode
-    // learning guard. The toggle must leave Conversion state untouched.
-    let mut engine = InputMethodEngine::new();
-
-    // Katakana mode, compose かか, start conversion (candidate window open)
-    engine.process_key(&press('k'));
-    engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
-    engine.process_key(&press('k'));
-    engine.process_key(&press('a'));
-    engine.process_key(&press_key(Keysym::SPACE));
-    assert!(matches!(engine.state(), InputState::Conversion { .. }));
-
-    let result = engine.process_key(&press_key(Keysym::HENKAN));
-    assert!(!result.consumed);
-    assert!(matches!(engine.state(), InputState::Conversion { .. }));
-    assert!(engine.mode.current() == InputMode::Katakana);
-    // The conversion reading must not have been katakana-baked
-    assert_eq!(engine.input_buf.reading(), "かか");
-
-    // Escape back to Composing: the typed hiragana reading is intact
-    engine.process_key(&press_key(Keysym::ESCAPE));
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
 }
 
 #[test]
