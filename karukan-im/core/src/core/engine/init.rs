@@ -78,7 +78,8 @@ impl InputMethodEngine {
     /// has: romaji conversion, dictionaries, learning cache, rewriters.
     pub fn init_from_settings(&mut self, settings: &Settings) -> Result<()> {
         tracing::info!(
-            "Karukan init: model={:?}, light_model={:?}, strategy={:?}",
+            "Karukan {} init: model={:?}, light_model={:?}, strategy={:?}",
+            karukan_engine::VERSION,
             settings.conversion.model,
             settings.conversion.light_model,
             settings.conversion.strategy,

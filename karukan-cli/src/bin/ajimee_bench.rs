@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 /// AJIMEE-Bench evaluation for karukan-engine
 #[derive(Parser)]
-#[command(name = "ajimee-bench")]
+#[command(name = "ajimee-bench", version = karukan_engine::VERSION)]
 struct Cli {
     /// Path to evaluation_items.json
     bench_path: PathBuf,

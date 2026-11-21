@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 /// karukan dictionary tool — build and view dictionaries.
 #[derive(Parser, Debug)]
-#[command(name = "karukan-dict")]
+#[command(name = "karukan-dict", version = karukan_engine::VERSION)]
 #[command(about = "karukan dictionary tool — build and view dictionaries")]
 struct Cli {
     #[command(subcommand)]

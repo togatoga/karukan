@@ -6,6 +6,14 @@ Linux向け日本語IME（fcitx5アドオン）。[karukan-im](../core/) エン�
 
 ## Install
 
+#### パッケージ作成者の方へ
+
+バージョンはリポジトリ直下の `Cargo.toml` の `[workspace.package] version` が唯一の正です。git のチェックアウトからビルドするとコミットが付き（`0.1.0+g1396bb2`）、tarball からビルドすると `0.1.0` だけになります。環境変数 `KARUKAN_VERSION` を設定すると、その文字列がそのまま使われます。この値は「ばーじょん」の変換候補と、起動時のログに出ます。
+
+```bash
+KARUKAN_VERSION=0.1.0-1.6 cargo build --release -p karukan-fcitx5
+```
+
 ### Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install)

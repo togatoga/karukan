@@ -21,7 +21,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Karukan kana-kanji conversion server
 #[derive(Parser, Debug)]
-#[command(name = "karukan-server")]
+#[command(name = "karukan-server", version = karukan_engine::VERSION)]
 #[command(about = "Japanese kana-kanji conversion server", long_about = None)]
 struct Args {
     /// Enable verbose logging (debug level)

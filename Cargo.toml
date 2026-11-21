@@ -3,6 +3,9 @@ members = ["karukan-engine", "karukan-cli", "karukan-im/core", "karukan-im/fcitx
 resolver = "3"
 
 [workspace.package]
+# The single source of the karukan version: every crate, the fcitx5 addon
+# (CMake) and the macOS bundle (Makefile) read it from here.
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.92"
 license = "MIT OR Apache-2.0"

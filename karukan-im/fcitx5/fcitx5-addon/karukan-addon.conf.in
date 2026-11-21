@@ -5,4 +5,4 @@ Library=karukan
 Type=SharedLibrary
 OnDemand=True
 Configurable=True
-Version=0.1.0
+Version=@PROJECT_VERSION@
