@@ -370,3 +370,66 @@ fn test_engine_config_live_conversion_enabled() {
     let engine = InputMethodEngine::with_config(config);
     assert!(engine.live.enabled);
 }
+
+/// Live conversion with the model's answers for にほ… fixed.
+fn nihon_engine() -> InputMethodEngine {
+    let mut engine = make_live_conversion_engine();
+    seed_model_cache(&mut engine, "ニホ", "", &["日保"]);
+    seed_model_cache(&mut engine, "ニホン", "", &["日本"]);
+    seed_model_cache(&mut engine, "ニホニ", "", &["日保に"]);
+    seed_model_cache(&mut engine, "ニホニャ", "", &["日保にゃ"]);
+    engine
+}
+
+fn type_and_show(engine: &mut InputMethodEngine, keys: &str) -> String {
+    for ch in keys.chars() {
+        engine.process_key(&press(ch));
+    }
+    engine
+        .preedit()
+        .map(|p| p.text().to_string())
+        .unwrap_or_default()
+}
+
+#[test]
+fn test_trailing_n_converts_as_n_kana() {
+    // A lone n at the end is converted as ん ahead of time: nihon shows
+    // 日本, not 日保n.
+    let mut engine = nihon_engine();
+    assert_eq!(type_and_show(&mut engine, "nihon"), "日本");
+}
+
+#[test]
+fn test_next_key_rewrites_the_trailing_n() {
+    // The ん is only shown: the n is still a live key, so the next key
+    // decides what it becomes.
+    let mut engine = nihon_engine();
+    assert_eq!(type_and_show(&mut engine, "nihoni"), "日保に");
+
+    let mut engine = nihon_engine();
+    assert_eq!(type_and_show(&mut engine, "nihony"), "日保ny");
+    assert_eq!(type_and_show(&mut engine, "a"), "日保にゃ");
+}
+
+#[test]
+fn test_trailing_n_commits_and_converts_as_shown() {
+    let mut engine = nihon_engine();
+    type_and_show(&mut engine, "nihon");
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "日本")),
+        "{:?}",
+        result.actions
+    );
+
+    let mut engine = nihon_engine();
+    type_and_show(&mut engine, "nihon");
+    engine.process_key(&press_key(Keysym::SPACE));
+    let head = engine
+        .candidates()
+        .and_then(|l| l.candidates().first().cloned());
+    assert_eq!(head.map(|c| c.text).as_deref(), Some("日本"));
+}
