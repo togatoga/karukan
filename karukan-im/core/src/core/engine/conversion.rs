@@ -159,9 +159,15 @@ impl InputMethodEngine {
     /// conversion window, settled at the configured width.
     fn to_conversion_candidate_list(
         &self,
-        candidates: Vec<AnnotatedCandidate>,
+        mut candidates: Vec<AnnotatedCandidate>,
         reading: &str,
     ) -> CandidateList {
+        // A setting typed by name sits second: the plain conversion stays
+        // first, so writing the word itself is unchanged. Inserted here so a
+        // list rebuilt in place (Ctrl+Backspace) keeps it too.
+        if let Some(command) = self.command_candidate(reading) {
+            candidates.insert(candidates.len().min(1), command);
+        }
         self.settle_candidates(
             candidates
                 .into_iter()
@@ -824,6 +830,9 @@ impl InputMethodEngine {
 
     /// Commit the current conversion
     fn commit_conversion(&mut self) -> EngineResult {
+        if let Some(result) = self.run_selected_command() {
+            return result;
+        }
         let Some((text, reading)) = self.selected_conversion_info() else {
             return EngineResult::not_consumed();
         };

@@ -113,7 +113,10 @@ pub struct KarukanEngine {
 
 impl KarukanEngine {
     fn new() -> Self {
-        let settings = Settings::load_or_default();
+        Self::with_settings(Settings::load_or_default())
+    }
+
+    fn with_settings(settings: Settings) -> Self {
         let config = EngineConfig::from_settings(&settings);
         let engine = InputMethodEngine::with_config(config);
         Self {

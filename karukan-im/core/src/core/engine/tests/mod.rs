@@ -10,6 +10,7 @@ mod basic;
 mod candidate_window;
 mod candidates;
 mod chunks;
+mod command;
 mod conversion;
 mod cursor;
 mod date;

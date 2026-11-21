@@ -91,20 +91,6 @@ fn test_aux_indicator_shows_persona_only_in_verbose_mode() {
 }
 
 #[test]
-fn test_verbose_toggle_reveals_persona_in_place() {
-    // Ctrl+Shift+V re-renders the aux line on the spot, so the persona
-    // appears and disappears with the toggle mid-composition.
-    let mut engine = persona_engine("太郎");
-    engine.process_key(&press('a'));
-    let result = engine.process_key(&press_ctrl_shift(Keysym('V' as u32)));
-    let aux = last_aux_text(&result).expect("aux text action");
-    assert!(aux.contains("[あ]P:太郎"), "aux was: {aux}");
-    let result = engine.process_key(&press_ctrl_shift(Keysym('V' as u32)));
-    let aux = last_aux_text(&result).expect("aux text action");
-    assert!(!aux.contains("P:"), "aux was: {aux}");
-}
-
-#[test]
 fn test_persona_applies_to_every_chunk_lctx() {
     // Chunked live conversion: each chunk's lctx gets the same persona
     // prefix, with the preceding chunks' converted text after the space.

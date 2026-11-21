@@ -109,7 +109,7 @@ pub struct EngineConfig {
     pub timeout_ms: u64,
     /// Conversion strategy mode (adaptive, light, main)
     pub strategy: StrategyMode,
-    /// Show the detailed aux line (Ctrl+Shift+V toggles it).
+    /// Show the detailed aux line (でばっぐもーど switches it).
     pub verbose: bool,
     /// Whether live conversion is enabled at engine startup
     pub live_conversion: bool,

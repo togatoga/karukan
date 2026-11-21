@@ -1138,26 +1138,23 @@ fn test_conversion_aux_counter_uses_the_beam_budget() {
 }
 
 #[test]
-fn test_verbose_toggle_keeps_what_conversion_needs() {
-    // Ctrl+Shift+V only adds or removes the debug details. What the user
-    // needs to convert — the state, the reading, the candidate's source —
-    // stays either way.
-    let mut engine = engine_with_learned("あい", "愛");
-    engine.process_key(&press('a'));
-    engine.process_key(&press('i'));
-    let quiet = last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux");
-    assert!(quiet.contains("[変換]"), "state: {quiet}");
-    assert!(quiet.contains("あい"), "reading: {quiet}");
-    assert!(quiet.contains("📝"), "candidate source: {quiet}");
-    assert!(!quiet.contains("推論"), "timing is a detail: {quiet}");
-
-    // The toggle re-renders the line being looked at, so the details show
-    // now rather than on the next keystroke.
-    let loud = last_aux_text(&engine.process_key(&press_ctrl_shift(Keysym::KEY_V))).expect("aux");
-    assert!(loud.contains("[変換]"), "state: {loud}");
-    assert!(loud.contains("あい"), "reading: {loud}");
-    assert!(loud.contains("📝"), "candidate source: {loud}");
-    assert!(loud.contains("推論"), "timing now shown: {loud}");
+fn test_verbose_keeps_what_conversion_needs() {
+    // Verbose mode only adds the debug details. What the user needs to
+    // convert — the state, the reading, the candidate's source — is on the
+    // line either way.
+    let convert = |verbose: bool| {
+        let mut engine = engine_with_learned("あい", "愛");
+        engine.config.verbose = verbose;
+        engine.process_key(&press('a'));
+        engine.process_key(&press('i'));
+        last_aux_text(&engine.process_key(&press_key(Keysym::SPACE))).expect("aux")
+    };
+    for (verbose, aux) in [(false, convert(false)), (true, convert(true))] {
+        assert!(aux.contains("[変換]"), "state: {aux}");
+        assert!(aux.contains("あい"), "reading: {aux}");
+        assert!(aux.contains("📝"), "candidate source: {aux}");
+        assert_eq!(aux.contains("推論"), verbose, "timing is a detail: {aux}");
+    }
 }
 
 #[test]

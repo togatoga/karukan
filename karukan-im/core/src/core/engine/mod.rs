@@ -5,6 +5,7 @@
 
 mod cache;
 mod chunk;
+mod command;
 mod conversion;
 mod cursor;
 mod display;
@@ -333,6 +334,12 @@ impl InputMethodEngine {
         if candidates.select_on_page(digit).is_none() {
             return EngineResult::consumed();
         }
+        if let Some(result) = self.run_selected_command() {
+            return result;
+        }
+        let Some(candidates) = self.shown_candidates_mut() else {
+            return EngineResult::consumed();
+        };
         let Some(selected) = candidates.selected() else {
             return EngineResult::consumed();
         };
@@ -627,14 +634,6 @@ impl InputMethodEngine {
             return self.toggle_live_conversion();
         }
 
-        // Ctrl+Shift+V: toggle the verbose aux line (works in all states)
-        if key.modifiers.control_key
-            && key.modifiers.shift_key
-            && (key.keysym == Keysym::KEY_V || key.keysym == Keysym::KEY_V_UPPER)
-        {
-            return self.toggle_verbose();
-        }
-
         // Reset adaptive model flag when starting a new word (first key in Empty state)
         if matches!(self.state, InputState::Empty) {
             self.metrics.adaptive_use_light_model = false;
@@ -704,6 +703,13 @@ impl InputMethodEngine {
                 self.record_learning(&reading, &text);
                 self.end_composition();
                 text
+            }
+            // The frontends commit this way when focus leaves. A selected
+            // command is not typed as its label, and since no confirmation
+            // could be seen, the setting is left as it was.
+            InputState::Conversion { .. } if self.selected_command().is_some() => {
+                self.end_composition();
+                String::new()
             }
             InputState::Conversion { .. } => {
                 let (text, reading) = self

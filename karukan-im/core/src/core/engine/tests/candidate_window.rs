@@ -64,8 +64,6 @@ fn test_shortcuts_open_no_window() {
     let mut engine = conversion_window_engine();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    let verbose = engine.process_key(&press_ctrl_shift(Keysym::KEY_V));
-    assert!(!opens_window(&verbose), "verbose: {:?}", verbose.actions);
     let live_off = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
     assert!(!opens_window(&live_off), "live off: {:?}", live_off.actions);
     let live_on = engine.process_key(&press_ctrl_shift(Keysym::KEY_L));
