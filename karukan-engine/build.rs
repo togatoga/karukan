@@ -58,9 +58,11 @@ fn commit() -> Option<String> {
     }
     for path in watched {
         if let Some(p) = git(&manifest, &["rev-parse", "--git-path", &path]) {
-            let p = manifest.join(p);
-            if p.exists() {
-                println!("cargo:rerun-if-changed={}", p.display());
+            // A branch kept only in packed-refs has no file of its own until
+            // the next commit writes one; watching the nearest directory that
+            // exists (Cargo scans it) sees that file appear.
+            if let Some(existing) = manifest.join(p).ancestors().find(|a| a.exists()) {
+                println!("cargo:rerun-if-changed={}", existing.display());
             }
         }
     }
