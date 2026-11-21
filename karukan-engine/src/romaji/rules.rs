@@ -377,207 +377,207 @@ mod tests {
     #[test]
     fn test_basic_vowels() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("a").output.unwrap(), "あ");
-        assert_eq!(trie.search_longest("i").output.unwrap(), "い");
-        assert_eq!(trie.search_longest("u").output.unwrap(), "う");
-        assert_eq!(trie.search_longest("e").output.unwrap(), "え");
-        assert_eq!(trie.search_longest("o").output.unwrap(), "お");
+        assert_eq!(trie.search_longest("a".chars()).output.unwrap(), "あ");
+        assert_eq!(trie.search_longest("i".chars()).output.unwrap(), "い");
+        assert_eq!(trie.search_longest("u".chars()).output.unwrap(), "う");
+        assert_eq!(trie.search_longest("e".chars()).output.unwrap(), "え");
+        assert_eq!(trie.search_longest("o".chars()).output.unwrap(), "お");
     }
 
     #[test]
     fn test_k_row() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("ka").output.unwrap(), "か");
-        assert_eq!(trie.search_longest("ki").output.unwrap(), "き");
-        assert_eq!(trie.search_longest("ku").output.unwrap(), "く");
-        assert_eq!(trie.search_longest("ke").output.unwrap(), "け");
-        assert_eq!(trie.search_longest("ko").output.unwrap(), "こ");
+        assert_eq!(trie.search_longest("ka".chars()).output.unwrap(), "か");
+        assert_eq!(trie.search_longest("ki".chars()).output.unwrap(), "き");
+        assert_eq!(trie.search_longest("ku".chars()).output.unwrap(), "く");
+        assert_eq!(trie.search_longest("ke".chars()).output.unwrap(), "け");
+        assert_eq!(trie.search_longest("ko".chars()).output.unwrap(), "こ");
     }
 
     #[test]
     fn test_youon() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("kya").output.unwrap(), "きゃ");
-        assert_eq!(trie.search_longest("sha").output.unwrap(), "しゃ");
-        assert_eq!(trie.search_longest("cha").output.unwrap(), "ちゃ");
-        assert_eq!(trie.search_longest("nya").output.unwrap(), "にゃ");
-        assert_eq!(trie.search_longest("hya").output.unwrap(), "ひゃ");
-        assert_eq!(trie.search_longest("mya").output.unwrap(), "みゃ");
-        assert_eq!(trie.search_longest("rya").output.unwrap(), "りゃ");
-        assert_eq!(trie.search_longest("gya").output.unwrap(), "ぎゃ");
-        assert_eq!(trie.search_longest("ja").output.unwrap(), "じゃ");
-        assert_eq!(trie.search_longest("bya").output.unwrap(), "びゃ");
-        assert_eq!(trie.search_longest("pya").output.unwrap(), "ぴゃ");
+        assert_eq!(trie.search_longest("kya".chars()).output.unwrap(), "きゃ");
+        assert_eq!(trie.search_longest("sha".chars()).output.unwrap(), "しゃ");
+        assert_eq!(trie.search_longest("cha".chars()).output.unwrap(), "ちゃ");
+        assert_eq!(trie.search_longest("nya".chars()).output.unwrap(), "にゃ");
+        assert_eq!(trie.search_longest("hya".chars()).output.unwrap(), "ひゃ");
+        assert_eq!(trie.search_longest("mya".chars()).output.unwrap(), "みゃ");
+        assert_eq!(trie.search_longest("rya".chars()).output.unwrap(), "りゃ");
+        assert_eq!(trie.search_longest("gya".chars()).output.unwrap(), "ぎゃ");
+        assert_eq!(trie.search_longest("ja".chars()).output.unwrap(), "じゃ");
+        assert_eq!(trie.search_longest("bya".chars()).output.unwrap(), "びゃ");
+        assert_eq!(trie.search_longest("pya".chars()).output.unwrap(), "ぴゃ");
     }
 
     #[test]
     fn test_small_characters() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("la").output.unwrap(), "ぁ");
-        assert_eq!(trie.search_longest("li").output.unwrap(), "ぃ");
-        assert_eq!(trie.search_longest("lu").output.unwrap(), "ぅ");
-        assert_eq!(trie.search_longest("le").output.unwrap(), "ぇ");
-        assert_eq!(trie.search_longest("lo").output.unwrap(), "ぉ");
-        assert_eq!(trie.search_longest("lya").output.unwrap(), "ゃ");
-        assert_eq!(trie.search_longest("lyu").output.unwrap(), "ゅ");
-        assert_eq!(trie.search_longest("lyo").output.unwrap(), "ょ");
-        assert_eq!(trie.search_longest("ltu").output.unwrap(), "っ");
+        assert_eq!(trie.search_longest("la".chars()).output.unwrap(), "ぁ");
+        assert_eq!(trie.search_longest("li".chars()).output.unwrap(), "ぃ");
+        assert_eq!(trie.search_longest("lu".chars()).output.unwrap(), "ぅ");
+        assert_eq!(trie.search_longest("le".chars()).output.unwrap(), "ぇ");
+        assert_eq!(trie.search_longest("lo".chars()).output.unwrap(), "ぉ");
+        assert_eq!(trie.search_longest("lya".chars()).output.unwrap(), "ゃ");
+        assert_eq!(trie.search_longest("lyu".chars()).output.unwrap(), "ゅ");
+        assert_eq!(trie.search_longest("lyo".chars()).output.unwrap(), "ょ");
+        assert_eq!(trie.search_longest("ltu".chars()).output.unwrap(), "っ");
     }
 
     #[test]
     fn test_n_variants() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("nn").output.unwrap(), "ん");
-        assert_eq!(trie.search_longest("n'").output.unwrap(), "ん");
-        assert_eq!(trie.search_longest("xn").output.unwrap(), "ん");
+        assert_eq!(trie.search_longest("nn".chars()).output.unwrap(), "ん");
+        assert_eq!(trie.search_longest("n'".chars()).output.unwrap(), "ん");
+        assert_eq!(trie.search_longest("xn".chars()).output.unwrap(), "ん");
     }
 
     #[test]
     fn test_c_row() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("ca").output.unwrap(), "か");
-        assert_eq!(trie.search_longest("ci").output.unwrap(), "し");
-        assert_eq!(trie.search_longest("cu").output.unwrap(), "く");
-        assert_eq!(trie.search_longest("ce").output.unwrap(), "せ");
-        assert_eq!(trie.search_longest("co").output.unwrap(), "こ");
-        assert_eq!(trie.search_longest("cya").output.unwrap(), "ちゃ");
-        assert_eq!(trie.search_longest("cyu").output.unwrap(), "ちゅ");
-        assert_eq!(trie.search_longest("cyo").output.unwrap(), "ちょ");
+        assert_eq!(trie.search_longest("ca".chars()).output.unwrap(), "か");
+        assert_eq!(trie.search_longest("ci".chars()).output.unwrap(), "し");
+        assert_eq!(trie.search_longest("cu".chars()).output.unwrap(), "く");
+        assert_eq!(trie.search_longest("ce".chars()).output.unwrap(), "せ");
+        assert_eq!(trie.search_longest("co".chars()).output.unwrap(), "こ");
+        assert_eq!(trie.search_longest("cya".chars()).output.unwrap(), "ちゃ");
+        assert_eq!(trie.search_longest("cyu".chars()).output.unwrap(), "ちゅ");
+        assert_eq!(trie.search_longest("cyo".chars()).output.unwrap(), "ちょ");
     }
 
     #[test]
     fn test_q_row() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("qa").output.unwrap(), "くぁ");
-        assert_eq!(trie.search_longest("qi").output.unwrap(), "くぃ");
-        assert_eq!(trie.search_longest("qu").output.unwrap(), "く");
-        assert_eq!(trie.search_longest("qe").output.unwrap(), "くぇ");
-        assert_eq!(trie.search_longest("qo").output.unwrap(), "くぉ");
+        assert_eq!(trie.search_longest("qa".chars()).output.unwrap(), "くぁ");
+        assert_eq!(trie.search_longest("qi".chars()).output.unwrap(), "くぃ");
+        assert_eq!(trie.search_longest("qu".chars()).output.unwrap(), "く");
+        assert_eq!(trie.search_longest("qe".chars()).output.unwrap(), "くぇ");
+        assert_eq!(trie.search_longest("qo".chars()).output.unwrap(), "くぉ");
     }
 
     #[test]
     fn test_kw_gw_series() {
         let trie = build_rules(SymbolStyle::default());
         // kw series
-        assert_eq!(trie.search_longest("kwa").output.unwrap(), "くぁ");
-        assert_eq!(trie.search_longest("kwi").output.unwrap(), "くぃ");
-        assert_eq!(trie.search_longest("kwu").output.unwrap(), "くぅ");
-        assert_eq!(trie.search_longest("kwe").output.unwrap(), "くぇ");
-        assert_eq!(trie.search_longest("kwo").output.unwrap(), "くぉ");
+        assert_eq!(trie.search_longest("kwa".chars()).output.unwrap(), "くぁ");
+        assert_eq!(trie.search_longest("kwi".chars()).output.unwrap(), "くぃ");
+        assert_eq!(trie.search_longest("kwu".chars()).output.unwrap(), "くぅ");
+        assert_eq!(trie.search_longest("kwe".chars()).output.unwrap(), "くぇ");
+        assert_eq!(trie.search_longest("kwo".chars()).output.unwrap(), "くぉ");
         // gw series
-        assert_eq!(trie.search_longest("gwa").output.unwrap(), "ぐぁ");
-        assert_eq!(trie.search_longest("gwi").output.unwrap(), "ぐぃ");
-        assert_eq!(trie.search_longest("gwu").output.unwrap(), "ぐぅ");
-        assert_eq!(trie.search_longest("gwe").output.unwrap(), "ぐぇ");
-        assert_eq!(trie.search_longest("gwo").output.unwrap(), "ぐぉ");
+        assert_eq!(trie.search_longest("gwa".chars()).output.unwrap(), "ぐぁ");
+        assert_eq!(trie.search_longest("gwi".chars()).output.unwrap(), "ぐぃ");
+        assert_eq!(trie.search_longest("gwu".chars()).output.unwrap(), "ぐぅ");
+        assert_eq!(trie.search_longest("gwe".chars()).output.unwrap(), "ぐぇ");
+        assert_eq!(trie.search_longest("gwo".chars()).output.unwrap(), "ぐぉ");
     }
 
     #[test]
     fn test_sw_zw_series() {
         let trie = build_rules(SymbolStyle::default());
         // sw series
-        assert_eq!(trie.search_longest("swa").output.unwrap(), "すぁ");
-        assert_eq!(trie.search_longest("swi").output.unwrap(), "すぃ");
-        assert_eq!(trie.search_longest("swu").output.unwrap(), "すぅ");
-        assert_eq!(trie.search_longest("swe").output.unwrap(), "すぇ");
-        assert_eq!(trie.search_longest("swo").output.unwrap(), "すぉ");
+        assert_eq!(trie.search_longest("swa".chars()).output.unwrap(), "すぁ");
+        assert_eq!(trie.search_longest("swi".chars()).output.unwrap(), "すぃ");
+        assert_eq!(trie.search_longest("swu".chars()).output.unwrap(), "すぅ");
+        assert_eq!(trie.search_longest("swe".chars()).output.unwrap(), "すぇ");
+        assert_eq!(trie.search_longest("swo".chars()).output.unwrap(), "すぉ");
         // zw series
-        assert_eq!(trie.search_longest("zwa").output.unwrap(), "ずぁ");
-        assert_eq!(trie.search_longest("zwi").output.unwrap(), "ずぃ");
-        assert_eq!(trie.search_longest("zwu").output.unwrap(), "ずぅ");
-        assert_eq!(trie.search_longest("zwe").output.unwrap(), "ずぇ");
-        assert_eq!(trie.search_longest("zwo").output.unwrap(), "ずぉ");
+        assert_eq!(trie.search_longest("zwa".chars()).output.unwrap(), "ずぁ");
+        assert_eq!(trie.search_longest("zwi".chars()).output.unwrap(), "ずぃ");
+        assert_eq!(trie.search_longest("zwu".chars()).output.unwrap(), "ずぅ");
+        assert_eq!(trie.search_longest("zwe".chars()).output.unwrap(), "ずぇ");
+        assert_eq!(trie.search_longest("zwo".chars()).output.unwrap(), "ずぉ");
     }
 
     #[test]
     fn test_th_dh_tw_dw_series() {
         let trie = build_rules(SymbolStyle::default());
         // th series
-        assert_eq!(trie.search_longest("tha").output.unwrap(), "てゃ");
-        assert_eq!(trie.search_longest("thi").output.unwrap(), "てぃ");
-        assert_eq!(trie.search_longest("t'i").output.unwrap(), "てぃ");
-        assert_eq!(trie.search_longest("thu").output.unwrap(), "てゅ");
-        assert_eq!(trie.search_longest("the").output.unwrap(), "てぇ");
-        assert_eq!(trie.search_longest("tho").output.unwrap(), "てょ");
+        assert_eq!(trie.search_longest("tha".chars()).output.unwrap(), "てゃ");
+        assert_eq!(trie.search_longest("thi".chars()).output.unwrap(), "てぃ");
+        assert_eq!(trie.search_longest("t'i".chars()).output.unwrap(), "てぃ");
+        assert_eq!(trie.search_longest("thu".chars()).output.unwrap(), "てゅ");
+        assert_eq!(trie.search_longest("the".chars()).output.unwrap(), "てぇ");
+        assert_eq!(trie.search_longest("tho".chars()).output.unwrap(), "てょ");
         // dh series
-        assert_eq!(trie.search_longest("dha").output.unwrap(), "でゃ");
-        assert_eq!(trie.search_longest("dhi").output.unwrap(), "でぃ");
-        assert_eq!(trie.search_longest("d'i").output.unwrap(), "でぃ");
-        assert_eq!(trie.search_longest("dhu").output.unwrap(), "でゅ");
+        assert_eq!(trie.search_longest("dha".chars()).output.unwrap(), "でゃ");
+        assert_eq!(trie.search_longest("dhi".chars()).output.unwrap(), "でぃ");
+        assert_eq!(trie.search_longest("d'i".chars()).output.unwrap(), "でぃ");
+        assert_eq!(trie.search_longest("dhu".chars()).output.unwrap(), "でゅ");
         // tw series
-        assert_eq!(trie.search_longest("twa").output.unwrap(), "とぁ");
-        assert_eq!(trie.search_longest("twi").output.unwrap(), "とぃ");
-        assert_eq!(trie.search_longest("twu").output.unwrap(), "とぅ");
-        assert_eq!(trie.search_longest("t'u").output.unwrap(), "とぅ");
+        assert_eq!(trie.search_longest("twa".chars()).output.unwrap(), "とぁ");
+        assert_eq!(trie.search_longest("twi".chars()).output.unwrap(), "とぃ");
+        assert_eq!(trie.search_longest("twu".chars()).output.unwrap(), "とぅ");
+        assert_eq!(trie.search_longest("t'u".chars()).output.unwrap(), "とぅ");
         // dw series
-        assert_eq!(trie.search_longest("dwa").output.unwrap(), "どぁ");
-        assert_eq!(trie.search_longest("dwi").output.unwrap(), "どぃ");
-        assert_eq!(trie.search_longest("dwu").output.unwrap(), "どぅ");
-        assert_eq!(trie.search_longest("d'u").output.unwrap(), "どぅ");
+        assert_eq!(trie.search_longest("dwa".chars()).output.unwrap(), "どぁ");
+        assert_eq!(trie.search_longest("dwi".chars()).output.unwrap(), "どぃ");
+        assert_eq!(trie.search_longest("dwu".chars()).output.unwrap(), "どぅ");
+        assert_eq!(trie.search_longest("d'u".chars()).output.unwrap(), "どぅ");
     }
 
     #[test]
     fn test_hw_series() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("hwa").output.unwrap(), "ふぁ");
-        assert_eq!(trie.search_longest("hwi").output.unwrap(), "ふぃ");
-        assert_eq!(trie.search_longest("hwe").output.unwrap(), "ふぇ");
-        assert_eq!(trie.search_longest("hwo").output.unwrap(), "ふぉ");
-        assert_eq!(trie.search_longest("hwyu").output.unwrap(), "ふゅ");
+        assert_eq!(trie.search_longest("hwa".chars()).output.unwrap(), "ふぁ");
+        assert_eq!(trie.search_longest("hwi".chars()).output.unwrap(), "ふぃ");
+        assert_eq!(trie.search_longest("hwe".chars()).output.unwrap(), "ふぇ");
+        assert_eq!(trie.search_longest("hwo".chars()).output.unwrap(), "ふぉ");
+        assert_eq!(trie.search_longest("hwyu".chars()).output.unwrap(), "ふゅ");
     }
 
     #[test]
     fn test_w_row_modern() {
         let trie = build_rules(SymbolStyle::default());
         // Modern wi/we should be うぃ/うぇ
-        assert_eq!(trie.search_longest("wi").output.unwrap(), "うぃ");
-        assert_eq!(trie.search_longest("we").output.unwrap(), "うぇ");
+        assert_eq!(trie.search_longest("wi".chars()).output.unwrap(), "うぃ");
+        assert_eq!(trie.search_longest("we".chars()).output.unwrap(), "うぇ");
         // Historical wyi/wye should be ゐ/ゑ
-        assert_eq!(trie.search_longest("wyi").output.unwrap(), "ゐ");
-        assert_eq!(trie.search_longest("wye").output.unwrap(), "ゑ");
+        assert_eq!(trie.search_longest("wyi".chars()).output.unwrap(), "ゐ");
+        assert_eq!(trie.search_longest("wye".chars()).output.unwrap(), "ゑ");
     }
 
     #[test]
     fn test_small_ka_ke() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("xka").output.unwrap(), "ヵ");
-        assert_eq!(trie.search_longest("xke").output.unwrap(), "ヶ");
-        assert_eq!(trie.search_longest("lka").output.unwrap(), "ヵ");
-        assert_eq!(trie.search_longest("lke").output.unwrap(), "ヶ");
+        assert_eq!(trie.search_longest("xka".chars()).output.unwrap(), "ヵ");
+        assert_eq!(trie.search_longest("xke".chars()).output.unwrap(), "ヶ");
+        assert_eq!(trie.search_longest("lka".chars()).output.unwrap(), "ヵ");
+        assert_eq!(trie.search_longest("lke".chars()).output.unwrap(), "ヶ");
     }
 
     #[test]
     fn test_z_special_symbols() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("z/").output.unwrap(), "・");
-        assert_eq!(trie.search_longest("z.").output.unwrap(), "…");
-        assert_eq!(trie.search_longest("z,").output.unwrap(), "‥");
-        assert_eq!(trie.search_longest("zh").output.unwrap(), "←");
-        assert_eq!(trie.search_longest("zj").output.unwrap(), "↓");
-        assert_eq!(trie.search_longest("zk").output.unwrap(), "↑");
-        assert_eq!(trie.search_longest("zl").output.unwrap(), "→");
-        assert_eq!(trie.search_longest("z-").output.unwrap(), "〜");
-        assert_eq!(trie.search_longest("z[").output.unwrap(), "『");
-        assert_eq!(trie.search_longest("z]").output.unwrap(), "』");
+        assert_eq!(trie.search_longest("z/".chars()).output.unwrap(), "・");
+        assert_eq!(trie.search_longest("z.".chars()).output.unwrap(), "…");
+        assert_eq!(trie.search_longest("z,".chars()).output.unwrap(), "‥");
+        assert_eq!(trie.search_longest("zh".chars()).output.unwrap(), "←");
+        assert_eq!(trie.search_longest("zj".chars()).output.unwrap(), "↓");
+        assert_eq!(trie.search_longest("zk".chars()).output.unwrap(), "↑");
+        assert_eq!(trie.search_longest("zl".chars()).output.unwrap(), "→");
+        assert_eq!(trie.search_longest("z-".chars()).output.unwrap(), "〜");
+        assert_eq!(trie.search_longest("z[".chars()).output.unwrap(), "『");
+        assert_eq!(trie.search_longest("z]".chars()).output.unwrap(), "』");
     }
 
     #[test]
     fn test_brackets_and_punctuation() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("[").output.unwrap(), "「");
-        assert_eq!(trie.search_longest("]").output.unwrap(), "」");
-        assert_eq!(trie.search_longest(",").output.unwrap(), "、");
-        assert_eq!(trie.search_longest(".").output.unwrap(), "。");
-        assert_eq!(trie.search_longest("-").output.unwrap(), "ー");
-        assert_eq!(trie.search_longest("~").output.unwrap(), "〜");
+        assert_eq!(trie.search_longest("[".chars()).output.unwrap(), "「");
+        assert_eq!(trie.search_longest("]".chars()).output.unwrap(), "」");
+        assert_eq!(trie.search_longest(",".chars()).output.unwrap(), "、");
+        assert_eq!(trie.search_longest(".".chars()).output.unwrap(), "。");
+        assert_eq!(trie.search_longest("-".chars()).output.unwrap(), "ー");
+        assert_eq!(trie.search_longest("~".chars()).output.unwrap(), "〜");
     }
 
     #[test]
     fn test_tsu_variants() {
         let trie = build_rules(SymbolStyle::default());
-        assert_eq!(trie.search_longest("tsa").output.unwrap(), "つぁ");
-        assert_eq!(trie.search_longest("tsi").output.unwrap(), "つぃ");
-        assert_eq!(trie.search_longest("tse").output.unwrap(), "つぇ");
-        assert_eq!(trie.search_longest("tso").output.unwrap(), "つぉ");
+        assert_eq!(trie.search_longest("tsa".chars()).output.unwrap(), "つぁ");
+        assert_eq!(trie.search_longest("tsi".chars()).output.unwrap(), "つぃ");
+        assert_eq!(trie.search_longest("tse".chars()).output.unwrap(), "つぇ");
+        assert_eq!(trie.search_longest("tso".chars()).output.unwrap(), "つぉ");
     }
 }

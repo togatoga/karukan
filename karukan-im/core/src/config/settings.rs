@@ -128,7 +128,7 @@ pub enum CandidateWindow {
 /// Aux-line settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplaySettings {
-    /// Start with the detailed aux line (Ctrl+Shift+V toggles it live):
+    /// Start with the detailed aux line (でばっぐもーど switches it):
     /// which part the alternatives cover, inference timing, the model that
     /// ran, and the context handed to it.
     pub verbose: bool,
@@ -210,7 +210,7 @@ pub struct ConversionSettings {
     pub timeout_ms: u64,
     /// Number of threads for llama.cpp inference (0 = all cores, llama.cpp default)
     pub n_threads: u32,
-    /// Enable live conversion at startup (Ctrl+Shift+L still toggles at runtime)
+    /// Enable live conversion at startup (らいぶへんかん switches it at runtime)
     pub live_conversion: bool,
 }
 

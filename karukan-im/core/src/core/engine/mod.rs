@@ -14,9 +14,9 @@ mod guard;
 mod init;
 mod input;
 mod input_buffer;
-mod mode;
 mod model;
 mod strategy;
+mod transliterate;
 mod types;
 
 pub use types::*;
@@ -391,12 +391,6 @@ impl InputMethodEngine {
         preedit
     }
 
-    /// Convert hiragana in input_buf to katakana permanently.
-    /// Called when leaving Katakana mode so the preedit doesn't revert.
-    fn bake_katakana(&mut self) {
-        self.input_buf.bake_katakana();
-    }
-
     /// Settle the pending romaji segment into the composed text at the cursor
     fn settle_romaji(&mut self) {
         self.edit_with_chunk_breaks(|e| e.input_buf.settle_romaji(&e.converters.romaji));
@@ -480,9 +474,8 @@ impl InputMethodEngine {
         if key.keysym == Keysym::HENKAN && key.modifiers.any() {
             return None;
         }
-        // While a conversion is in flight (candidate window open) the kana
-        // modes cannot toggle: switching would katakana-bake the conversion
-        // *reading* (not the preedit) and defeat the Emoji-mode learning
+        // While a conversion is in flight (candidate window open) Emoji
+        // cannot toggle: switching would defeat the Emoji-mode learning
         // guard — the commit path checks the current mode to decide whether
         // the reading is safe to record in the kana-keyed learning cache.
         // Alphabet is exempt: it only says how the next keystroke is read,
@@ -496,15 +489,10 @@ impl InputMethodEngine {
         // Only consume the key when actually switching; otherwise pass through
         // so the system can properly track modifier state.
         if key.is_press && self.mode.current() != InputMode::Hiragana {
-            // Bake katakana before switching so preedit doesn't revert. No
-            // settling otherwise — the mode switch must not touch the
-            // elements, so live romaji (`ky` typed before an alphabet word)
-            // still combines after coming back to kana mode.
-            if self.mode.current() == InputMode::Katakana {
-                self.settle_romaji();
-                self.bake_katakana();
-            }
-            self.mode.set(InputMode::Hiragana);
+            // No settling — the mode switch must not touch the elements, so
+            // live romaji (`ky` typed before an alphabet word) still combines
+            // after coming back to kana mode.
+            self.mode.exit_temporary();
             // An open candidate window keeps its own line, mode indicator
             // included: a composing line here would hide the source-filter
             // header mid-view.
@@ -547,7 +535,7 @@ impl InputMethodEngine {
     fn settle_text(&self, text: &str) -> String {
         match self.mode.current() {
             InputMode::Alphabet | InputMode::Emoji => text.to_string(),
-            InputMode::Hiragana | InputMode::Katakana => {
+            InputMode::Hiragana => {
                 // Spaces follow `[symbol] space` the way symbols follow the
                 // width rules: NFKC flattens `　` to ` ` in the prompt, so
                 // the model can only ever answer with the half-width one.

@@ -29,6 +29,7 @@ mod single_kanji;
 mod source_filter;
 mod strategy;
 mod surrounding;
+mod transliterate;
 mod width;
 
 /// Engine seeded with a learning entry `reading → surface`, no kanji model.
@@ -66,6 +67,15 @@ fn dict_from_json(json: &str) -> Dictionary {
     tmp.write_all(json.as_bytes()).unwrap();
     tmp.flush().unwrap();
     Dictionary::build_from_json(tmp.path()).unwrap()
+}
+
+/// Type `keys` one key at a time; the result of the last key.
+fn type_keys(engine: &mut InputMethodEngine, keys: &str) -> EngineResult {
+    let mut result = EngineResult::not_consumed();
+    for ch in keys.chars() {
+        result = engine.process_key(&press(ch));
+    }
+    result
 }
 
 fn press(ch: char) -> KeyEvent {

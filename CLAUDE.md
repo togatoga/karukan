@@ -142,12 +142,12 @@ cargo clippy --workspace  # Lint all crates
   - `model.rs` — Model dispatch and the cache in front of it (`run_kana_kanji_conversion`, `cached_convert`, `run_parallel_beam`, `model_candidates`)
   - `filter.rs` — Ctrl+R / Ctrl+T source-filtered candidate views (`FILTER_CYCLE`, `source_view`, `apply_candidate_filter`)
   - `guard.rs` — Overload guard: the time budget of a model call, and the rest a model takes after overrunning it (`OverloadGuard`)
+  - `transliterate.rs` — F6–F10 (and Ctrl+K, the same as F7): a conversion listing only the composition's transliterations (hiragana, full/half katakana, full/half alphanumeric), no model call. The alphanumerics are the keystrokes as typed (`InputBuffer::keystrokes`). The converter reports which keys fired each rule (`Converted::spans`, `convert_flush_spans`), so nothing is reconstructed after the fact. Every char a span wrote points at that span (`Rc<Span>`), and `keystrokes` gives a span's keys only while all its chars still stand together; once an edit breaks it up (deleting ょ from 「きょ」, typing between them), those chars give themselves, so F9/F10 never show keys that were not typed (きょ minus ょ gives き, `a` typed inside it きaょ, and deleting that `a` again gives `kyo`). Edits know nothing of this: the check happens when the keys are read. A chain table (`romaji.tsv`) keeps its live tail as display text, so its runs record their text as keys and F9/F10 leave them as written). The pressed form is stamped on the selected row (source and description), which is how a repeated key is told from a switch between forms, and why a surface shared by several forms commits with the pressed one's learnability; opening the list clears the live display like Space does, and a repeated F9/F10 steps through as typed → lower → UPPER → Capitalized. Kana forms commit as `Fallback` (learned); alphanumerics as `CandidateSource::Transliteration`, which is not learnable, so `kai` never heads later かい conversions. There is no katakana input mode: Hiragana is the only lasting `InputMode`, Alphabet and Emoji last one composition (`ModeState`), and katakana is this conversion, so the next word is hiragana again
   - `chunk/split.rs` — Where the chunk boundaries fall, engine-free: every char is classified into a `Token`, and `group_chunks` walks them once, packing them into chunks under `ChunkLimits`. Pure functions, unit-tested in place
   - `chunk/mod.rs` — What the engine does with the chunks: `chunked_auto_suggest`, the chunk-grid conversion, and the manual breaks
   - `cache.rs` — LRU conversion cache keyed by the computation: (katakana reading, lctx, model role, beam width)
   - `cursor.rs` — Cursor movement
   - `display.rs` — Preedit text display
-  - `mode.rs` — Mode switching (katakana, alphabet, live conversion)
   - `init.rs` — Dictionary setup, learning cache init, and background model loading (models load on a spawned thread; `poll_loaded_models` installs them on the next key event)
   - `strategy.rs` — Conversion strategy determination and adaptive model selection
   - `tests.rs` — Engine unit tests
@@ -174,7 +174,7 @@ Linux fcitx5 frontend. Wraps karukan-im via C FFI and exposes the engine to the 
 Swift/InputMethodKit frontend. All IME state lives in karukan-imserver (spawned as a bundled child process); Swift only adapts IMK events and renders UI.
 
 - `main.swift` — IMKServer startup, engine process spawn, wake-from-sleep restart, SIGPIPE handling
-- `KarukanInputController.swift` — IMKInputController; translates keys, applies engine actions (preedit/candidates/commit), JIS かな key and right-Command tap return to hiragana (exit katakana mode)
+- `KarukanInputController.swift` — IMKInputController; translates keys, applies engine actions (preedit/candidates/commit), JIS かな key and right-Command tap return to hiragana (exit alphabet mode)
 - `KeyCodeMap.swift` — NSEvent → XKB keysym translation (same keysym representation as fcitx5), RightCommandTapDetector
 - `resources/*.tiff` — template menu icon (か), regenerated via `swift scripts/generate_icons.swift`; `resources/{ja,en}.lproj/InfoPlist.strings` localize the input mode name shown in the input menu
 - `EngineProcess.swift` — child process lifecycle: crash restart with exponential backoff, EOF-based clean shutdown (lets the server save its learning cache)

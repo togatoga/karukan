@@ -39,13 +39,6 @@ fn user_dict_with(reading: &str, surface: &str) -> Dictionary {
     ))
 }
 
-/// Drive the engine by typing a string of characters.
-fn type_string(engine: &mut InputMethodEngine, s: &str) {
-    for ch in s.chars() {
-        engine.process_key(&press(ch));
-    }
-}
-
 /// Texts in the conversion-state candidate list.
 fn conversion_state_texts(engine: &InputMethodEngine) -> Vec<String> {
     engine
@@ -210,7 +203,7 @@ fn ellipsis_candidate_carries_three_dot_leader_description() {
     // description "三点リーダ" as its per-candidate description (not
     // duplicated into the aux text source-label slot).
     let mut engine = InputMethodEngine::new();
-    type_string(&mut engine, "..");
+    type_keys(&mut engine, "..");
     engine.process_key(&press('.'));
     engine.process_key(&press_key(Keysym::SPACE));
 
@@ -284,7 +277,7 @@ fn typing_three_dots_emits_ellipsis_in_auto_suggest_and_conversion() {
     // both in the auto-suggest list (before Space) and in the conversion
     // candidate list (after Space).
     let mut engine = InputMethodEngine::new();
-    type_string(&mut engine, "..");
+    type_keys(&mut engine, "..");
     let final_result = engine.process_key(&press('.'));
     assert_eq!(engine.input_buf.reading(), "。。。");
 
@@ -297,7 +290,7 @@ fn typing_three_dots_emits_ellipsis_in_auto_suggest_and_conversion() {
 #[test]
 fn typing_a_then_space_emits_half_width_katakana() {
     let mut engine = InputMethodEngine::new();
-    type_string(&mut engine, "a");
+    type_keys(&mut engine, "a");
 
     let result = engine.process_key(&press_key(Keysym::SPACE));
     assert!(result.consumed);

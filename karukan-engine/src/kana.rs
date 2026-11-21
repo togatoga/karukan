@@ -193,6 +193,26 @@ pub fn katakana_to_half_width(text: &str) -> String {
     out
 }
 
+/// Convert half-width katakana to full-width katakana, composing the sound
+/// marks (`ｶﾞ` → `ガ`, `ｰ` → `ー`). Everything else is left as it is, the
+/// half-width kana symbols `｡｢｣､･` included: their width is a setting.
+pub fn half_width_katakana_to_full(text: &str) -> String {
+    let is_half_kana = |c: char| ('\u{FF66}'..='\u{FF9F}').contains(&c);
+    let mut out = String::with_capacity(text.len());
+    let mut run = String::new();
+    for c in text.chars() {
+        if is_half_kana(c) {
+            run.push(c);
+            continue;
+        }
+        out.push_str(&normalize_nfkc(&run));
+        run.clear();
+        out.push(c);
+    }
+    out.push_str(&normalize_nfkc(&run));
+    out
+}
+
 /// Map a half-width ASCII alphanumeric character (digit / Latin letter) to
 /// its full-width form (e.g. `a` → `ａ`, `Z` → `Ｚ`, `5` → `５`). All other
 /// characters pass through unchanged.
@@ -225,6 +245,13 @@ pub fn fullwidth_to_ascii_char(c: char) -> char {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn half_width_katakana_to_full_composes_sound_marks() {
+        assert_eq!(half_width_katakana_to_full("ｶﾞｯｺｰ"), "ガッコー");
+        assert_eq!(half_width_katakana_to_full("ﾊﾟﾝ｡"), "パン｡");
+        assert_eq!(half_width_katakana_to_full("ａ1、がガ"), "ａ1、がガ");
+    }
 
     #[test]
     fn test_contains_kana() {

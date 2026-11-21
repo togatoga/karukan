@@ -24,6 +24,8 @@ pub enum CandidateSource {
     Command,
     /// Hiragana/katakana fallback
     Fallback,
+    /// F9/F10 alphanumeric transliteration of the keystrokes
+    Transliteration,
 }
 
 impl CandidateSource {
@@ -37,6 +39,7 @@ impl CandidateSource {
             CandidateSource::Dictionary => "\u{1F4DA} \u{8F9E}\u{66F8}", // 📚 辞書
             CandidateSource::Rewriter => "\u{1F504} \u{5909}\u{63DB}", // 🔄 変換
             CandidateSource::Date => "\u{1F4C5} \u{65E5}\u{4ED8}",     // 📅 日付
+            CandidateSource::Transliteration => "\u{1F524} \u{82F1}\u{6570}", // 🔤 英数
             CandidateSource::Command => "\u{2699} \u{8A2D}\u{5B9A}",   // ⚙ 設定
             CandidateSource::Fallback => "",
         }
@@ -47,13 +50,14 @@ impl CandidateSource {
     /// own — its kana ride at the tail of the rewriter view.
     pub fn emoji(&self) -> &'static str {
         match self {
-            CandidateSource::UserDictionary => "\u{1F464}", // 👤
-            CandidateSource::Learning => "\u{1F4DD}",       // 📝
-            CandidateSource::Model => "\u{1F916}",          // 🤖
-            CandidateSource::Dictionary => "\u{1F4DA}",     // 📚
-            CandidateSource::Rewriter => "\u{1F504}",       // 🔄
-            CandidateSource::Date => "\u{1F4C5}",           // 📅
-            CandidateSource::Command => "\u{2699}",         // ⚙
+            CandidateSource::UserDictionary => "\u{1F464}",  // 👤
+            CandidateSource::Learning => "\u{1F4DD}",        // 📝
+            CandidateSource::Model => "\u{1F916}",           // 🤖
+            CandidateSource::Dictionary => "\u{1F4DA}",      // 📚
+            CandidateSource::Rewriter => "\u{1F504}",        // 🔄
+            CandidateSource::Date => "\u{1F4C5}",            // 📅
+            CandidateSource::Transliteration => "\u{1F524}", // 🔤
+            CandidateSource::Command => "\u{2699}",          // ⚙
             CandidateSource::Fallback => "",
         }
     }
@@ -66,10 +70,14 @@ impl CandidateSource {
 
     /// Whether committing a candidate from this source is recorded in the
     /// learning cache. Date/time candidates are rendered from the clock, so
-    /// a recorded one would resurface later as a stale date; a command
-    /// inputs no text at all.
+    /// a recorded one would resurface later as a stale date; a recorded
+    /// romaji spelling (`kai` for かい) would head every later conversion of
+    /// its kana reading; a command inputs no text at all.
     pub fn is_learnable(&self) -> bool {
-        !matches!(self, CandidateSource::Date | CandidateSource::Command)
+        !matches!(
+            self,
+            CandidateSource::Date | CandidateSource::Transliteration | CandidateSource::Command
+        )
     }
 }
 

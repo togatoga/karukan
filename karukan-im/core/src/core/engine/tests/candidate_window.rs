@@ -64,8 +64,8 @@ fn test_shortcuts_open_no_window() {
     let mut engine = conversion_window_engine();
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
-    assert_eq!(engine.mode.current(), InputMode::Katakana);
+    engine.process_key(&press_shift('A'));
+    assert_eq!(engine.mode.current(), InputMode::Alphabet);
     let back = engine.process_key(&press_key(Keysym::HENKAN));
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
     assert!(!opens_window(&back), "mode toggle: {:?}", back.actions);

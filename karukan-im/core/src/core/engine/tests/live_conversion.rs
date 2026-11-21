@@ -358,7 +358,7 @@ fn test_shift_space_inserts_the_configured_space_into_a_composition() {
     }
 }
 
-// --- Ctrl+Shift+L live conversion toggle tests ---
+// --- Live conversion setting ---
 
 #[test]
 fn test_engine_config_live_conversion_enabled() {

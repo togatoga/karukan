@@ -278,25 +278,6 @@ fn test_shift_alphabet_reverts_to_hiragana_after_erase_to_empty() {
 }
 
 #[test]
-fn test_shift_alphabet_from_katakana_reverts_to_katakana() {
-    let mut engine = InputMethodEngine::new();
-
-    // Type a char, then switch to katakana mode (Ctrl+K)
-    engine.process_key(&press('a'));
-    engine.process_key(&press_ctrl(Keysym::KEY_K));
-    assert!(engine.mode.current() == InputMode::Katakana);
-
-    // Shift+A enters alphabet, remembering Katakana as the prior mode
-    engine.process_key(&press_shift('A'));
-    assert!(engine.mode.current() == InputMode::Alphabet);
-
-    // Commit → reverts to Katakana (the mode before the Shift gesture),
-    // not all the way to Hiragana
-    engine.process_key(&press_key(Keysym::RETURN));
-    assert!(engine.mode.current() == InputMode::Katakana);
-}
-
-#[test]
 fn test_alphabet_mode_aux_text() {
     let mut engine = InputMethodEngine::new();
 

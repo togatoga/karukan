@@ -12,7 +12,7 @@ pub enum InputState {
     #[default]
     Empty,
 
-    /// Composing mode - building preedit text (hiragana, katakana, or alphabet)
+    /// Composing mode - building preedit text (kana, alphabet, or an emoji query)
     Composing {
         /// The preedit string being composed
         preedit: Preedit,
