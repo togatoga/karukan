@@ -1,0 +1,49 @@
+name: Release
+
+# Publishes a release when the version on main has none yet: normally the
+# merge of a release PR (release-pr.yml).
+
+on:
+  push:
+    branches: [main]
+    paths: ['Cargo.toml']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Find the version
+        id: version
+        run: |
+          version=$(scripts/version.sh current)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "v$version is already released; nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The dictionary is built offline, so each release carries the
+      # previous one's: installs fetch releases/latest/download/dict.tgz.
+      # Creating the release with it attached leaves no moment where the
+      # latest release has none.
+      - name: Publish
+        if: steps.version.outputs.new == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          previous=$(gh release view --json tagName --jq .tagName)
+          gh release download "$previous" --pattern dict.tgz
+          gh release create "v$VERSION" dict.tgz \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --generate-notes --notes-start-tag "$previous"

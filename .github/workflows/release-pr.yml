@@ -1,0 +1,83 @@
+name: Prepare release
+
+# Run from the Actions tab: raises the version and opens a release PR.
+# Merging that PR publishes the release (release.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which part of the version to raise'
+        type: choice
+        options: [minor, patch, major]
+        default: minor
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    name: Open the release PR
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: dtolnay/rust-toolchain@stable
+
+      # A PR opened by this workflow's token gets no CI of its own, so the
+      # release starts only from a main whose CI has finished green.
+      - name: Require a green main
+        run: |
+          sha=$(git rev-parse HEAD)
+          not_green=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs" \
+            --jq '.check_runs[]
+                  | select(.name != "Open the release PR")
+                  | select(.status != "completed"
+                           or (.conclusion | IN("success", "skipped", "neutral") | not))
+                  | "\(.name): \(.conclusion // .status)"')
+          if [ -n "$not_green" ]; then
+            echo "::error::main ($sha) is not green yet; wait for its CI and run again."
+            echo "$not_green"
+            exit 1
+          fi
+
+      - name: Raise the version
+        id: bump
+        run: echo "version=$(scripts/version.sh bump '${{ inputs.bump }}')" >> "$GITHUB_OUTPUT"
+
+      - name: Open the PR
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          branch="release/v$VERSION"
+          previous=$(gh release view --json tagName --jq .tagName)
+          notes=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="v$VERSION" -f target_commitish=main \
+            -f previous_tag_name="$previous" --jq .body)
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git commit -qam "chore: release v$VERSION"
+          git push -q origin "$branch"
+
+          # The draft sits in a code block: GitHub's notes credit each PR as
+          # "by @author", and a mention there would notify every contributor
+          # on each release PR. The published release credits them.
+          body=$(cat <<BODY
+          この PR をマージすると **v$VERSION** をリリースします。タグとリリースページを作り、$previous の \`dict.tgz\` を添付します。
+
+          変更は番号だけです（ルートの Cargo.toml、ワークスペースのクレートの Cargo.lock、AppStream のリリース一覧）。ワークフローが作った PR では CI が動きませんが、作成時点の main の CI はすべて通っています。
+
+          ## リリースノートの下書き
+
+          \`\`\`markdown
+          $notes
+          \`\`\`
+          BODY
+          )
+          gh pr create --base main --head "$branch" --title "chore: release v$VERSION" --body "$body"
