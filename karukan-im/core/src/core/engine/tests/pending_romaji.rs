@@ -220,3 +220,19 @@ fn test_stranded_consonant_stays_in_place_live() {
     send(&mut engine, "y1a");
     assert_eq!(preedit_text(&engine), "y1あ");
 }
+
+#[test]
+fn test_trailing_n_commits_as_n_kana() {
+    // `hon` + Enter commits ほん, not ほn: the input ended on the n.
+    let mut engine = InputMethodEngine::new();
+    engine.config.live_conversion = false;
+    send(&mut engine, "hon");
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::Commit(t) if t == "ほん")),
+        "expected ほん: {result:?}"
+    );
+}

@@ -131,7 +131,9 @@ impl RomajiConverter {
     }
 
     /// Force-convert leftover pending input (`ltu` → っ); characters with no
-    /// rule pass through literally (a trailing `n` stays `n`).
+    /// rule pass through literally (`k` stays `k`). A lone trailing `n`
+    /// settles as what `nn` types (ん), since nothing else could have
+    /// been meant once the input ends there.
     pub fn flush_pending(&self, pending: &str) -> String {
         self.flush_spans(pending)
             .into_iter()
@@ -256,8 +258,18 @@ impl<'a> ConvertState<'a> {
     }
 
     /// Fire rules for whatever is pending without waiting for more keys:
-    /// the input has ended (`ky` settles as `k` + `y`).
+    /// the input has ended (`ky` settles as `k` + `y`). A lone `n` could
+    /// only have meant ん once nothing follows, so it settles as what `nn`
+    /// types.
     fn flush(&mut self) {
+        if self.pending == ['n']
+            && let Some(n) = self
+                .trie
+                .walk(['n', 'n'])
+                .and_then(|node| node.output.as_deref())
+        {
+            self.fire(n, 1);
+        }
         while !self.pending.is_empty() {
             self.fire_longest();
         }
@@ -393,7 +405,10 @@ mod tests {
         assert_eq!(c.flush_pending("k"), "k");
         assert_eq!(c.flush_pending("ltu"), "っ");
         assert_eq!(c.convert_flush("k"), "k");
-        assert_eq!(c.convert_flush("kan"), "かn");
+        assert_eq!(c.convert_flush("kan"), "かん");
+        assert_eq!(c.convert_flush("n"), "ん");
+        // Only a lone n: a longer tail is still a typo to keep visible.
+        assert_eq!(c.convert_flush("kany"), "かny");
     }
 
     #[test]
@@ -661,7 +676,8 @@ mod span_tests {
         };
         assert_eq!(c.convert("kaky").pending, "ky");
         assert_eq!(flushed("ky"), [pair("k", "k"), pair("y", "y")]);
-        assert_eq!(flushed("n"), [pair("n", "n")]);
+        // A lone n settles as ん, keyed by the n that was typed.
+        assert_eq!(flushed("n"), [pair("ん", "n")]);
         assert!(flushed("").is_empty());
     }
 }
