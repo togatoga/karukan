@@ -414,9 +414,9 @@ fn ctrl_s_cuts_the_conversion_into_segments() {
     assert_eq!(focused_text(&engine), "早稲田大学");
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 
-    // The script: the hiragana with the kanji before it.
+    // The script: wherever it changes, the verb's ending off too.
     engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行", "く"]);
 
     // The dictionary's shortest words — and then round to the first.
     engine.process_key(&press_ctrl_s());
@@ -428,15 +428,25 @@ fn ctrl_s_cuts_the_conversion_into_segments() {
 
 #[test]
 fn ctrl_s_does_nothing_more_when_every_way_cuts_alike() {
-    // No dictionary: the three ways all cut 今日は|医者に|行く.
-    let mut engine = converted_sentence();
+    let mut engine = converted_tower();
     engine.process_key(&press_ctrl_s());
     engine.process_key(&press_key(Keysym::RIGHT));
     let result = engine.process_key(&press_ctrl_s());
 
     assert!(result.consumed);
-    assert_eq!(segment_texts(&engine), ["今日は", "医者に", "行く"]);
-    assert_eq!(focused_text(&engine), "医者に");
+    assert_eq!(segment_texts(&engine), ["東京", "タワー"]);
+    assert_eq!(focused_text(&engine), "タワー");
+}
+
+/// とうきょうたわー converted to 東京タワー with no dictionary: the three
+/// ways all cut it 東京|タワー.
+fn converted_tower() -> InputMethodEngine {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    seed_model_cache(&mut engine, "トウキョウタワー", "", &["東京タワー"]);
+    type_keys(&mut engine, "toukyoutawa-");
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(preedit_text(&engine), "東京タワー");
+    engine
 }
 
 /// きょうぎぷろぐらみんぐをまなぶ converted, with a dictionary that has
@@ -487,11 +497,14 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
         aux_text(&result)
     );
 
-    // By script: cut where the katakana starts.
+    // By script: wherever it changes.
     let result = engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["競技", "プログラミングを", "学ぶ"]);
+    assert_eq!(
+        segment_texts(&engine),
+        ["競技", "プログラミング", "を", "学", "ぶ"]
+    );
     assert!(
-        aux_text(&result).contains("文節1/3 区切り:字種"),
+        aux_text(&result).contains("文節1/5 区切り:字種"),
         "{}",
         aux_text(&result)
     );
@@ -525,11 +538,10 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
 
 #[test]
 fn ctrl_s_names_no_way_of_cutting_when_there_is_one() {
-    // No dictionary: 今日は医者に行く is cut the same every way.
-    let mut engine = converted_sentence();
+    let mut engine = converted_tower();
     let result = engine.process_key(&press_ctrl_s());
     assert!(
-        aux_text(&result).contains("文節1/3"),
+        aux_text(&result).contains("文節1/2"),
         "{}",
         aux_text(&result)
     );
