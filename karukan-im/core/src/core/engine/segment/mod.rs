@@ -61,54 +61,53 @@ impl InputMethodEngine {
         self.render_conversion()
     }
 
-    /// Ctrl+S: cut the conversion into segments, and with each further
-    /// press cut it another way — the dictionary's longest words, then the
-    /// shorter words those are made of, then the script alone. How finely
-    /// to cut is a choice, so the key offers the choices instead of the
-    /// IME guessing one.
+    /// Ctrl+S: cut what is focused. The first press cuts the whole
+    /// conversion into segments; each press after that cuts the focused
+    /// segment, and only that one, so how finely a sentence is cut is
+    /// decided place by place instead of for all of it at once.
     ///
-    /// What is cut is the text on screen, so choices already made in a
-    /// segment carry over as text. A way of cutting that changes nothing
-    /// is skipped, so every press that can do something does; when no
-    /// other way exists the press does nothing.
-    pub(super) fn cycle_segmentation(&mut self) -> EngineResult {
-        let (segments, _) = self.segments();
+    /// What is focused is cut the coarsest way that cuts it at all
+    /// ([`Granularity::COARSEST_FIRST`]): into 文節, else into words, else
+    /// into the words a word is made of. 早稲田大学に行く thus gives
+    /// 早稲田大学に|行く, then 早稲田大学|に, then 早稲田|大学 — and a
+    /// press on something that does not come apart does nothing.
+    ///
+    /// What is cut is the text on screen, so a choice already made in the
+    /// segment carries over as text.
+    pub(super) fn split_focus(&mut self) -> EngineResult {
         let whole = !self.state.is_segmented();
-        // A whole conversion that the arrow keys would not split either
-        // (a command, a date) has nothing to cut.
-        let (reading, text) = match self.state.candidates().and_then(CandidateList::selected) {
-            Some(c) if whole && !self.splits(c) => return EngineResult::consumed(),
-            Some(c) if whole => (
-                c.reading
-                    .clone()
-                    .unwrap_or_else(|| segments[0].reading.clone()),
-                c.text.clone(),
-            ),
-            _ => (
-                segments.iter().map(|s| s.reading.as_str()).collect(),
-                segments.iter().map(Segment::text).collect(),
-            ),
-        };
-        let current: Vec<&str> = match whole {
-            // Nothing is cut yet: any cut is a change, the default first.
-            true => Vec::new(),
-            false => segments.iter().map(|s| s.reading.as_str()).collect(),
-        };
-        let mut granularity = match whole {
-            true => Granularity::default(),
-            false => self.segment_granularity.next(),
-        };
-        for _ in 0..3 {
-            let pieces = split_segments(&reading, &text, &self.word_lookup(&text), granularity);
-            let cut: Vec<&str> = pieces.iter().map(|p| p.reading.as_str()).collect();
-            if pieces.len() > 1 && cut != current {
-                self.segment_granularity = granularity;
-                self.put_segments(pieces.into_iter().map(Segment::from).collect(), 0);
-                return self.render_conversion();
-            }
-            granularity = granularity.next();
+        // A whole conversion comes back from `segments` already cut into
+        // 文節 when it can be.
+        let (mut segments, focus) = self.segments();
+        if whole && segments.len() > 1 {
+            self.put_segments(segments, 0);
+            return self.render_conversion();
         }
-        EngineResult::consumed()
+        let (reading, text) = match self.state.candidates().and_then(CandidateList::selected) {
+            // A whole conversion that the arrow keys would not split
+            // either (a command, a date) has nothing to cut.
+            Some(c) if whole && !self.splits(c) => return EngineResult::consumed(),
+            // A predicted phrase reads longer than what was typed.
+            Some(c) if whole && c.reading.is_some() => {
+                (c.reading.clone().unwrap_or_default(), c.text.clone())
+            }
+            _ => (
+                segments[focus].reading.clone(),
+                segments[focus].text().to_string(),
+            ),
+        };
+        let lookup = self.word_lookup(&text);
+        let Some(pieces) = Granularity::COARSEST_FIRST
+            .into_iter()
+            .map(|granularity| split_segments(&reading, &text, &lookup, granularity))
+            .find(|pieces| pieces.len() > 1)
+        else {
+            return EngineResult::consumed();
+        };
+        drop(lookup);
+        segments.splice(focus..=focus, pieces.into_iter().map(Segment::from));
+        self.put_segments(segments, focus);
+        self.render_conversion()
     }
 
     /// Shift+←/→: move the focused segment's right edge by one character of
@@ -276,7 +275,7 @@ impl InputMethodEngine {
                 c.reading.as_deref().unwrap_or(reading),
                 &c.text,
                 &self.word_lookup(&c.text),
-                self.segment_granularity,
+                Granularity::Phrases,
             ),
             _ => Vec::new(),
         };
@@ -361,7 +360,7 @@ impl InputMethodEngine {
             &reading,
             &text,
             &self.word_lookup(&text),
-            self.segment_granularity,
+            Granularity::Phrases,
         )
     }
 

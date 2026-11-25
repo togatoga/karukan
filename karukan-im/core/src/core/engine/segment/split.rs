@@ -74,23 +74,8 @@ pub(in crate::core) enum Granularity {
 }
 
 impl Granularity {
-    /// The next one, round and round.
-    pub(in crate::core) fn next(self) -> Self {
-        match self {
-            Self::Phrases => Self::Words,
-            Self::Words => Self::Fine,
-            Self::Fine => Self::Phrases,
-        }
-    }
-
-    /// Its place in the cycle, from 1, for the aux line.
-    pub(in crate::core) fn number(self) -> usize {
-        match self {
-            Self::Phrases => 1,
-            Self::Words => 2,
-            Self::Fine => 3,
-        }
-    }
+    /// Every way of cutting, the coarsest first.
+    pub(in crate::core) const COARSEST_FIRST: [Self; 3] = [Self::Phrases, Self::Words, Self::Fine];
 
     /// Whether dictionary words written in hiragana alone are units. Not
     /// for 文節: the dictionary has no parts of speech, so は and に would

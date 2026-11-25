@@ -408,7 +408,7 @@ fn ctrl_s_while_typing_one_word_is_a_plain_conversion() {
 }
 
 #[test]
-fn ctrl_s_enters_segments_and_then_cuts_another_way() {
+fn ctrl_s_cuts_the_whole_and_then_the_focused_segment() {
     let mut engine = converted_university();
 
     // First press: 文節 — the dictionary's longest words with the
@@ -417,24 +417,28 @@ fn ctrl_s_enters_segments_and_then_cuts_another_way() {
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
     assert_eq!(focused_text(&engine), "早稲田大学に");
 
-    // Second: 単語 — the particle the dictionary has stands alone.
+    // Again: the focused segment alone, the particle off its word.
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
+    assert_eq!(focused_text(&engine), "早稲田大学");
 
-    // Third: 細かく — the shorter words the long one is made of.
+    // Again: the word into the words it is made of.
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
+    assert_eq!(focused_text(&engine), "早稲田");
 
-    // And round again.
+    // Nothing is left to cut there, nor in a segment that is one word.
     engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    engine.process_key(&press_key(Keysym::END));
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
 
     // The text never changed.
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 }
 
 #[test]
-fn ctrl_s_keeps_what_was_chosen_in_a_segment() {
+fn ctrl_s_leaves_the_other_segments_as_they_are() {
     let mut engine = converted_university();
     seed_model_cache(&mut engine, "イク", "早稲田大学に", &["行く", "逝く"]);
     engine.process_key(&press_ctrl_s());
@@ -442,8 +446,35 @@ fn ctrl_s_keeps_what_was_chosen_in_a_segment() {
     engine.process_key(&press_key(Keysym::SPACE));
     assert_eq!(preedit_text(&engine), "早稲田大学に逝く");
 
+    engine.process_key(&press_key(Keysym::HOME));
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "逝く"]);
+}
+
+#[test]
+fn ctrl_s_on_one_dictionary_word_cuts_inside_it() {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
+        r#"[
+            {"reading":"きょうぎぷろぐらみんぐ","candidates":[{"surface":"競技プログラミング","score":1.0}]},
+            {"reading":"きょうぎ","candidates":[{"surface":"競技","score":1.0}]},
+            {"reading":"ぷろぐらみんぐ","candidates":[{"surface":"プログラミング","score":1.0}]},
+            {"reading":"ぷろ","candidates":[{"surface":"プロ","score":1.0}]},
+            {"reading":"ぐら","candidates":[{"surface":"グラ","score":1.0}]},
+            {"reading":"みんぐ","candidates":[{"surface":"ミング","score":1.0}]}
+        ]"#,
+    )));
+    seed_model_cache(
+        &mut engine,
+        "キョウギプログラミング",
+        "",
+        &["競技プログラミング"],
+    );
+    type_keys(&mut engine, "kyougipuroguramingu");
+    engine.process_key(&press_ctrl_s());
+
+    assert_eq!(segment_texts(&engine), ["競技", "プログラミング"]);
+    assert_eq!(preedit_text(&engine), "競技プログラミング");
 }
 
 #[test]
@@ -459,7 +490,7 @@ fn ctrl_s_does_nothing_where_nothing_comes_apart() {
 }
 
 #[test]
-fn the_aux_line_says_which_way_it_is_cut() {
+fn the_aux_line_counts_the_segments() {
     let mut engine = converted_university();
     let aux = |result: &EngineResult| {
         result
@@ -472,7 +503,7 @@ fn the_aux_line_says_which_way_it_is_cut() {
             .unwrap()
     };
     let result = engine.process_key(&press_ctrl_s());
-    assert!(aux(&result).contains("区切り1"), "{}", aux(&result));
+    assert!(aux(&result).contains("文節1/2"), "{}", aux(&result));
     let result = engine.process_key(&press_ctrl_s());
-    assert!(aux(&result).contains("区切り2"), "{}", aux(&result));
+    assert!(aux(&result).contains("文節1/3"), "{}", aux(&result));
 }

@@ -191,7 +191,6 @@ impl InputMethodEngine {
 
         let preedit = Preedit::with_text_highlighted(&selected_text);
 
-        self.segment_granularity = Default::default();
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
             candidates: candidates.clone(),
@@ -723,12 +722,12 @@ impl InputMethodEngine {
                             return self.rebreak_conversion();
                         }
                         // Ctrl+S: cut the conversion into segments, and
-                        // with each further press cut it another way. Not
+                        // with each further press cut the focused one. Not
                         // Ctrl+Space: macOS (previous input source) and
                         // fcitx5 (its trigger key) take that one before
                         // it gets here.
                         Keysym::KEY_S | Keysym::KEY_S_UPPER if self.segments_apply() => {
-                            return self.cycle_segmentation();
+                            return self.split_focus();
                         }
                         // Ctrl+A/B/E/F: Home/←/End/→, as while composing.
                         Keysym::KEY_A | Keysym::KEY_A_UPPER if self.segments_apply() => {
