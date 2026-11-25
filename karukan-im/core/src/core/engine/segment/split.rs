@@ -107,6 +107,11 @@ impl Granularity {
     }
 }
 
+/// What a char pinned on its own costs: the least there is, but something,
+/// so that a dictionary word written in katakana (プログラミング) is taken
+/// as the word it is instead of seven kana that happen to line up.
+const PIN_COST: usize = 1;
+
 /// What a step of the alignment is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Step {
@@ -178,6 +183,10 @@ fn must_pin(c: char) -> bool {
     Script::of(c).must_pin()
 }
 
+fn is_hiragana_only(c: char) -> bool {
+    matches!(Script::of(c), Script::Hiragana | Script::ProlongedMark)
+}
+
 /// `c` as the reading would spell it, for comparing: katakana as hiragana,
 /// a full-width ASCII form as its half-width one.
 fn fold(c: char) -> char {
@@ -208,14 +217,15 @@ fn align(
     let folded_reading: Vec<char> = reading.iter().map(|&c| fold(c)).collect();
 
     // Dictionary words by where their reading starts, surfaces folded like
-    // the text. A word written in kana alone adds nothing: its kana pin
-    // themselves.
+    // the text. Not the ones written in hiragana alone: the dictionary has
+    // no parts of speech, so it cannot tell は and に from これ and ここ,
+    // and a particle taken as a word would be a segment of its own.
     let words_at: Vec<Vec<(usize, Vec<char>)>> = (0..m)
         .map(|j| {
             let rest: String = reading[j..].iter().collect();
             words(&rest)
                 .into_iter()
-                .filter(|(_, surface)| !surface.chars().all(must_pin))
+                .filter(|(_, surface)| !surface.chars().all(is_hiragana_only))
                 .map(|(taken, surface)| (taken, surface.chars().map(fold).collect()))
                 .collect()
         })
@@ -231,7 +241,7 @@ fn align(
         for j in (0..m).rev() {
             // A pin: this char is that reading char.
             if folded_text[i] == folded_reading[j] && best[i + 1][j + 1] != UNREACHABLE {
-                best[i][j] = best[i + 1][j + 1];
+                best[i][j] = best[i + 1][j + 1] + PIN_COST;
                 step[i][j] = (i + 1, j + 1, Step::Pin);
             }
             // A dictionary word: its surface here, its reading there.
@@ -510,6 +520,22 @@ mod tests {
         assert_eq!(
             split_with("それはごぞんじなどは", "それはご存知などは", &entries),
             "それは=それは|ごぞんじなどは=ご存知などは"
+        );
+    }
+
+    #[test]
+    fn a_katakana_word_is_cut_by_the_dictionary_too() {
+        // Two katakana words side by side: the script sees one run, the
+        // dictionary sees two words.
+        let entries = [("てすと", "テスト"), ("けーす", "ケース"), ("かく", "書く")];
+        assert_eq!(
+            split_with("てすとけーすをかく", "テストケースを書く", &entries),
+            "てすと=テスト|けーすを=ケースを|かく=書く"
+        );
+        // One the dictionary lacks is still a word, by its script.
+        assert_eq!(
+            split("これはてすとです", "これはテストです"),
+            "これは=これは|てすとです=テストです"
         );
     }
 
