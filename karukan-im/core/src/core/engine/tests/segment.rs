@@ -499,9 +499,28 @@ fn the_aux_line_counts_the_segments() {
             })
             .unwrap()
     };
+    // Which cut of how many, and what kind it is.
     let result = engine.process_key(&press_ctrl_s());
-    assert!(aux(&result).contains("文節1/2"), "{}", aux(&result));
+    assert!(
+        aux(&result).contains("文節1/2 切り方1/4 辞書1"),
+        "{}",
+        aux(&result)
+    );
     let result = engine.process_key(&press_ctrl_s());
-    assert!(aux(&result).contains("文節1/3"), "{}", aux(&result));
-    assert!(!aux(&result).contains("区切り"), "{}", aux(&result));
+    assert!(
+        aux(&result).contains("文節1/3 切り方2/4 辞書2"),
+        "{}",
+        aux(&result)
+    );
+    engine.process_key(&press_ctrl_s());
+    let result = engine.process_key(&press_ctrl_s());
+    assert!(
+        aux(&result).contains("文節1/4 切り方4/4 部品"),
+        "{}",
+        aux(&result)
+    );
+
+    // Split by an arrow key, or resized, it is no cut Ctrl+S picked.
+    let result = engine.process_key(&press_shift_key(Keysym::RIGHT));
+    assert!(!aux(&result).contains("切り方"), "{}", aux(&result));
 }

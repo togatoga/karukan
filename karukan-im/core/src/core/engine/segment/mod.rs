@@ -96,7 +96,7 @@ impl InputMethodEngine {
         // From the whole, the first; from a cut, the one after it — and
         // the first again from one the list does not have (a segment was
         // resized).
-        let shown = |cut: &Vec<Piece>| {
+        let shown = |(_, cut): &(String, Vec<Piece>)| {
             !whole
                 && cut
                     .iter()
@@ -109,8 +109,10 @@ impl InputMethodEngine {
             None if cuts.is_empty() => return EngineResult::consumed(),
             None => 0,
         };
-        let pieces = cuts.swap_remove(next);
+        let total = cuts.len();
+        let (name, pieces) = cuts.swap_remove(next);
         self.put_segments(pieces.into_iter().map(Segment::from).collect(), 0);
+        self.segment_cut = Some(format!("切り方{}/{total} {name}", next + 1));
         self.render_conversion()
     }
 
@@ -120,20 +122,29 @@ impl InputMethodEngine {
     /// longest match, then what it gives way to), up to [`RANKED_CUTS`];
     /// then the cuts made by a rule, which reach what those three may not
     /// — every particle off its word, every word in its parts, the script
-    /// alone. A cut that an earlier one already gives is left out.
-    fn cuts(&self, reading: &str, text: &str) -> Vec<Vec<Piece>> {
+    /// alone. A cut that an earlier one already gives is left out. Each
+    /// comes with the name the aux line gives it.
+    fn cuts(&self, reading: &str, text: &str) -> Vec<(String, Vec<Piece>)> {
         let lookup = self.word_lookup(text);
-        let by_rule = [Granularity::Phrases, Granularity::Words, Granularity::Fine]
+        let ranked = ranked_cuts(reading, text, &lookup, RANKED_CUTS)
             .into_iter()
-            .map(|granularity| split_segments(reading, text, &lookup, granularity))
-            .chain([split_by_script(reading, text, &lookup)]);
-        let mut cuts: Vec<Vec<Piece>> = Vec::new();
-        for cut in ranked_cuts(reading, text, &lookup, RANKED_CUTS)
-            .into_iter()
-            .chain(by_rule)
-        {
-            if cut.len() > 1 && !cuts.contains(&cut) {
-                cuts.push(cut);
+            .enumerate()
+            .map(|(rank, cut)| (format!("辞書{}", rank + 1), cut));
+        let by_rule = [
+            (Granularity::Phrases, "助詞付き"),
+            (Granularity::Words, "助詞別"),
+            (Granularity::Fine, "部品"),
+        ]
+        .into_iter()
+        .map(|(granularity, name)| {
+            let cut = split_segments(reading, text, &lookup, granularity);
+            (name.to_string(), cut)
+        })
+        .chain([("字種".to_string(), split_by_script(reading, text, &lookup))]);
+        let mut cuts: Vec<(String, Vec<Piece>)> = Vec::new();
+        for (name, cut) in ranked.chain(by_rule) {
+            if cut.len() > 1 && cuts.iter().all(|(_, earlier)| *earlier != cut) {
+                cuts.push((name, cut));
             }
         }
         cuts
@@ -151,7 +162,7 @@ impl InputMethodEngine {
         self.cuts(reading, text)
             .into_iter()
             .next()
-            .unwrap_or_else(whole)
+            .map_or_else(whole, |(_, cut)| cut)
     }
 
     /// Shift+←/→: move the focused segment's right edge by one character of
@@ -160,6 +171,8 @@ impl InputMethodEngine {
     /// the segments before it are left as they are.
     pub(super) fn resize_segment(&mut self, grow: bool) -> EngineResult {
         let (segments, focus) = self.segments();
+        // The segments stop being the cut Ctrl+S picked.
+        self.segment_cut = None;
         let mut focused: Vec<char> = segments[focus].reading.chars().collect();
         let mut rest: Vec<char> = segments[focus + 1..]
             .iter()
