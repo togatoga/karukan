@@ -338,6 +338,14 @@ fn a_conversion_that_dropped_kana_is_not_split() {
 /// わせだだいがくにいく converted to 早稲田大学に行く, with a dictionary
 /// that knows the university both as one word and as its two parts.
 fn converted_university() -> InputMethodEngine {
+    let mut engine = typed_university();
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(!engine.state().is_segmented());
+    engine
+}
+
+/// The same sentence typed and not yet converted: the live conversion.
+fn typed_university() -> InputMethodEngine {
     let mut engine = engine_with_learned("__none__", "__none__");
     engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
         r#"[
@@ -355,8 +363,6 @@ fn converted_university() -> InputMethodEngine {
         &["早稲田大学に行く"],
     );
     type_keys(&mut engine, "wasedadaigakuniiku");
-    engine.process_key(&press_key(Keysym::SPACE));
-    assert!(!engine.state().is_segmented());
     engine
 }
 
@@ -372,6 +378,33 @@ fn segment_texts(engine: &InputMethodEngine) -> Vec<String> {
 
 fn press_ctrl_s() -> KeyEvent {
     press_ctrl(Keysym::KEY_S)
+}
+
+#[test]
+fn ctrl_s_while_typing_converts_and_cuts_in_one_press() {
+    let mut engine = typed_university();
+    engine.process_key(&press_ctrl_s());
+
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(focused_text(&engine), "早稲田大学に");
+    assert_eq!(preedit_text(&engine), "早稲田大学に行く");
+
+    // And from there it is the same key as after Space.
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
+}
+
+#[test]
+fn ctrl_s_while_typing_one_word_is_a_plain_conversion() {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    seed_model_cache(&mut engine, "キョウ", "", &["今日"]);
+    type_keys(&mut engine, "kyou");
+    let result = engine.process_key(&press_ctrl_s());
+
+    assert!(result.consumed);
+    assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    assert!(!engine.state().is_segmented());
+    assert_eq!(preedit_text(&engine), "今日");
 }
 
 #[test]
