@@ -16,7 +16,7 @@
 //! already had.
 mod split;
 
-use split::{Piece, ranked_cuts};
+use split::{Piece, finest_cut, ranked_cuts, script_cut};
 
 use crate::core::state::Segment;
 
@@ -60,20 +60,70 @@ impl InputMethodEngine {
         self.render_conversion()
     }
 
-    /// Ctrl+S: cut the conversion into segments, the first one focused —
-    /// what the arrow keys do, without moving the focus anywhere. Pressed
-    /// on a conversion already cut, or on one that does not come apart,
-    /// it does nothing: there is one way to cut, and the segments' edges
-    /// are moved from there with Shift+←/→.
+    /// Ctrl+S: cut the conversion into segments, the first one focused,
+    /// and pressed again cut it the next way, round and round. There are
+    /// three ways and no more: the dictionary's longest words
+    /// ([`Self::cut`], what the arrow keys split into), the script alone
+    /// ([`script_cut`]), which cuts where the dictionary has one long
+    /// word, and the dictionary's shortest words ([`finest_cut`]), the
+    /// extreme. A way that cuts as an earlier one does is left out, and
+    /// with one way left the second press does nothing.
+    ///
+    /// What is cut is the text on screen, so choices already made in a
+    /// segment carry over as text.
     pub(super) fn split_conversion(&mut self) -> EngineResult {
-        if self.state.is_segmented() {
-            return EngineResult::consumed();
-        }
         let (segments, _) = self.segments();
-        if segments.len() < 2 {
-            return EngineResult::consumed();
+        let whole = !self.state.is_segmented();
+        let (reading, text) = match self.state.candidates().and_then(CandidateList::selected) {
+            // A whole conversion that the arrow keys would not split
+            // either (a command, a date) has nothing to cut.
+            Some(c) if whole && !self.splits(c) => return EngineResult::consumed(),
+            // A predicted phrase reads longer than what was typed.
+            Some(c) if whole => (
+                c.reading
+                    .clone()
+                    .unwrap_or_else(|| segments[0].reading.clone()),
+                c.text.clone(),
+            ),
+            _ => (
+                segments.iter().map(|s| s.reading.as_str()).collect(),
+                segments.iter().map(Segment::text).collect(),
+            ),
+        };
+        let candidates = {
+            let lookup = self.word_lookup(&text);
+            [
+                ("辞書(最長)", self.cut(&reading, &text)),
+                ("字種", script_cut(&reading, &text, &lookup)),
+                ("辞書(最短)", finest_cut(&reading, &text, &lookup)),
+            ]
+        };
+        let mut ways: Vec<(&'static str, Vec<Piece>)> = Vec::new();
+        for (name, cut) in candidates {
+            // A way that cuts nothing, or as an earlier one does, is none.
+            if cut.len() > 1 && ways.iter().all(|(_, earlier)| *earlier != cut) {
+                ways.push((name, cut));
+            }
         }
-        self.put_segments(segments, 0);
+        // From the whole, the first way; from one of them, the next; and
+        // the first again from segments that are none (one was resized).
+        let shown = ways.iter().position(|(_, cut)| {
+            !whole
+                && cut
+                    .iter()
+                    .map(|p| p.reading.as_str())
+                    .eq(segments.iter().map(|s| s.reading.as_str()))
+        });
+        let next = match shown {
+            Some(_) if ways.len() == 1 => return EngineResult::consumed(),
+            Some(at) => (at + 1) % ways.len(),
+            None if ways.is_empty() => return EngineResult::consumed(),
+            None => 0,
+        };
+        let (name, pieces) = ways[next].clone();
+        self.put_segments(pieces.into_iter().map(Segment::from).collect(), 0);
+        // Named only when there is another way to switch to.
+        self.segment_cut = (ways.len() > 1).then_some(name);
         self.render_conversion()
     }
 
@@ -99,6 +149,8 @@ impl InputMethodEngine {
     /// the segments before it are left as they are.
     pub(super) fn resize_segment(&mut self, grow: bool) -> EngineResult {
         let (segments, focus) = self.segments();
+        // The segments stop being any of the ways of cutting.
+        self.segment_cut = None;
         let mut focused: Vec<char> = segments[focus].reading.chars().collect();
         let mut rest: Vec<char> = segments[focus + 1..]
             .iter()

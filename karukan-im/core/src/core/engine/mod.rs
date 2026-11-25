@@ -171,6 +171,11 @@ pub struct InputMethodEngine {
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
     /// then (or if loading failed) the engine runs dictionary/kana-only.
     model_loading: Option<std::sync::mpsc::Receiver<init::LoadedConverters>>,
+    /// Which way Ctrl+S last cut the conversion, for the aux line (辞書(最長)
+    /// / 字種 / 辞書(最短)) — only while there is another way to switch to. None again
+    /// once the segments are no longer that cut (a new conversion, a
+    /// resize).
+    segment_cut: Option<&'static str>,
 }
 
 impl InputMethodEngine {
@@ -200,6 +205,7 @@ impl InputMethodEngine {
             dicts: Dictionaries::default(),
             learning: None,
             model_loading: None,
+            segment_cut: None,
         }
     }
 

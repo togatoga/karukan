@@ -232,8 +232,12 @@ impl InputMethodEngine {
         // stands: the composition's chunk counter says nothing about it.
         if self.state.is_segmented() {
             let (left, right) = self.state.neighbours();
+            let cut = self
+                .segment_cut
+                .map(|way| format!(" 区切り:{way}"))
+                .unwrap_or_default();
             return format!(
-                "{} {shown} 文節{}/{}",
+                "{} {shown} 文節{}/{}{cut}",
                 self.segment_outline(),
                 left.len() + 1,
                 left.len() + 1 + right.len()

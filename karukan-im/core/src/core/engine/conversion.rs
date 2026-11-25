@@ -191,6 +191,7 @@ impl InputMethodEngine {
 
         let preedit = Preedit::with_text_highlighted(&selected_text);
 
+        self.segment_cut = None;
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
             candidates: candidates.clone(),
@@ -721,7 +722,8 @@ impl InputMethodEngine {
                         Keysym::KEY_J | Keysym::KEY_J_UPPER => {
                             return self.rebreak_conversion();
                         }
-                        // Ctrl+S: cut the conversion into segments. Not
+                        // Ctrl+S: cut the conversion into segments, and
+                        // pressed again cut it the other way. Not
                         // Ctrl+Space: macOS (previous input source) and
                         // fcitx5 (its trigger key) take that one before
                         // it gets here.

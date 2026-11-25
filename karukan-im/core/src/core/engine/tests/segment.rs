@@ -413,12 +413,127 @@ fn ctrl_s_cuts_the_conversion_into_segments() {
     assert_eq!(focused_text(&engine), "早稲田大学に");
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 
-    // There is one way to cut: pressed again, nothing moves.
+    // The script cuts it the same, so the next way is the dictionary's
+    // shortest words — and then round to the first.
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(preedit_text(&engine), "早稲田大学に行く");
+}
+
+#[test]
+fn ctrl_s_does_nothing_more_when_every_way_cuts_alike() {
+    // No dictionary: the three ways all cut 今日は|医者に|行く.
+    let mut engine = converted_sentence();
+    engine.process_key(&press_ctrl_s());
     engine.process_key(&press_key(Keysym::RIGHT));
     let result = engine.process_key(&press_ctrl_s());
+
     assert!(result.consumed);
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
-    assert_eq!(focused_text(&engine), "行く");
+    assert_eq!(segment_texts(&engine), ["今日は", "医者に", "行く"]);
+    assert_eq!(focused_text(&engine), "医者に");
+}
+
+/// きょうぎぷろぐらみんぐをまなぶ converted, with a dictionary that has
+/// 競技プログラミング as one word and as its two parts.
+fn converted_programming() -> InputMethodEngine {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
+        r#"[
+            {"reading":"きょうぎぷろぐらみんぐ","candidates":[{"surface":"競技プログラミング","score":1.0}]},
+            {"reading":"きょうぎ","candidates":[{"surface":"競技","score":1.0}]},
+            {"reading":"ぷろぐらみんぐ","candidates":[{"surface":"プログラミング","score":1.0}]},
+            {"reading":"を","candidates":[{"surface":"を","score":1.0}]},
+            {"reading":"まなぶ","candidates":[{"surface":"学ぶ","score":1.0}]}
+        ]"#,
+    )));
+    seed_model_cache(
+        &mut engine,
+        "キョウギプログラミングヲマナブ",
+        "",
+        &["競技プログラミングを学ぶ"],
+    );
+    type_keys(&mut engine, "kyougipuroguraminguwomanabu");
+    engine.process_key(&press_key(Keysym::SPACE));
+    engine
+}
+
+fn aux_text(result: &EngineResult) -> String {
+    result
+        .actions
+        .iter()
+        .find_map(|a| match a {
+            EngineAction::UpdateAuxText(text) => Some(text.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn ctrl_s_again_cuts_the_next_way_and_round() {
+    let mut engine = converted_programming();
+
+    // By the dictionary: its longest word is one segment.
+    let result = engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["競技プログラミングを", "学ぶ"]);
+    assert!(
+        aux_text(&result).contains("文節1/2 区切り:辞書(最長)"),
+        "{}",
+        aux_text(&result)
+    );
+
+    // By script: cut where the katakana starts.
+    let result = engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["競技", "プログラミングを", "学ぶ"]);
+    assert!(
+        aux_text(&result).contains("文節1/3 区切り:字種"),
+        "{}",
+        aux_text(&result)
+    );
+
+    // By the dictionary's shortest words: を comes off too.
+    let result = engine.process_key(&press_ctrl_s());
+    assert_eq!(
+        segment_texts(&engine),
+        ["競技", "プログラミング", "を", "学ぶ"]
+    );
+    assert!(
+        aux_text(&result).contains("文節1/4 区切り:辞書(最短)"),
+        "{}",
+        aux_text(&result)
+    );
+
+    // And back.
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["競技プログラミングを", "学ぶ"]);
+    assert_eq!(preedit_text(&engine), "競技プログラミングを学ぶ");
+
+    // Resized, the segments are neither cut: no name, and the next press
+    // starts from the dictionary's again.
+    let result = engine.process_key(&press_shift_key(Keysym::LEFT));
+    assert!(
+        !aux_text(&result).contains("区切り"),
+        "{}",
+        aux_text(&result)
+    );
+}
+
+#[test]
+fn ctrl_s_names_no_way_of_cutting_when_there_is_one() {
+    // No dictionary: 今日は医者に行く is cut the same every way.
+    let mut engine = converted_sentence();
+    let result = engine.process_key(&press_ctrl_s());
+    assert!(
+        aux_text(&result).contains("文節1/3"),
+        "{}",
+        aux_text(&result)
+    );
+    assert!(
+        !aux_text(&result).contains("区切り"),
+        "{}",
+        aux_text(&result)
+    );
 }
 
 #[test]

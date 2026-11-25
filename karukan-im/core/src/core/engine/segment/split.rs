@@ -81,7 +81,7 @@ impl Script {
             'ー' => Self::ProlongedMark,
             '\u{3041}'..='\u{309F}' => Self::Hiragana,
             '\u{30A1}'..='\u{30FA}' | '\u{30FD}'..='\u{30FF}' => Self::Katakana,
-            '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '々' | '〆' => Self::Other,
+            c if is_kanji(c) => Self::Other,
             c if c.is_alphanumeric() => Self::Alphanumeric,
             _ => Self::Other,
         }
@@ -164,7 +164,10 @@ struct Cut {
     /// Compared left to right: the chars outside a dictionary word
     /// (hiragana and marks aside: those belong to the word before them);
     /// the unknown words; the segments; the segments that start with a
-    /// word of a single character.
+    /// word of a single character. The last two are what the [`Way`]
+    /// makes them: cutting finely, the single-character kanji words and
+    /// the chars that start no segment; by script, the script's
+    /// boundaries left inside a step, and nothing.
     cost: (usize, usize, usize, usize),
     /// It gives some word a reading the dictionary contradicts.
     doubtful: bool,
@@ -243,6 +246,101 @@ pub(in crate::core) fn ranked_cuts(
     words: WordLookup,
     k: usize,
 ) -> Vec<Vec<Piece>> {
+    cuts_where(reading, text, words, k, Way::Longest)
+}
+
+/// `text` cut by script alone: a segment starts where a run of kanji, of
+/// katakana or of alphanumerics does, and the hiragana and marks after a
+/// run are its own (競技|プログラミングを|学ぶ). Two things a run's first
+/// char does not say are allowed for: お or ご right before kanji is that
+/// word's prefix and starts the segment in its place (お茶を|飲む), and a
+/// single hiragana char at the head of the text — a particle carried over
+/// from what was typed before — makes no segment of its own.
+///
+/// The dictionary says nothing about where to cut here. It still lines
+/// the text up with the reading, which is what gives each segment its
+/// reading, so a boundary that falls inside the only word covering it
+/// (ご存知) is not cut. Empty when that leaves fewer than two segments.
+pub(in crate::core) fn script_cut(reading: &str, text: &str, words: WordLookup) -> Vec<Piece> {
+    let chars: Vec<char> = text.chars().collect();
+    let starts = script_starts(&chars);
+    cuts_where(reading, text, words, 1, Way::Script(&starts))
+        .pop()
+        .unwrap_or_default()
+}
+
+/// `text` cut as finely as the dictionary cuts it: the opposite end from
+/// [`ranked_cuts`], the most segments instead of the fewest, so a word
+/// made of words comes apart (早稲田|大学) and a particle the dictionary
+/// has stands alone (今日|は). The extreme on purpose, for when the
+/// longest match keeps together what is to be fixed apart — and it does
+/// take apart whatever the dictionary can tile (プロ|グラ|ミング).
+///
+/// Two things keep it from going to dust. A word of a single kanji or
+/// katakana counts against a covering before the segments are counted, so
+/// 東京 does not become 東|京. And a single hiragana is a word only right
+/// after something that is not hiragana: は after 今日 is, the あ and る
+/// of ある are not.
+///
+/// Empty when that leaves fewer than two segments.
+pub(in crate::core) fn finest_cut(reading: &str, text: &str, words: WordLookup) -> Vec<Piece> {
+    cuts_where(reading, text, words, 1, Way::Shortest)
+        .pop()
+        .unwrap_or_default()
+}
+
+/// What a cut is after.
+#[derive(Debug, Clone, Copy)]
+enum Way<'a> {
+    /// The dictionary's words, the fewest segments: [`ranked_cuts`].
+    Longest,
+    /// The dictionary's words, the most segments: [`finest_cut`].
+    Shortest,
+    /// These places, where segments start by script alone:
+    /// [`script_cut`]. The covering only lines the text up with the
+    /// reading, and the one wanted hides the fewest of them in a step.
+    Script(&'a [bool]),
+}
+
+/// For each char of `text`, whether a segment starts there by script
+/// alone ([`script_cut`]).
+fn script_starts(text: &[char]) -> Vec<bool> {
+    // The run each char is in: a script words are written in, or `None`
+    // for hiragana and marks. `ー` goes with whatever it prolongs.
+    let mut runs: Vec<Option<Script>> = Vec::with_capacity(text.len());
+    for &c in text {
+        let run = match Script::of(c) {
+            Script::ProlongedMark => runs.last().copied().flatten(),
+            Script::Hiragana => None,
+            Script::Other if !is_kanji(c) => None,
+            script => Some(script),
+        };
+        runs.push(run);
+    }
+    let mut starts = vec![false; text.len()];
+    for i in 1..text.len() {
+        if runs[i].is_none() || runs[i] == runs[i - 1] {
+            continue;
+        }
+        let prefixed = is_kanji(text[i]) && matches!(text[i - 1], 'お' | 'ご');
+        starts[if prefixed { i - 1 } else { i }] = true;
+    }
+    // A lone hiragana char at the head joins what follows it.
+    if text.len() > 1 && runs[0].is_none() && starts[1] {
+        starts[1] = false;
+    }
+    starts[0] = false;
+    starts
+}
+
+fn is_kanji(c: char) -> bool {
+    matches!(c, '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '々' | '〆')
+}
+
+/// The best `k` cuts of `text` into two segments or more, for what `way`
+/// is after. One search for all three: they differ in where a segment
+/// starts and in what a covering is charged for.
+fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) -> Vec<Vec<Piece>> {
     let reading: Vec<char> = reading.chars().collect();
     let text: Vec<char> = text.chars().collect();
     let (n, m) = (text.len(), reading.len());
@@ -272,21 +370,40 @@ pub(in crate::core) fn ranked_cuts(
         for j in (0..m).rev() {
             let mut here = Vec::new();
             let mut take = |i2: usize, j2: usize, kind: Step, outside: usize, doubtful: bool| {
-                let starts = i > 0 && starts_segment(&text, i, kind);
-                let single = starts && kind == Step::Word && i2 - i == 1;
-                let step = (
-                    outside,
-                    usize::from(kind == Step::Unknown),
-                    usize::from(starts),
-                    usize::from(single),
-                );
+                let (starts, third, fourth) = match way {
+                    Way::Longest => {
+                        let starts = i > 0 && starts_segment(&text, i, kind);
+                        let single = starts && kind == Step::Word && i2 - i == 1;
+                        (starts, usize::from(starts), usize::from(single))
+                    }
+                    Way::Shortest => {
+                        let starts = i > 0 && starts_segment(&text, i, kind);
+                        let lone = kind == Step::Word
+                            && i2 - i == 1
+                            && Script::of(text[i]) != Script::Hiragana;
+                        // Every char that starts no segment is charged, so
+                        // the fewest of them is the most segments.
+                        (starts, usize::from(lone), i2 - i - usize::from(starts))
+                    }
+                    Way::Script(script) => {
+                        let hidden = script[i + 1..i2].iter().filter(|&&s| s).count();
+                        (script[i], hidden, 0)
+                    }
+                };
+                let step = (outside, usize::from(kind == Step::Unknown), third, fourth);
                 for rest in &kept[i2][j2] {
                     offer(&mut here, rest, step, doubtful, starts.then_some((i, j)));
                 }
             };
             for (taken, surface) in &words_at[j] {
                 let (i2, j2) = (i + surface.len(), j + taken);
-                if i2 <= n && j2 <= m && folded_text[i..i2] == surface[..] {
+                // Cutting finely, a hiragana among hiragana is no word.
+                let dust = matches!(way, Way::Shortest)
+                    && surface.len() == 1
+                    && i > 0
+                    && Script::of(text[i]) == Script::Hiragana
+                    && Script::of(text[i - 1]) == Script::Hiragana;
+                if i2 <= n && j2 <= m && folded_text[i..i2] == surface[..] && !dust {
                     take(i2, j2, Step::Word, 0, false);
                 }
             }
@@ -318,9 +435,14 @@ pub(in crate::core) fn ranked_cuts(
     let Some(best) = cuts.first().filter(|best| !best.doubtful) else {
         return Vec::new();
     };
-    let known = (best.cost.0, best.cost.1);
+    // Cutting finely, single-kanji words are held to the best covering's
+    // too: a cut that needs more of them (東|京) is no cut.
+    let known = |cut: &Cut| match way {
+        Way::Shortest => (cut.cost.0, cut.cost.1, cut.cost.2),
+        Way::Longest | Way::Script(_) => (cut.cost.0, cut.cost.1, 0),
+    };
     cuts.iter()
-        .filter(|cut| !cut.doubtful && (cut.cost.0, cut.cost.1) == known)
+        .filter(|cut| !cut.doubtful && known(cut) == known(best))
         .filter(|cut| !cut.starts.is_empty())
         .take(k)
         .map(|cut| {
@@ -632,5 +754,150 @@ mod tests {
         assert!(ranked("きょう", "今日", &[("きょう", "今日")]).is_empty());
         // A word the dictionary lacks is not cut at a guess.
         assert!(ranked("わせだだいがく", "早稲田大学", &[]).is_empty());
+    }
+
+    /// The cut by script, written like [`split_with`]'s; empty when it
+    /// does not cut.
+    fn by_script(reading: &str, text: &str, entries: &[(&str, &str)]) -> String {
+        script_cut(reading, text, &lookup(entries))
+            .iter()
+            .map(|p| format!("{}={}", p.reading, p.text))
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
+    #[test]
+    fn the_script_cuts_where_a_run_starts() {
+        let entries = [
+            ("きょうぎぷろぐらみんぐ", "競技プログラミング"),
+            ("きょうぎ", "競技"),
+            ("ぷろぐらみんぐ", "プログラミング"),
+            ("まなぶ", "学ぶ"),
+        ];
+        // Where the dictionary has one long word, the script still cuts.
+        assert_eq!(
+            by_script(
+                "きょうぎぷろぐらみんぐをまなぶ",
+                "競技プログラミングを学ぶ",
+                &entries
+            ),
+            "きょうぎ=競技|ぷろぐらみんぐを=プログラミングを|まなぶ=学ぶ"
+        );
+        // Kanji that run on are one run.
+        assert_eq!(
+            by_script(
+                "わせだだいがくにいく",
+                "早稲田大学に行く",
+                &[("いく", "行く")]
+            ),
+            "わせだだいがくに=早稲田大学に|いく=行く"
+        );
+        // ー goes with what it prolongs, and one run is no cut.
+        assert_eq!(by_script("らーめん", "らーめん", &[]), "");
+    }
+
+    #[test]
+    fn the_script_cut_knows_a_prefix_and_a_leading_particle() {
+        let entries = [
+            ("おちゃ", "お茶"),
+            ("のむ", "飲む"),
+            ("ごはん", "ご飯"),
+            ("たべる", "食べる"),
+        ];
+        // お and ご before kanji start the segment.
+        assert_eq!(
+            by_script("きょうはおちゃをのむ", "今日はお茶を飲む", &entries),
+            "きょうは=今日は|おちゃを=お茶を|のむ=飲む"
+        );
+        assert_eq!(
+            by_script("おちゃをのむ", "お茶を飲む", &entries),
+            "おちゃを=お茶を|のむ=飲む"
+        );
+        // A lone hiragana char at the head is no segment of its own.
+        assert_eq!(
+            by_script("をのんでごはんをたべる", "を飲んでご飯を食べる", &entries),
+            "をのんで=を飲んで|ごはんを=ご飯を|たべる=食べる"
+        );
+        // A hiragana word at the head is.
+        assert_eq!(
+            by_script("これはごはん", "これはご飯", &entries),
+            "これは=これは|ごはん=ご飯"
+        );
+    }
+
+    #[test]
+    fn the_script_cut_never_cuts_inside_the_only_word_there() {
+        // ご存知 changes script, and nothing but the whole word reads it.
+        assert_eq!(
+            by_script("ごぞんじ", "ご存知", &[("ごぞんじ", "ご存知")]),
+            ""
+        );
+    }
+
+    /// The finest cut, written like [`split_with`]'s; empty when it does
+    /// not cut.
+    fn finest(reading: &str, text: &str, entries: &[(&str, &str)]) -> String {
+        finest_cut(reading, text, &lookup(entries))
+            .iter()
+            .map(|p| format!("{}={}", p.reading, p.text))
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
+    #[test]
+    fn the_finest_cut_takes_words_and_particles_apart() {
+        let entries = [
+            ("わせだだいがく", "早稲田大学"),
+            ("わせだ", "早稲田"),
+            ("だいがく", "大学"),
+            ("に", "に"),
+            ("は", "は"),
+            ("いく", "行く"),
+            ("い", "行"),
+            ("く", "く"),
+        ];
+        assert_eq!(
+            finest("わせだだいがくにはいく", "早稲田大学には行く", &entries),
+            // に comes off its word; は, a hiragana after a hiragana, does
+            // not come off に; 行く is not 行|く.
+            "わせだ=早稲田|だいがく=大学|には=には|いく=行く"
+        );
+    }
+
+    #[test]
+    fn the_finest_cut_stops_short_of_dust() {
+        let entries = [
+            ("とうきょう", "東京"),
+            ("とう", "東"),
+            ("きょう", "京"),
+            ("と", "都"),
+            ("とうきょうと", "東京都"),
+            ("あ", "あ"),
+            ("る", "る"),
+            ("ある", "ある"),
+            ("に", "に"),
+        ];
+        // Never down to single kanji while a longer word will do.
+        assert_eq!(finest("とうきょう", "東京", &entries), "");
+        // Nor hiragana into its letters.
+        assert_eq!(
+            finest("とうきょうにある", "東京にある", &entries),
+            "とうきょう=東京|に=に|ある=ある"
+        );
+    }
+
+    #[test]
+    fn the_finest_cut_takes_apart_whatever_the_dictionary_tiles() {
+        let entries = [
+            ("ぷろぐらみんぐ", "プログラミング"),
+            ("ぷろ", "プロ"),
+            ("ぐら", "グラ"),
+            ("みんぐ", "ミング"),
+        ];
+        // The extreme, as asked for.
+        assert_eq!(
+            finest("ぷろぐらみんぐ", "プログラミング", &entries),
+            "ぷろ=プロ|ぐら=グラ|みんぐ=ミング"
+        );
     }
 }
