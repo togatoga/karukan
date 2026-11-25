@@ -191,6 +191,7 @@ impl InputMethodEngine {
 
         let preedit = Preedit::with_text_highlighted(&selected_text);
 
+        self.segment_granularity = Default::default();
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
             candidates: candidates.clone(),
@@ -646,6 +647,11 @@ impl InputMethodEngine {
             // Shift+Tab (ISO_Left_Tab on X11) and Shift+Space step back the
             // way Tab and Space step forward: mozc-compatible muscle memory.
             Keysym::ISO_LEFT_TAB => self.prev_candidate(),
+            // Ctrl+Space: cut the conversion into segments, and with each
+            // further press cut it another way.
+            Keysym::SPACE if key.modifiers.control_key && self.segments_apply() => {
+                self.cycle_segmentation()
+            }
             Keysym::TAB | Keysym::SPACE if key.modifiers.shift_key => self.prev_candidate(),
             Keysym::SPACE | Keysym::DOWN | Keysym::TAB => self.next_candidate(),
             Keysym::UP => self.prev_candidate(),

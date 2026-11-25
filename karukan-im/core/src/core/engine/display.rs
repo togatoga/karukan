@@ -233,10 +233,11 @@ impl InputMethodEngine {
         if self.state.is_segmented() {
             let (left, right) = self.state.neighbours();
             return format!(
-                "{} {shown} 文節{}/{}",
+                "{} {shown} 文節{}/{} 区切り{}",
                 self.segment_outline(),
                 left.len() + 1,
-                left.len() + 1 + right.len()
+                left.len() + 1 + right.len(),
+                self.segment_granularity.number()
             );
         }
         if self.state.reading() == Some(shown) {

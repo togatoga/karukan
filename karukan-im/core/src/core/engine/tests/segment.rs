@@ -334,3 +334,107 @@ fn a_conversion_that_dropped_kana_is_not_split() {
     assert!(!engine.state().is_segmented());
     assert_eq!(preedit_text(&engine), "早稲田大学へ行く");
 }
+
+/// わせだだいがくにいく converted to 早稲田大学に行く, with a dictionary
+/// that knows the university both as one word and as its two parts.
+fn converted_university() -> InputMethodEngine {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
+        r#"[
+            {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1.0}]},
+            {"reading":"だいがく","candidates":[{"surface":"大学","score":1.0}]},
+            {"reading":"わせだだいがく","candidates":[{"surface":"早稲田大学","score":1.0}]},
+            {"reading":"いく","candidates":[{"surface":"行く","score":1.0}]}
+        ]"#,
+    )));
+    seed_model_cache(
+        &mut engine,
+        "ワセダダイガクニイク",
+        "",
+        &["早稲田大学に行く"],
+    );
+    type_keys(&mut engine, "wasedadaigakuniiku");
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(!engine.state().is_segmented());
+    engine
+}
+
+/// The segments' texts in order.
+fn segment_texts(engine: &InputMethodEngine) -> Vec<String> {
+    let (left, right) = engine.state().neighbours();
+    left.iter()
+        .map(|s| s.text().to_string())
+        .chain([focused_text(engine)])
+        .chain(right.iter().map(|s| s.text().to_string()))
+        .collect()
+}
+
+fn press_ctrl_space() -> KeyEvent {
+    press_ctrl(Keysym::SPACE)
+}
+
+#[test]
+fn ctrl_space_enters_segments_and_then_cuts_another_way() {
+    let mut engine = converted_university();
+
+    // First press: the dictionary's longest words, first segment focused.
+    engine.process_key(&press_ctrl_space());
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(focused_text(&engine), "早稲田大学に");
+
+    // Second: the shorter words the long one is made of.
+    engine.process_key(&press_ctrl_space());
+    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "行く"]);
+
+    // The script alone cuts where the longest words did, which is no
+    // change from two presses ago but is one from here.
+    engine.process_key(&press_ctrl_space());
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+
+    // The text never changed.
+    assert_eq!(preedit_text(&engine), "早稲田大学に行く");
+}
+
+#[test]
+fn ctrl_space_keeps_what_was_chosen_in_a_segment() {
+    let mut engine = converted_university();
+    seed_model_cache(&mut engine, "イク", "早稲田大学に", &["行く", "逝く"]);
+    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_key(Keysym::END));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(preedit_text(&engine), "早稲田大学に逝く");
+
+    engine.process_key(&press_ctrl_space());
+    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "逝く"]);
+}
+
+#[test]
+fn ctrl_space_does_nothing_where_nothing_comes_apart() {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    seed_model_cache(&mut engine, "キョウ", "", &["今日"]);
+    type_keys(&mut engine, "kyou");
+    engine.process_key(&press_key(Keysym::SPACE));
+    let result = engine.process_key(&press_ctrl_space());
+    assert!(result.consumed);
+    assert!(!engine.state().is_segmented());
+    assert_eq!(preedit_text(&engine), "今日");
+}
+
+#[test]
+fn the_aux_line_says_which_way_it_is_cut() {
+    let mut engine = converted_university();
+    let aux = |result: &EngineResult| {
+        result
+            .actions
+            .iter()
+            .find_map(|a| match a {
+                EngineAction::UpdateAuxText(text) => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let result = engine.process_key(&press_ctrl_space());
+    assert!(aux(&result).contains("区切り1"), "{}", aux(&result));
+    let result = engine.process_key(&press_ctrl_space());
+    assert!(aux(&result).contains("区切り2"), "{}", aux(&result));
+}
