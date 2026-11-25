@@ -675,6 +675,7 @@ fn test_model_view_converts_japanese_run_and_passes_digits_through() {
     for ch in ['a', 'i', '1', '2', '3'] {
         engine.process_key(&press(ch));
     }
+    engine.process_key(&press_key(Keysym::SPACE));
     open_model_view(&mut engine);
     assert_eq!(shown_texts(&engine), vec!["合い123"]);
 }
@@ -701,11 +702,11 @@ fn test_model_view_beams_a_tail_window_on_long_readings() {
 }
 
 #[test]
-fn test_space_conversion_keeps_the_alternatives_of_the_tail() {
+fn test_space_conversion_beams_the_tail_window() {
     use crate::config::settings::StrategyMode;
-    // Space opens on the live grid's own text, split into segments; the
-    // last segment's list holds what the tail's beam used to put in the
-    // mixed list, converted after the same prefix.
+    // Space shares the tail-window conversion: a reading longer than the
+    // window cap still gets beam-width model rows in the mixed list
+    // (prefix top-1 + window beam) instead of one greedy candidate.
     let mut engine = InputMethodEngine::new();
     engine.config.verbose = true;
     engine.config.chunk_chars = 2;
@@ -717,10 +718,8 @@ fn test_space_conversion_keeps_the_alternatives_of_the_tail() {
         engine.process_key(&press(ch));
     }
     engine.process_key(&press_key(Keysym::SPACE));
-    assert_eq!(engine.preedit().unwrap().text(), "合い上");
-    engine.process_key(&press_key(Keysym::END));
     let texts = shown_texts(&engine);
-    assert_eq!(&texts[..2], ["上", "植え"], "texts were: {texts:?}");
+    assert_eq!(&texts[..2], ["合い上", "合い植え"], "texts were: {texts:?}");
 }
 
 #[test]
@@ -738,7 +737,8 @@ fn test_space_head_is_the_live_grid_conversion() {
         engine.process_key(&press(ch));
     }
     engine.process_key(&press_key(Keysym::SPACE));
-    assert_eq!(engine.preedit().unwrap().text(), "合い上");
+    let texts = shown_texts(&engine);
+    assert_eq!(&texts[..2], ["合い上", "合い植え"], "texts were: {texts:?}");
 }
 
 #[test]

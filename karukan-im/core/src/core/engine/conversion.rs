@@ -154,9 +154,7 @@ impl InputMethodEngine {
         }
 
         let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-        let result = self.enter_conversion_state(&reading, candidate_list);
-        // A sentence opens already split, its first segment focused.
-        self.split_on_entry().unwrap_or(result)
+        self.enter_conversion_state(&reading, candidate_list)
     }
 
     /// Map builder output to the public [`CandidateList`] shown in the

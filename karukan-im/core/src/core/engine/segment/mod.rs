@@ -38,34 +38,11 @@ impl InputMethodEngine {
         self.mode.current() == InputMode::Hiragana
     }
 
-    /// Split a conversion that has just opened: whatever heads its list —
-    /// the model's answer, a phrase from the history or a dictionary — is
-    /// shown in segments from the start, the first one focused, so the
-    /// user never has to ask for them. `None` when it does not come apart
-    /// (one word) and the conversion is left as it was.
-    pub(super) fn split_on_entry(&mut self) -> Option<EngineResult> {
-        // Two lists are the whole reading's and nothing else's: one
-        // offering a setting (でばっぐもーど), which only the unsplit list
-        // carries, and one still narrowed by a romaji tail (わせd), where
-        // the word is not finished and the list is predicting it.
-        let whole_only = self
-            .state
-            .reading()
-            .is_some_and(|reading| self.command_candidate(reading).is_some())
-            || !self.input_buf.pending().is_empty();
-        if !self.segments_apply() || whole_only {
-            return None;
-        }
-        let (segments, focus) = self.segments();
-        if segments.len() < 2 {
-            return None;
-        }
-        self.put_segments(segments, focus);
-        Some(self.render_conversion())
-    }
-
     /// ←/→/Home/End: move the focus to another segment, wrapping at the
-    /// ends. On a conversion still whole, the press is what splits it.
+    /// ends. A conversion opens whole, with the list for all of it; the
+    /// first of these keys is what splits it, and from the whole → lands
+    /// on the second segment and ← on the last, as if the first had been
+    /// focused all along.
     pub(super) fn focus_segment(&mut self, to: Focus) -> EngineResult {
         let (segments, focus) = self.segments();
         let last = segments.len() - 1;

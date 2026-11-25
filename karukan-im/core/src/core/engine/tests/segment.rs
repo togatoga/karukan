@@ -67,22 +67,23 @@ fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_sentence_opens_split_with_its_first_segment_focused() {
+fn a_conversion_opens_whole() {
+    // Space shows what it always did: the list for the whole reading.
+    // Segments are asked for with the arrow keys.
     let engine = converted_sentence();
+    assert!(!engine.state().is_segmented());
+    assert_eq!(focused_text(&engine), "今日は医者に行く");
+    assert_eq!(engine.state().reading(), Some("きょうはいしゃにいく"));
+}
+
+#[test]
+fn home_splits_and_focuses_the_first_segment() {
+    let mut engine = converted_sentence();
+    engine.process_key(&press_key(Keysym::HOME));
     assert!(engine.state().is_segmented());
     assert_eq!(focused_text(&engine), "今日は");
     assert_eq!(engine.state().reading(), Some("きょうは"));
     assert_eq!(engine.preedit().unwrap().caret(), 0);
-}
-
-#[test]
-fn one_word_stays_one_segment() {
-    let mut engine = engine_with_learned("__none__", "__none__");
-    seed_model_cache(&mut engine, "キョウ", "", &["今日"]);
-    type_keys(&mut engine, "kyou");
-    engine.process_key(&press_key(Keysym::SPACE));
-    assert!(!engine.state().is_segmented());
-    assert_eq!(focused_text(&engine), "今日");
 }
 
 #[test]
@@ -91,6 +92,7 @@ fn a_phrase_from_the_history_is_split_like_any_other() {
     type_keys(&mut engine, "kyouhaishaniiku");
     engine.process_key(&press_key(Keysym::SPACE));
     assert_eq!(preedit_text(&engine), "今日は医者に行く");
+    engine.process_key(&press_key(Keysym::HOME));
     assert!(engine.state().is_segmented());
     assert_eq!(focused_text(&engine), "今日は");
 }
@@ -135,7 +137,6 @@ fn right_moves_the_focus_to_the_second_segment() {
 #[test]
 fn focus_wraps_and_jumps() {
     let mut engine = converted_sentence();
-    assert_eq!(focused_text(&engine), "今日は");
     engine.process_key(&press_key(Keysym::LEFT));
     assert_eq!(focused_text(&engine), "行く", "← from the first wraps");
     engine.process_key(&press_key(Keysym::RIGHT));
@@ -175,10 +176,10 @@ fn enter_commits_every_segment_and_learns_the_chosen_ones() {
     assert!(engine.state().is_empty());
     // A segment that was focused is learned under its own reading: its
     // text was chosen from a list built for that reading.
-    assert_eq!(learned(&engine, "きょうは"), ["今日は"]);
     assert_eq!(learned(&engine, "いしゃに"), ["慰謝に"]);
     // A segment never focused was cut out of the whole conversion: its
     // pairing with the reading is a guess, and teaches nothing.
+    assert!(learned(&engine, "きょうは").is_empty());
     assert!(learned(&engine, "いく").is_empty());
     // The sentence as a whole is learned as it always was.
     assert_eq!(
