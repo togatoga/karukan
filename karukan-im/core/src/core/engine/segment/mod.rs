@@ -66,8 +66,9 @@ impl InputMethodEngine {
     /// ([`Self::cut`], what the arrow keys split into), the script alone
     /// ([`script_cut`]), which cuts where the dictionary has one long
     /// word, and the dictionary's shortest words ([`finest_cut`]), the
-    /// extreme. A way that cuts as an earlier one does is left out, and
-    /// with one way left the second press does nothing.
+    /// extreme. A way that cuts as an earlier one does is left out. After
+    /// the last way comes the whole again, one segment over everything,
+    /// so the key is also the way back out of segments.
     ///
     /// What is cut is the text on screen, so choices already made in a
     /// segment carry over as text.
@@ -105,8 +106,9 @@ impl InputMethodEngine {
                 ways.push((name, cut));
             }
         }
-        // From the whole, the first way; from one of them, the next; and
-        // the first again from segments that are none (one was resized).
+        // From the whole, the first way; from one of them, the next, and
+        // from the last the whole again; and the first from segments that
+        // are none of them (one was resized).
         let shown = ways.iter().position(|(_, cut)| {
             !whole
                 && cut
@@ -115,8 +117,14 @@ impl InputMethodEngine {
                     .eq(segments.iter().map(|s| s.reading.as_str()))
         });
         let next = match shown {
-            Some(_) if ways.len() == 1 => return EngineResult::consumed(),
-            Some(at) => (at + 1) % ways.len(),
+            Some(at) if at + 1 == ways.len() => {
+                // Back to one segment over everything, with what is on
+                // screen at the head of its list.
+                self.put_segments(vec![Segment::unbuilt(reading, Some(text))], 0);
+                self.segment_cut = None;
+                return self.render_conversion();
+            }
+            Some(at) => at + 1,
             None if ways.is_empty() => return EngineResult::consumed(),
             None => 0,
         };

@@ -418,24 +418,46 @@ fn ctrl_s_cuts_the_conversion_into_segments() {
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行", "く"]);
 
-    // The dictionary's shortest words — and then round to the first.
+    // The dictionary's shortest words.
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
+
+    // Then the whole again, one segment — and round to the first way.
+    engine.process_key(&press_ctrl_s());
+    assert!(!engine.state().is_segmented());
+    assert_eq!(focused_text(&engine), "早稲田大学に行く");
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 }
 
 #[test]
-fn ctrl_s_does_nothing_more_when_every_way_cuts_alike() {
+fn ctrl_s_goes_between_the_one_way_and_the_whole_when_every_way_cuts_alike() {
     let mut engine = converted_tower();
     engine.process_key(&press_ctrl_s());
-    engine.process_key(&press_key(Keysym::RIGHT));
-    let result = engine.process_key(&press_ctrl_s());
-
-    assert!(result.consumed);
     assert_eq!(segment_texts(&engine), ["東京", "タワー"]);
-    assert_eq!(focused_text(&engine), "タワー");
+
+    engine.process_key(&press_ctrl_s());
+    assert!(!engine.state().is_segmented());
+    assert_eq!(preedit_text(&engine), "東京タワー");
+
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["東京", "タワー"]);
+}
+
+#[test]
+fn ctrl_s_back_to_the_whole_keeps_what_was_chosen() {
+    let mut engine = converted_tower();
+    seed_model_cache(&mut engine, "トウキョウ", "", &["東京", "東響"]);
+    engine.process_key(&press_ctrl_s());
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert_eq!(preedit_text(&engine), "東響タワー");
+
+    engine.process_key(&press_ctrl_s());
+    assert!(!engine.state().is_segmented());
+    assert_eq!(preedit_text(&engine), "東響タワー");
+    let result = engine.process_key(&press_key(Keysym::RETURN));
+    assert_eq!(committed(&result).as_deref(), Some("東響タワー"));
 }
 
 /// とうきょうたわー converted to 東京タワー with no dictionary: the three
@@ -521,7 +543,9 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
         aux_text(&result)
     );
 
-    // And back.
+    // The whole, and then the first way again.
+    engine.process_key(&press_ctrl_s());
+    assert!(!engine.state().is_segmented());
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["競技プログラミング", "を", "学ぶ"]);
     assert_eq!(preedit_text(&engine), "競技プログラミングを学ぶ");
