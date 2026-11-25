@@ -98,10 +98,21 @@ fn a_phrase_from_the_history_is_split_like_any_other() {
 }
 
 #[test]
-fn the_aux_line_spells_out_where_the_focus_is() {
-    // Drawn by the IME itself, so it shows in applications that draw every
-    // underline of the preedit alike (a terminal).
+fn the_aux_line_is_quiet_about_segments() {
     let mut engine = converted_sentence();
+    let result = engine.process_key(&press_key(Keysym::RIGHT));
+    let aux = aux_text(&result);
+    // The focused segment's reading, and none of the detail.
+    assert!(aux.contains("いしゃに"), "aux was: {aux}");
+    assert!(!aux.contains("文節"), "aux was: {aux}");
+    assert!(!aux.contains("[医者に]"), "aux was: {aux}");
+}
+
+#[test]
+fn the_verbose_aux_line_spells_out_where_the_focus_is() {
+    // Debug detail: which segment of how many, and its neighbours.
+    let mut engine = converted_sentence();
+    engine.config.verbose = true;
     let result = engine.process_key(&press_key(Keysym::RIGHT));
     let aux = result
         .actions
@@ -555,6 +566,8 @@ fn aux_text(result: &EngineResult) -> String {
 #[test]
 fn ctrl_s_again_cuts_the_next_way_and_round() {
     let mut engine = converted_programming();
+    // The aux line names the way of cutting in verbose mode.
+    engine.config.verbose = true;
 
     // By the dictionary: its longest word is one segment.
     let result = engine.process_key(&press_ctrl_s());
@@ -609,6 +622,7 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
 #[test]
 fn ctrl_s_names_no_way_of_cutting_when_there_is_one() {
     let mut engine = converted_tower();
+    engine.config.verbose = true;
     let result = engine.process_key(&press_ctrl_s());
     assert!(
         aux_text(&result).contains("文節1/2"),
