@@ -119,11 +119,20 @@ impl InputMethodEngine {
     /// composition, with `form` selected. Pressing the same key again while
     /// that list is shown steps to the key's next variant.
     pub(super) fn transliterate(&mut self, form: Transliteration) -> EngineResult {
-        let reading = self.input_buf.settled_reading(&self.converters.romaji);
+        // In a split conversion the key rewrites the focused segment. Its
+        // kana forms come from its reading; which keystrokes typed that
+        // stretch is not recorded, so F9/F10 have nothing to show.
+        let segmented = self.state.is_segmented();
+        let (reading, keystrokes) = match self.state.reading() {
+            Some(reading) if segmented => (reading.to_string(), String::new()),
+            _ => (
+                self.input_buf.settled_reading(&self.converters.romaji),
+                self.input_buf.keystrokes(),
+            ),
+        };
         if reading.is_empty() {
             return EngineResult::consumed();
         }
-        let keystrokes = self.input_buf.keystrokes();
         let mut rows: Vec<Candidate> = Transliteration::ALL
             .into_iter()
             .flat_map(|t| {
@@ -186,6 +195,9 @@ impl InputMethodEngine {
         // Like Space: the list replaces the live display, so cancelling
         // returns to the kana, not to the live conversion.
         self.live.shown = false;
+        if segmented {
+            return self.replace_focused_candidates(candidates);
+        }
         self.enter_conversion_state(&reading, candidates)
     }
 }

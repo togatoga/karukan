@@ -16,6 +16,7 @@ mod input;
 mod input_buffer;
 mod mode;
 mod model;
+mod segment;
 mod strategy;
 mod transliterate;
 mod types;
@@ -337,6 +338,11 @@ impl InputMethodEngine {
         if let Some(result) = self.run_selected_command() {
             return result;
         }
+        // In a split conversion the pick settles one segment, not the
+        // whole: the focus moves on to the next one, and Enter commits.
+        if self.state.is_segmented() {
+            return self.after_segment_pick();
+        }
         let Some(candidates) = self.shown_candidates_mut() else {
             return EngineResult::consumed();
         };
@@ -358,7 +364,8 @@ impl InputMethodEngine {
         } else {
             None
         };
-        self.finish_conversion(&text, &reading);
+        let learned: Vec<_> = reading.map(|r| (r, text.clone())).into_iter().collect();
+        self.finish_conversion(&learned);
 
         EngineResult::consumed()
             .with_action(EngineAction::Commit(text))
@@ -712,10 +719,8 @@ impl InputMethodEngine {
                 String::new()
             }
             InputState::Conversion { .. } => {
-                let (text, reading) = self
-                    .selected_conversion_info()
-                    .expect("state is Conversion");
-                self.finish_conversion(&text, &reading);
+                let (text, learned) = self.conversion_commit().expect("state is Conversion");
+                self.finish_conversion(&learned);
                 text
             }
         };

@@ -228,6 +228,16 @@ impl InputMethodEngine {
     /// reading」) is not a chunk, so that text stays and only the counter is
     /// taken from the chunk.
     fn conversion_reading(&self, shown: &str) -> String {
+        // Split into segments, the line names the focused one and where it
+        // stands: the composition's chunk counter says nothing about it.
+        if self.state.is_segmented() {
+            let (left, right) = self.state.neighbours();
+            return format!(
+                "{shown} 文節{}/{}",
+                left.len() + 1,
+                left.len() + 1 + right.len()
+            );
+        }
         if self.state.reading() == Some(shown) {
             return self.aux_reading();
         }
@@ -243,7 +253,9 @@ impl InputMethodEngine {
     /// and a selected predictive candidate carries a reading of its own.
     /// Both cases keep `shown` as it is.
     fn conversion_chunk_reading(&self, shown: &str) -> Option<String> {
-        if !matches!(self.state.filter(), None | Some(CandidateSource::Model)) {
+        if !matches!(self.state.filter(), None | Some(CandidateSource::Model))
+            || self.state.is_segmented()
+        {
             return None;
         }
         let reading = self.state.reading().filter(|r| *r == shown)?;

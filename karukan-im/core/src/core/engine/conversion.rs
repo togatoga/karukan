@@ -7,8 +7,10 @@ use std::collections::HashSet;
 use tracing::debug;
 
 use super::filter::source_for_key;
+use super::segment::Focus;
 use super::transliterate::Transliteration;
 use super::*;
+use crate::core::state::Segment;
 
 /// Maximum number of learning candidates to show
 const MAX_LEARNING_CANDIDATES: usize = 3;
@@ -195,6 +197,9 @@ impl InputMethodEngine {
             reading: reading.to_string(),
             // A fresh conversion always starts unfiltered
             filter: None,
+            // and as one segment
+            left: Vec::new(),
+            right: Vec::new(),
         };
 
         // After the state assignment: the aux header reads the active filter.
@@ -340,8 +345,14 @@ impl InputMethodEngine {
         // 1. Learning cache candidates (highest priority).
         //    Force-inserted so they win against duplicate text from later sources.
         //    Skipped when the caller asks for a learning-free conversion (Tab key).
+        // A segment's reading is fixed: an entry that reads longer is not an
+        // answer to it, so no prediction in either source.
+        let segmented = self.state.is_segmented();
         if learning == LearningLookup::Use {
             for c in self.lookup_learning_candidates(reading) {
+                if segmented && c.reading.as_deref() != Some(reading) {
+                    continue;
+                }
                 // Exact matches have reading == input reading; use None to avoid redundancy
                 let cand_reading = c.reading.filter(|r| r != reading);
                 builder.push_force(
@@ -357,7 +368,7 @@ impl InputMethodEngine {
             base,
             pending,
             usize::MAX,
-            usize::MAX,
+            if segmented { 0 } else { usize::MAX },
             MIN_PREDICTIVE_PREFIX_CHARS,
             None,
         );
@@ -654,23 +665,33 @@ impl InputMethodEngine {
             // stays in the view — the mirror of typing-refine, so the list
             // re-expands as the query shrinks. Without a filter it returns
             // to the composition as before.
-            Keysym::BACKSPACE if self.state.filter().is_some() => {
+            Keysym::BACKSPACE if self.state.filter().is_some() && !self.state.is_segmented() => {
                 self.refine_through_composing(key)
             }
             // Backspace cancels back to the composition, like Escape.
             Keysym::BACKSPACE => self.cancel_conversion(),
             // Ctrl+H deletes like Backspace, matching mozc's MS-IME keymap.
             Keysym::KEY_H | Keysym::KEY_H_UPPER if key.modifiers.control_key => {
-                if self.state.filter().is_some() {
+                if self.state.filter().is_some() && !self.state.is_segmented() {
                     self.refine_through_composing(key)
                 } else {
                     self.cancel_conversion()
                 }
             }
-            // Caret keys drop back to editing, the same way a caret move
-            // ends the live-conversion display while composing: the
+            // The arrow keys work on segments, mozc-style: ←/→ move the
+            // focus, Shift+←/→ shrink and grow the focused one, Home/End
+            // jump to the first and last.
+            Keysym::LEFT | Keysym::RIGHT if self.segments_apply() && key.modifiers.shift_key => {
+                self.resize_segment(key.keysym == Keysym::RIGHT)
+            }
+            Keysym::LEFT if self.segments_apply() => self.focus_segment(Focus::Left),
+            Keysym::RIGHT if self.segments_apply() => self.focus_segment(Focus::Right),
+            Keysym::HOME if self.segments_apply() => self.focus_segment(Focus::First),
+            Keysym::END if self.segments_apply() => self.focus_segment(Focus::Last),
+            // Where there are no segments to move between (direct input,
+            // the emoji picker) the caret keys drop back to editing: the
             // conversion (and its source filter) dissolves and the raw
-            // reading gets the caret. Delegated to the composing handler so
+            // text gets the caret. Delegated to the composing handler so
             // the two states cannot drift apart.
             Keysym::LEFT | Keysym::RIGHT | Keysym::HOME | Keysym::END => {
                 self.in_composing(false, |e| e.process_key_composing(key))
@@ -692,12 +713,27 @@ impl InputMethodEngine {
                         }
                         // Ctrl+J: split at the caret and rebuild, so the
                         // alternatives cover only the text after the break.
+                        // Segments have boundaries of their own; a chunk
+                        // break would cut the composition under them.
+                        Keysym::KEY_J | Keysym::KEY_J_UPPER if self.state.is_segmented() => {
+                            return EngineResult::consumed();
+                        }
                         Keysym::KEY_J | Keysym::KEY_J_UPPER => {
                             return self.rebreak_conversion();
                         }
-                        // Ctrl+A/B/E/F: the same caret moves as while
-                        // composing, dropping back to editing like the
-                        // arrow keys above.
+                        // Ctrl+A/B/E/F: Home/←/End/→, as while composing.
+                        Keysym::KEY_A | Keysym::KEY_A_UPPER if self.segments_apply() => {
+                            return self.focus_segment(Focus::First);
+                        }
+                        Keysym::KEY_B | Keysym::KEY_B_UPPER if self.segments_apply() => {
+                            return self.focus_segment(Focus::Left);
+                        }
+                        Keysym::KEY_E | Keysym::KEY_E_UPPER if self.segments_apply() => {
+                            return self.focus_segment(Focus::Last);
+                        }
+                        Keysym::KEY_F | Keysym::KEY_F_UPPER if self.segments_apply() => {
+                            return self.focus_segment(Focus::Right);
+                        }
                         Keysym::KEY_A
                         | Keysym::KEY_A_UPPER
                         | Keysym::KEY_B
@@ -728,6 +764,15 @@ impl InputMethodEngine {
                 // the reading grows and the suggestion rewrites in place,
                 // keeping any active source filter.
                 if key.to_char().is_some() && !key.modifiers.control_key {
+                    // Once the conversion is split there is no single
+                    // reading left to refine, and dropping back would throw
+                    // away every choice made per segment: the key commits
+                    // what is on screen and starts the next input.
+                    if self.state.is_segmented() {
+                        let mut result = self.commit_conversion();
+                        result.actions.extend(self.process_key_empty(key).actions);
+                        return result;
+                    }
                     return self.refine_through_composing(key);
                 }
 
@@ -819,21 +864,36 @@ impl InputMethodEngine {
         }
     }
 
+    /// What committing the conversion types, and the `(reading, text)`
+    /// pairs it teaches: every segment's text in order, and one pair per
+    /// segment whose text was chosen from a list built for its reading.
+    pub(super) fn conversion_commit(&self) -> Option<(String, Vec<(String, String)>)> {
+        let (focused, reading) = self.selected_conversion_info()?;
+        let (left, right) = self.state.neighbours();
+        let mut text: String = left.iter().map(Segment::text).collect();
+        let mut learned: Vec<_> = left.iter().filter_map(Segment::learned).collect();
+        text.push_str(&focused);
+        learned.extend(reading.map(|reading| (reading, focused)));
+        text.extend(right.iter().map(Segment::text));
+        learned.extend(right.iter().filter_map(Segment::learned));
+        Some((text, learned))
+    }
+
     /// Record the committed conversion in the learning cache and end the
     /// composition.
-    pub(super) fn finish_conversion(&mut self, text: &str, reading: &Option<String>) {
-        if let Some(reading) = reading {
+    pub(super) fn finish_conversion(&mut self, learned: &[(String, String)]) {
+        for (reading, text) in learned {
             self.record_learning(reading, text);
         }
         self.end_composition();
     }
 
     /// Commit the current conversion
-    fn commit_conversion(&mut self) -> EngineResult {
+    pub(super) fn commit_conversion(&mut self) -> EngineResult {
         if let Some(result) = self.run_selected_command() {
             return result;
         }
-        let Some((text, reading)) = self.selected_conversion_info() else {
+        let Some((text, learned)) = self.conversion_commit() else {
             return EngineResult::not_consumed();
         };
 
@@ -841,7 +901,7 @@ impl InputMethodEngine {
             return EngineResult::consumed();
         }
 
-        self.finish_conversion(&text, &reading);
+        self.finish_conversion(&learned);
 
         EngineResult::consumed()
             .with_action(EngineAction::HideCandidates)
@@ -891,18 +951,23 @@ impl InputMethodEngine {
         let prev_filter = self.state.filter();
         let prev_cursor = self.state.candidates().map(|c| c.cursor()).unwrap_or(0);
 
-        let candidates = self.build_conversion_candidates(
-            &reading,
-            &reading,
-            "",
-            self.config.num_candidates,
-            LearningLookup::Use,
-        );
-        if candidates.is_empty() {
-            return self.cancel_conversion();
-        }
-        let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-        let mut result = self.enter_conversion_state(&reading, candidate_list);
+        let mut result = if self.state.is_segmented() {
+            let list = self.build_segment_list(&reading, None);
+            self.replace_focused_candidates(list)
+        } else {
+            let candidates = self.build_conversion_candidates(
+                &reading,
+                &reading,
+                "",
+                self.config.num_candidates,
+                LearningLookup::Use,
+            );
+            if candidates.is_empty() {
+                return self.cancel_conversion();
+            }
+            let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
+            self.enter_conversion_state(&reading, candidate_list)
+        };
 
         if let Some(source) = prev_filter {
             result = self.apply_candidate_filter(source);
@@ -939,8 +1004,11 @@ impl InputMethodEngine {
     }
 
     /// Navigate candidates with the given operation, then update preedit
-    fn navigate_candidate(&mut self, op: impl FnOnce(&mut CandidateList) -> bool) -> EngineResult {
-        let (selected_text, candidates) = {
+    pub(super) fn navigate_candidate(
+        &mut self,
+        op: impl FnOnce(&mut CandidateList) -> bool,
+    ) -> EngineResult {
+        let candidates = {
             let Some(candidates) = self.state.candidates_mut() else {
                 return EngineResult::not_consumed();
             };
@@ -950,10 +1018,9 @@ impl InputMethodEngine {
                 return EngineResult::consumed();
             }
             op(candidates);
-            let text = candidates.selected_text().unwrap_or("").to_string();
-            (text, candidates.clone())
+            candidates.clone()
         };
-        self.update_conversion_preedit(&selected_text, candidates)
+        self.update_conversion_preedit(candidates)
     }
 
     /// Select next candidate
@@ -988,20 +1055,19 @@ impl InputMethodEngine {
     }
 
     /// Update preedit after candidate selection change
-    fn update_conversion_preedit(
-        &mut self,
-        selected_text: &str,
-        candidates: CandidateList,
-    ) -> EngineResult {
-        let preedit = Preedit::with_text_highlighted(selected_text);
+    fn update_conversion_preedit(&mut self, candidates: CandidateList) -> EngineResult {
+        let preedit = self.conversion_preedit();
 
         if let Some(p) = self.state.preedit_mut() {
             *p = preedit.clone();
         }
 
+        // A row cut out of a longer conversion carries no reading of its
+        // own: the segment's stands in.
         let reading = candidates
             .selected()
             .and_then(|c| c.reading.clone())
+            .or_else(|| self.state.reading().map(str::to_string))
             .unwrap_or_default();
         let aux = self.format_aux_conversion_with_page(&reading, Some(&candidates));
 
