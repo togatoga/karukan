@@ -385,8 +385,8 @@ fn ctrl_s_while_typing_converts_and_cuts_in_one_press() {
     let mut engine = typed_university();
     engine.process_key(&press_ctrl_s());
 
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
-    assert_eq!(focused_text(&engine), "早稲田大学に");
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
+    assert_eq!(focused_text(&engine), "早稲田大学");
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 }
 
@@ -407,18 +407,22 @@ fn ctrl_s_while_typing_one_word_is_a_plain_conversion() {
 fn ctrl_s_cuts_the_conversion_into_segments() {
     let mut engine = converted_university();
 
-    // The dictionary's longest match, first segment focused.
+    // The dictionary's longest words, first segment focused: に is a
+    // word the dictionary has.
     engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
-    assert_eq!(focused_text(&engine), "早稲田大学に");
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
+    assert_eq!(focused_text(&engine), "早稲田大学");
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 
-    // The script cuts it the same, so the next way is the dictionary's
-    // shortest words — and then round to the first.
+    // The script: the hiragana with the kanji before it.
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+
+    // The dictionary's shortest words — and then round to the first.
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
     engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
 }
 
@@ -476,9 +480,9 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
 
     // By the dictionary: its longest word is one segment.
     let result = engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["競技プログラミングを", "学ぶ"]);
+    assert_eq!(segment_texts(&engine), ["競技プログラミング", "を", "学ぶ"]);
     assert!(
-        aux_text(&result).contains("文節1/2 区切り:辞書(最長)"),
+        aux_text(&result).contains("文節1/3 区切り:辞書(最長)"),
         "{}",
         aux_text(&result)
     );
@@ -506,7 +510,7 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
 
     // And back.
     engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["競技プログラミングを", "学ぶ"]);
+    assert_eq!(segment_texts(&engine), ["競技プログラミング", "を", "学ぶ"]);
     assert_eq!(preedit_text(&engine), "競技プログラミングを学ぶ");
 
     // Resized, the segments are neither cut: no name, and the next press

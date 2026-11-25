@@ -24,7 +24,7 @@
 //! wanted leave the least outside the dictionary, and among those the
 //! fewest segments come first — which is what "longest match" means. The
 //! dictionary has no parts of speech, so it cannot say whether は is a
-//! particle or これ a word; the number of segments stands in for that.
+//! particle or これ a word: both are its words, and both are segments.
 //! The cuts come ranked ([`ranked_cuts`]) because the one wanted is the
 //! best that has two segments at least, and the best of all may be the
 //! whole text as one word.
@@ -229,11 +229,12 @@ fn offer(
 /// The best `k` ways the dictionary cuts `text`, the conversion of
 /// `reading`, into two segments or more — the fewest segments first.
 ///
-/// Every dictionary word may be a unit here, hiragana ones too, and a
-/// hiragana char or a mark no word took joins the word before it. Among
-/// the coverings that leave the least outside the dictionary, the ones
-/// with the fewest segments come first: the longest match, then what it
-/// gives way to — a particle off its word (今日|は), a word into the words
+/// Every dictionary word is a unit here, hiragana ones too (今日|は): a
+/// hiragana char no word took counts as left outside the dictionary, so
+/// the dictionary's word for it always wins, and only hiragana it lacks
+/// joins the word before it. Among the coverings that leave the least
+/// outside the dictionary, the ones with the fewest segments come first:
+/// the longest match, then what it gives way to — a word into the words
 /// it is made of (競技|プログラミング). Coverings with the same number of
 /// segments come in no particular order, except that one starting a
 /// segment with a single-character word comes after one that does not.
@@ -408,8 +409,17 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
                 }
             }
             if folded_text[i] == folded_reading[j] {
-                let outside = usize::from(Script::of(text[i]).is_word_char());
-                take(i + 1, j + 1, Step::Pin, outside, false);
+                // A kana or an alphanumeric no word took is outside the
+                // dictionary. Cutting by its longest words that goes for
+                // hiragana too, so a word the dictionary has is a word
+                // (今日|は) and only what it lacks joins the word before;
+                // the other ways leave hiragana free to join.
+                let script = Script::of(text[i]);
+                let outside = match way {
+                    Way::Longest => script != Script::Other,
+                    Way::Shortest | Way::Script(_) => script.is_word_char(),
+                };
+                take(i + 1, j + 1, Step::Pin, usize::from(outside), false);
             }
             for len in 1..=MAX_RUN.min(n - i) {
                 if Script::of(text[i + len - 1]).is_kana() {
@@ -505,9 +515,20 @@ mod tests {
     ];
 
     #[test]
-    fn a_segment_is_a_word_and_the_hiragana_after_it() {
+    fn every_dictionary_word_is_a_segment() {
+        // は and に are words the dictionary has, so they are segments.
         assert_eq!(
             split_with("きょうはいしゃにいく", "今日は医者に行く", &SENTENCE),
+            "きょう=今日|は=は|いしゃ=医者|に=に|いく=行く"
+        );
+    }
+
+    #[test]
+    fn hiragana_the_dictionary_lacks_joins_the_word_before_it() {
+        // No は or に here: nothing to make them words.
+        let entries = [("きょう", "今日"), ("いしゃ", "医者"), ("いく", "行く")];
+        assert_eq!(
+            split_with("きょうはいしゃにいく", "今日は医者に行く", &entries),
             "きょうは=今日は|いしゃに=医者に|いく=行く"
         );
     }
@@ -685,8 +706,12 @@ mod tests {
             ("いく", "行く"),
         ];
         let (reading, text) = ("きょうはいしゃにいく", "今日は医者に行く");
-        let cuts = ranked_cuts(reading, text, &lookup(&entries), 3);
-        assert_eq!(cuts.len(), 3);
+        let lookup = lookup(&entries);
+        let cuts = [
+            ranked_cuts(reading, text, &lookup, 1).pop().unwrap(),
+            finest_cut(reading, text, &lookup),
+            script_cut(reading, text, &lookup),
+        ];
         for pieces in cuts {
             assert!(pieces.len() > 1);
             let joined = |f: fn(&Piece) -> &str| pieces.iter().map(f).collect::<String>();
@@ -705,12 +730,11 @@ mod tests {
             ("いく", "行く"),
         ];
         let cuts = ranked("わせだだいがくにいく", "早稲田大学に行く", &entries);
-        // Fewest segments first: the particle with its word.
-        assert_eq!(cuts[0], "早稲田大学に|行く");
-        // Then one segment more: the long word gives way before the
-        // particle comes off, since に is a single character.
-        assert_eq!(cuts[1], "早稲田|大学に|行く");
-        assert_eq!(cuts[2], "早稲田大学|に|行く");
+        // Fewest segments first: the longest word, and に, which the
+        // dictionary has, a word of its own.
+        assert_eq!(cuts[0], "早稲田大学|に|行く");
+        // Then one segment more: the long word gives way.
+        assert_eq!(cuts[1], "早稲田|大学|に|行く");
     }
 
     #[test]
@@ -741,9 +765,11 @@ mod tests {
             ("ある", "ある"),
         ];
         let cuts = ranked("これはここにある", "これはここにある", &entries);
-        // Words of two characters before the particles.
-        assert_eq!(cuts[0], "これは|ここにある");
-        assert_eq!(cuts[1], "これはここに|ある");
+        assert_eq!(cuts[0], "これ|は|ここ|に|ある");
+        // With no は or に in the dictionary they join the word before.
+        let fewer = [("これ", "これ"), ("ここ", "ここ"), ("ある", "ある")];
+        let cuts = ranked("これはここにある", "これはここにある", &fewer);
+        assert_eq!(cuts[0], "これは|ここに|ある");
     }
 
     #[test]
