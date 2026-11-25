@@ -171,7 +171,7 @@ pub struct InputMethodEngine {
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
     /// then (or if loading failed) the engine runs dictionary/kana-only.
     model_loading: Option<std::sync::mpsc::Receiver<init::LoadedConverters>>,
-    /// How finely the conversion is cut into segments: what Ctrl+Space
+    /// How finely the conversion is cut into segments: what Ctrl+S
     /// steps through. Back to the default with every new conversion.
     segment_granularity: segment::Granularity,
 }

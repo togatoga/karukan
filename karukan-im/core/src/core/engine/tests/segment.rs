@@ -370,30 +370,30 @@ fn segment_texts(engine: &InputMethodEngine) -> Vec<String> {
         .collect()
 }
 
-fn press_ctrl_space() -> KeyEvent {
-    press_ctrl(Keysym::SPACE)
+fn press_ctrl_s() -> KeyEvent {
+    press_ctrl(Keysym::KEY_S)
 }
 
 #[test]
-fn ctrl_space_enters_segments_and_then_cuts_another_way() {
+fn ctrl_s_enters_segments_and_then_cuts_another_way() {
     let mut engine = converted_university();
 
     // First press: 文節 — the dictionary's longest words with the
     // hiragana after them, first segment focused.
-    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
     assert_eq!(focused_text(&engine), "早稲田大学に");
 
     // Second: 単語 — the particle the dictionary has stands alone.
-    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
 
     // Third: 細かく — the shorter words the long one is made of.
-    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
 
     // And round again.
-    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
 
     // The text never changed.
@@ -401,25 +401,25 @@ fn ctrl_space_enters_segments_and_then_cuts_another_way() {
 }
 
 #[test]
-fn ctrl_space_keeps_what_was_chosen_in_a_segment() {
+fn ctrl_s_keeps_what_was_chosen_in_a_segment() {
     let mut engine = converted_university();
     seed_model_cache(&mut engine, "イク", "早稲田大学に", &["行く", "逝く"]);
-    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_ctrl_s());
     engine.process_key(&press_key(Keysym::END));
     engine.process_key(&press_key(Keysym::SPACE));
     assert_eq!(preedit_text(&engine), "早稲田大学に逝く");
 
-    engine.process_key(&press_ctrl_space());
+    engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "逝く"]);
 }
 
 #[test]
-fn ctrl_space_does_nothing_where_nothing_comes_apart() {
+fn ctrl_s_does_nothing_where_nothing_comes_apart() {
     let mut engine = engine_with_learned("__none__", "__none__");
     seed_model_cache(&mut engine, "キョウ", "", &["今日"]);
     type_keys(&mut engine, "kyou");
     engine.process_key(&press_key(Keysym::SPACE));
-    let result = engine.process_key(&press_ctrl_space());
+    let result = engine.process_key(&press_ctrl_s());
     assert!(result.consumed);
     assert!(!engine.state().is_segmented());
     assert_eq!(preedit_text(&engine), "今日");
@@ -438,8 +438,8 @@ fn the_aux_line_says_which_way_it_is_cut() {
             })
             .unwrap()
     };
-    let result = engine.process_key(&press_ctrl_space());
+    let result = engine.process_key(&press_ctrl_s());
     assert!(aux(&result).contains("区切り1"), "{}", aux(&result));
-    let result = engine.process_key(&press_ctrl_space());
+    let result = engine.process_key(&press_ctrl_s());
     assert!(aux(&result).contains("区切り2"), "{}", aux(&result));
 }

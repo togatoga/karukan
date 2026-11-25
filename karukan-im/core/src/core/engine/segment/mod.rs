@@ -61,7 +61,7 @@ impl InputMethodEngine {
         self.render_conversion()
     }
 
-    /// Ctrl+Space: cut the conversion into segments, and with each further
+    /// Ctrl+S: cut the conversion into segments, and with each further
     /// press cut it another way — the dictionary's longest words, then the
     /// shorter words those are made of, then the script alone. How finely
     /// to cut is a choice, so the key offers the choices instead of the

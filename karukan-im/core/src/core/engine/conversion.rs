@@ -647,11 +647,6 @@ impl InputMethodEngine {
             // Shift+Tab (ISO_Left_Tab on X11) and Shift+Space step back the
             // way Tab and Space step forward: mozc-compatible muscle memory.
             Keysym::ISO_LEFT_TAB => self.prev_candidate(),
-            // Ctrl+Space: cut the conversion into segments, and with each
-            // further press cut it another way.
-            Keysym::SPACE if key.modifiers.control_key && self.segments_apply() => {
-                self.cycle_segmentation()
-            }
             Keysym::TAB | Keysym::SPACE if key.modifiers.shift_key => self.prev_candidate(),
             Keysym::SPACE | Keysym::DOWN | Keysym::TAB => self.next_candidate(),
             Keysym::UP => self.prev_candidate(),
@@ -726,6 +721,14 @@ impl InputMethodEngine {
                         }
                         Keysym::KEY_J | Keysym::KEY_J_UPPER => {
                             return self.rebreak_conversion();
+                        }
+                        // Ctrl+S: cut the conversion into segments, and
+                        // with each further press cut it another way. Not
+                        // Ctrl+Space: macOS (previous input source) and
+                        // fcitx5 (its trigger key) take that one before
+                        // it gets here.
+                        Keysym::KEY_S | Keysym::KEY_S_UPPER if self.segments_apply() => {
+                            return self.cycle_segmentation();
                         }
                         // Ctrl+A/B/E/F: Home/←/End/→, as while composing.
                         Keysym::KEY_A | Keysym::KEY_A_UPPER if self.segments_apply() => {
