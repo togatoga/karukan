@@ -66,9 +66,10 @@ pub(in crate::core) enum Granularity {
     /// a particle the dictionary has is a segment of its own
     /// (今日|は|医者|に|行く).
     Words,
-    /// 細かく: the shortest dictionary words, so a word made of words
-    /// comes apart (早稲田|大学) — though not into single characters while
-    /// longer words will do.
+    /// 細かく: the words of 単語, each given way to the words it is made
+    /// of — the fewest that make it, so it comes apart one level and no
+    /// further (競技プログラミング into 競技|プログラミング, not on into
+    /// プロ|グラ|ミング), and never into single characters.
     Fine,
 }
 
@@ -100,10 +101,19 @@ impl Granularity {
 }
 
 /// What a covering costs, compared left to right: the text chars left
-/// outside a dictionary word; then, for the fine cut, the words of a single
-/// character; then the number of units — the fewer the better, except for
-/// the fine cut, which wants the more.
-type Cost = (usize, usize, isize);
+/// outside a dictionary word; then the words of a single character, counted
+/// only when a word is taken apart; then the number of units.
+type Cost = (usize, usize, usize);
+
+/// What is being covered: a sentence, or one dictionary word by the words
+/// it is made of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Cover {
+    Sentence,
+    /// The word itself is not an answer, and neither is anything but
+    /// dictionary words of two characters or more.
+    Parts,
+}
 
 /// A covering no one can take.
 const UNREACHABLE: Cost = (usize::MAX, 0, 0);
@@ -112,19 +122,19 @@ fn add(rest: Cost, step: Cost) -> Cost {
     (rest.0 + step.0, rest.1 + step.1, rest.2 + step.2)
 }
 
-impl Granularity {
+impl Cover {
     /// A dictionary word of `len` text chars.
     fn word(self, len: usize) -> Cost {
         match self {
-            Self::Phrases | Self::Words => (0, 0, 1),
-            Self::Fine => (0, usize::from(len == 1), -1),
+            Self::Sentence => (0, 0, 1),
+            Self::Parts => (0, usize::from(len == 1), 1),
         }
     }
+}
 
-    /// An unknown word of `len` text chars.
-    fn unknown(self, len: usize) -> Cost {
-        (len, 0, 1)
-    }
+/// An unknown word of `len` text chars.
+fn unknown(len: usize) -> Cost {
+    (len, 0, 1)
 }
 
 /// A char that is the reading's own: outside the dictionary, and no unit.
@@ -207,6 +217,7 @@ fn align(
     text: &[char],
     words: WordLookup,
     granularity: Granularity,
+    cover: Cover,
 ) -> Option<Vec<Option<(usize, Step)>>> {
     let (n, m) = (text.len(), reading.len());
     if n == 0 || m == 0 || n > MAX_CHARS || m > MAX_CHARS {
@@ -248,8 +259,13 @@ fn align(
             // A dictionary word: its surface here, its reading there.
             for (taken, surface) in &words_at[j] {
                 let (i2, j2) = (i + surface.len(), j + taken);
-                if i2 <= n && j2 <= m && folded_text[i..i2] == surface[..] {
-                    take(i2, j2, Step::Word, granularity.word(surface.len()));
+                let whole = (i, j, i2, j2) == (0, 0, n, m);
+                if i2 <= n
+                    && j2 <= m
+                    && folded_text[i..i2] == surface[..]
+                    && !(whole && cover == Cover::Parts)
+                {
+                    take(i2, j2, Step::Word, cover.word(surface.len()));
                 }
             }
             // This char is that reading char.
@@ -262,12 +278,16 @@ fn align(
                     break;
                 }
                 for taken in 1..=(len * MAX_READING_PER_CHAR).min(m - j) {
-                    take(i + len, j + taken, Step::Unknown, granularity.unknown(len));
+                    take(i + len, j + taken, Step::Unknown, unknown(len));
                 }
             }
         }
     }
     if best[0][0] == UNREACHABLE {
+        return None;
+    }
+    // A word comes apart only into whole words, none of a single char.
+    if cover == Cover::Parts && (best[0][0].0, best[0][0].1) != (0, 0) {
         return None;
     }
 
@@ -319,6 +339,44 @@ fn starts_segment(text: &[char], i: usize, step: Step) -> bool {
     }
 }
 
+/// The fine cut: each dictionary word in `positions` gives way to the
+/// fewest dictionary words that make it, where there are such. One level
+/// only — the parts are not taken apart in turn, which is what would turn
+/// プログラミング into プロ|グラ|ミング.
+fn take_words_apart(
+    positions: &mut [Option<(usize, Step)>],
+    reading: &[char],
+    text: &[char],
+    words: WordLookup,
+) {
+    let starts: Vec<usize> = (0..text.len())
+        .filter(|&i| positions[i].is_some())
+        .collect();
+    for (k, &i) in starts.iter().enumerate() {
+        let Some((j, Step::Word)) = positions[i] else {
+            continue;
+        };
+        let i2 = starts.get(k + 1).copied().unwrap_or(text.len());
+        let j2 = positions
+            .get(i2)
+            .copied()
+            .flatten()
+            .map_or(reading.len(), |(j2, _)| j2);
+        let Some(parts) = align(
+            &reading[j..j2],
+            &text[i..i2],
+            words,
+            Granularity::Fine,
+            Cover::Parts,
+        ) else {
+            continue;
+        };
+        for (offset, part) in parts.into_iter().enumerate() {
+            positions[i + offset] = part.map(|(at, step)| (j + at, step));
+        }
+    }
+}
+
 /// Split `text`, the conversion of `reading`, into segments. Always at
 /// least one piece, and the pieces always concatenate back to both strings:
 /// when the two cannot be lined up, the whole is a single segment.
@@ -336,9 +394,18 @@ pub(in crate::core) fn split_segments(
     };
     let reading_chars: Vec<char> = reading.chars().collect();
     let text_chars: Vec<char> = text.chars().collect();
-    let Some(positions) = align(&reading_chars, &text_chars, words, granularity) else {
+    let Some(mut positions) = align(
+        &reading_chars,
+        &text_chars,
+        words,
+        granularity,
+        Cover::Sentence,
+    ) else {
         return whole();
     };
+    if granularity == Granularity::Fine {
+        take_words_apart(&mut positions, &reading_chars, &text_chars, words);
+    }
 
     let mut pieces = Vec::new();
     let (mut text_start, mut reading_start) = (0, 0);
@@ -552,11 +619,39 @@ mod tests {
             "わせだだいがく=早稲田大学|は=は|とうきょう=東京|に=に|ある=ある"
         );
         // 細かく: the words those are made of — never down to single
-        // kanji while a longer word will do.
+        // kanji.
         assert_eq!(
             split_at(reading, text, &entries, Granularity::Fine),
             "わせだ=早稲田|だいがく=大学|は=は|とうきょう=東京|に=に|ある=ある"
         );
+    }
+
+    #[test]
+    fn the_fine_cut_takes_a_word_apart_one_level() {
+        let entries = [
+            ("きょうぎぷろぐらみんぐ", "競技プログラミング"),
+            ("きょうぎ", "競技"),
+            ("ぷろぐらみんぐ", "プログラミング"),
+            ("ぷろ", "プロ"),
+            ("ぐら", "グラ"),
+            ("みんぐ", "ミング"),
+            ("とうきょうと", "東京都"),
+            ("とうきょう", "東京"),
+            ("と", "都"),
+        ];
+        let fine = |reading, text| split_at(reading, text, &entries, Granularity::Fine);
+        // The fewest words that make it, not the most.
+        assert_eq!(
+            fine("きょうぎぷろぐらみんぐ", "競技プログラミング"),
+            "きょうぎ=競技|ぷろぐらみんぐ=プログラミング"
+        );
+        // Asked for on its own, the part comes apart in turn.
+        assert_eq!(
+            fine("ぷろぐらみんぐ", "プログラミング"),
+            "ぷろ=プロ|ぐら=グラ|みんぐ=ミング"
+        );
+        // Not when a part would be a single character.
+        assert_eq!(fine("とうきょうと", "東京都"), "とうきょうと=東京都");
     }
 
     #[test]
