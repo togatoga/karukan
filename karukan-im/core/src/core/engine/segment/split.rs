@@ -226,10 +226,14 @@ fn offer(
 /// The best `k` ways the dictionary cuts `text`, the conversion of
 /// `reading`, into two segments or more — the fewest segments first.
 ///
-/// Every dictionary word is a unit here, hiragana ones too (今日|は): a
+/// Every dictionary word is a unit here, hiragana ones too (東京|から): a
 /// hiragana char no word took counts as left outside the dictionary, so
-/// the dictionary's word for it always wins, and only hiragana it lacks
-/// joins the word before it. Among the coverings that leave the least
+/// the dictionary's word for it always wins, and hiragana it lacks joins
+/// the word before it. One rule sits on top of the dictionary: a word
+/// that is a single hiragana joins the word before it as well (今日は,
+/// 学校には), which is what makes the segments 文節 — the dictionary has
+/// no parts of speech to say は is a particle, and one hiragana standing
+/// alone as a word nearly always is one. Among the coverings that leave the least
 /// outside the dictionary, the ones with the fewest segments come first:
 /// the longest match, then what it gives way to — a word into the words
 /// it is made of (競技|プログラミング). Coverings with the same number of
@@ -351,7 +355,13 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
                 let unknown = usize::from(kind == Step::Unknown);
                 let (starts, step) = match way {
                     Way::Longest => {
-                        let starts = i > 0 && starts_segment(&text, i, kind);
+                        // The one rule on top of the dictionary: a word
+                        // that is a single hiragana (は, を, に) joins the
+                        // word before it.
+                        let particle = kind == Step::Word
+                            && i2 - i == 1
+                            && Script::of(text[i]) == Script::Hiragana;
+                        let starts = i > 0 && !particle && starts_segment(&text, i, kind);
                         (starts, (outside, unknown, usize::from(starts)))
                     }
                     Way::Shortest => {
@@ -477,11 +487,27 @@ mod tests {
     ];
 
     #[test]
-    fn every_dictionary_word_is_a_segment() {
-        // は and に are words the dictionary has, so they are segments.
+    fn a_single_hiragana_word_joins_the_word_before_it() {
+        // は and に are words the dictionary has, of one hiragana each.
         assert_eq!(
             split_with("きょうはいしゃにいく", "今日は医者に行く", &SENTENCE),
-            "きょう=今日|は=は|いしゃ=医者|に=に|いく=行く"
+            "きょうは=今日は|いしゃに=医者に|いく=行く"
+        );
+        // Two in a row both join; a longer hiragana word is a segment.
+        let entries = [
+            ("がっこう", "学校"),
+            ("に", "に"),
+            ("は", "は"),
+            ("から", "から"),
+            ("いく", "行く"),
+        ];
+        assert_eq!(
+            split_with("がっこうにはいく", "学校には行く", &entries),
+            "がっこうには=学校には|いく=行く"
+        );
+        assert_eq!(
+            split_with("がっこうからいく", "学校から行く", &entries),
+            "がっこう=学校|から=から|いく=行く"
         );
     }
 
@@ -692,11 +718,10 @@ mod tests {
             ("いく", "行く"),
         ];
         let cuts = ranked("わせだだいがくにいく", "早稲田大学に行く", &entries);
-        // Fewest segments first: the longest word, and に, which the
-        // dictionary has, a word of its own.
-        assert_eq!(cuts[0], "早稲田大学|に|行く");
+        // Fewest segments first: the longest word, に with it.
+        assert_eq!(cuts[0], "早稲田大学に|行く");
         // Then one segment more: the long word gives way.
-        assert_eq!(cuts[1], "早稲田|大学|に|行く");
+        assert_eq!(cuts[1], "早稲田|大学に|行く");
     }
 
     #[test]
@@ -727,8 +752,9 @@ mod tests {
             ("ある", "ある"),
         ];
         let cuts = ranked("これはここにある", "これはここにある", &entries);
-        assert_eq!(cuts[0], "これ|は|ここ|に|ある");
-        // With no は or に in the dictionary they join the word before.
+        // The words of two characters are segments; は and に join.
+        assert_eq!(cuts[0], "これは|ここに|ある");
+        // The same with no は or に in the dictionary at all.
         let fewer = [("これ", "これ"), ("ここ", "ここ"), ("ある", "ある")];
         let cuts = ranked("これはここにある", "これはここにある", &fewer);
         assert_eq!(cuts[0], "これは|ここに|ある");
