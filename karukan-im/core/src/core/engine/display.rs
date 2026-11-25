@@ -233,7 +233,8 @@ impl InputMethodEngine {
         if self.state.is_segmented() {
             let (left, right) = self.state.neighbours();
             return format!(
-                "{shown} 文節{}/{}",
+                "{} {shown} 文節{}/{}",
+                self.segment_outline(),
                 left.len() + 1,
                 left.len() + 1 + right.len()
             );

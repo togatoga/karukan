@@ -154,7 +154,9 @@ impl InputMethodEngine {
         }
 
         let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-        self.enter_conversion_state(&reading, candidate_list)
+        let result = self.enter_conversion_state(&reading, candidate_list);
+        // A sentence opens already split, its first segment focused.
+        self.split_on_entry().unwrap_or(result)
     }
 
     /// Map builder output to the public [`CandidateList`] shown in the
@@ -865,8 +867,12 @@ impl InputMethodEngine {
     }
 
     /// What committing the conversion types, and the `(reading, text)`
-    /// pairs it teaches: every segment's text in order, and one pair per
-    /// segment whose text was chosen from a list built for its reading.
+    /// pairs it teaches: every segment's text in order; one pair per
+    /// segment whose text was chosen from a list built for its reading;
+    /// and, when the conversion was split, the whole reading with the
+    /// whole text — the pair an unsplit commit has always taught, which is
+    /// right however the segments were cut, since the readings add up to
+    /// what was typed and the texts to what was committed.
     pub(super) fn conversion_commit(&self) -> Option<(String, Vec<(String, String)>)> {
         let (focused, reading) = self.selected_conversion_info()?;
         let (left, right) = self.state.neighbours();
@@ -876,6 +882,26 @@ impl InputMethodEngine {
         learned.extend(reading.map(|reading| (reading, focused)));
         text.extend(right.iter().map(Segment::text));
         learned.extend(right.iter().filter_map(Segment::learned));
+
+        if self.state.is_segmented() {
+            // Not when a segment holds something that must not be learned
+            // (a date is stale tomorrow): the sentence would carry it.
+            let learnable = |list: &CandidateList| {
+                list.selected()
+                    .is_none_or(|c| c.source.is_none_or(|s| s.is_learnable()))
+            };
+            let all_learnable = self.state.candidates().is_some_and(learnable)
+                && left.iter().chain(right).all(|s| learnable(&s.candidates));
+            if all_learnable {
+                let whole: String = left
+                    .iter()
+                    .map(|s| s.reading.as_str())
+                    .chain(self.state.reading())
+                    .chain(right.iter().map(|s| s.reading.as_str()))
+                    .collect();
+                learned.push((whole, text.clone()));
+            }
+        }
         Some((text, learned))
     }
 

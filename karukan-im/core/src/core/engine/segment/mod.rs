@@ -38,8 +38,34 @@ impl InputMethodEngine {
         self.mode.current() == InputMode::Hiragana
     }
 
+    /// Split a conversion that has just opened: whatever heads its list —
+    /// the model's answer, a phrase from the history or a dictionary — is
+    /// shown in segments from the start, the first one focused, so the
+    /// user never has to ask for them. `None` when it does not come apart
+    /// (one word) and the conversion is left as it was.
+    pub(super) fn split_on_entry(&mut self) -> Option<EngineResult> {
+        // Two lists are the whole reading's and nothing else's: one
+        // offering a setting (でばっぐもーど), which only the unsplit list
+        // carries, and one still narrowed by a romaji tail (わせd), where
+        // the word is not finished and the list is predicting it.
+        let whole_only = self
+            .state
+            .reading()
+            .is_some_and(|reading| self.command_candidate(reading).is_some())
+            || !self.input_buf.pending().is_empty();
+        if !self.segments_apply() || whole_only {
+            return None;
+        }
+        let (segments, focus) = self.segments();
+        if segments.len() < 2 {
+            return None;
+        }
+        self.put_segments(segments, focus);
+        Some(self.render_conversion())
+    }
+
     /// ←/→/Home/End: move the focus to another segment, wrapping at the
-    /// ends. The first press on a fresh conversion is what splits it.
+    /// ends. On a conversion still whole, the press is what splits it.
     pub(super) fn focus_segment(&mut self, to: Focus) -> EngineResult {
         let (segments, focus) = self.segments();
         let last = segments.len() - 1;
@@ -214,10 +240,15 @@ impl InputMethodEngine {
             return (segments.collect(), left.len());
         }
 
+        // A row carries the reading it converts: a phrase predicted from
+        // what was typed reads longer than that, and is cut against its
+        // own reading.
         let pieces = match candidates.selected() {
-            Some(c) if self.splits(c, reading) => {
-                split_segments(reading, &c.text, &self.word_lookup(&c.text))
-            }
+            Some(c) if self.splits(c) => split_segments(
+                c.reading.as_deref().unwrap_or(reading),
+                &c.text,
+                &self.word_lookup(&c.text),
+            ),
             _ => Vec::new(),
         };
         if pieces.len() < 2 {
@@ -226,22 +257,21 @@ impl InputMethodEngine {
         (pieces.into_iter().map(Segment::from).collect(), 0)
     }
 
-    /// Whether the selected row is `reading` converted, and so can be cut
-    /// against it: not a longer word predicted from it, and not a row whose
-    /// text was never the reading's (a command, a date, the keystrokes).
-    fn splits(&self, selected: &Candidate, reading: &str) -> bool {
-        selected.reading.as_deref().is_none_or(|r| r == reading)
-            && matches!(
-                selected.source,
-                None | Some(
-                    CandidateSource::Model
-                        | CandidateSource::Learning
-                        | CandidateSource::UserDictionary
-                        | CandidateSource::Dictionary
-                        | CandidateSource::Fallback
-                        | CandidateSource::Rewriter
-                )
+    /// Whether the selected row is its reading converted, and so can be
+    /// cut against it: not a row whose text was never the reading's (a
+    /// command, a date, the keystrokes).
+    fn splits(&self, selected: &Candidate) -> bool {
+        matches!(
+            selected.source,
+            None | Some(
+                CandidateSource::Model
+                    | CandidateSource::Learning
+                    | CandidateSource::UserDictionary
+                    | CandidateSource::Dictionary
+                    | CandidateSource::Fallback
+                    | CandidateSource::Rewriter
             )
+        )
     }
 
     /// Install `segments` with the one at `focus` focused, building its
@@ -316,6 +346,27 @@ impl InputMethodEngine {
             before.push_str(self.conversion_preedit_focused());
         }
         self.lctx_for(&self.truncate_context_for_api(), &before)
+    }
+
+    /// The segments as one line with the focused one bracketed, for the
+    /// aux line: 「今日は[医者に]行く」. The preedit marks the focus with
+    /// its underline, which not every application draws (a terminal shows
+    /// all of it alike); this line is drawn by the IME itself. Only the
+    /// neighbours on either side are spelled out, so a long sentence does
+    /// not widen the window.
+    pub(super) fn segment_outline(&self) -> String {
+        let (left, right) = self.state.neighbours();
+        let before = match left {
+            [] => String::new(),
+            [only] => only.text().to_string(),
+            [.., last] => format!("…{}", last.text()),
+        };
+        let after = match right {
+            [] => String::new(),
+            [only] => only.text().to_string(),
+            [first, ..] => format!("{}…", first.text()),
+        };
+        format!("{before}[{}]{after}", self.conversion_preedit_focused())
     }
 
     /// The focused segment's text.

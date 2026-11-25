@@ -56,24 +56,54 @@ fn run_cost(text_len: usize, reading_len: usize) -> usize {
     10 + 4 * text_len + reading_len.abs_diff(text_len * 2)
 }
 
-fn is_hiragana(c: char) -> bool {
-    matches!(c, '\u{3041}'..='\u{309F}')
+/// What kind of character a text char is, as far as segments care.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Script {
+    Hiragana,
+    Katakana,
+    /// `ー`: written in either kana, and never the start of a word.
+    ProlongedMark,
+    Kanji,
+    /// Latin letters and digits, either width.
+    Alphanumeric,
+    /// Marks that close a clause: the text after one starts a new segment.
+    ClauseMark,
+    Other,
 }
 
-fn is_katakana(c: char) -> bool {
-    matches!(c, '\u{30A1}'..='\u{30FA}' | '\u{30FC}'..='\u{30FF}')
+impl Script {
+    fn of(c: char) -> Self {
+        match c {
+            'ー' => Self::ProlongedMark,
+            '\u{3041}'..='\u{309F}' => Self::Hiragana,
+            '\u{30A1}'..='\u{30FA}' | '\u{30FD}'..='\u{30FF}' => Self::Katakana,
+            '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '々' | '〆' => Self::Kanji,
+            '、' | '。' | '，' | '．' | '！' | '？' | ',' | '.' | '!' | '?' | '､' | '｡' => {
+                Self::ClauseMark
+            }
+            c if c.is_alphanumeric() => Self::Alphanumeric,
+            _ => Self::Other,
+        }
+    }
+
+    /// Whether the char can only be itself in the reading. Kana must be:
+    /// the model writes the reading's kana back as they are. Anything
+    /// else that is not kanji (a digit, a mark) may be itself or may be
+    /// what kana were converted to (いち → 1), so it pins when it matches
+    /// and floats otherwise.
+    fn must_pin(self) -> bool {
+        matches!(self, Self::Hiragana | Self::Katakana | Self::ProlongedMark)
+    }
+
+    /// Whether a word can begin with the char: what follows hiragana as
+    /// the next word rather than as more of the same one.
+    fn starts_word(self) -> bool {
+        matches!(self, Self::Kanji | Self::Katakana | Self::Alphanumeric)
+    }
 }
 
-fn is_kanji(c: char) -> bool {
-    matches!(c, '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '々' | '〆' | 'ヶ')
-}
-
-/// Marks that close a clause: the text after one starts a new segment.
-fn is_clause_mark(c: char) -> bool {
-    matches!(
-        c,
-        '、' | '。' | '，' | '．' | '！' | '？' | ',' | '.' | '!' | '?' | '､' | '｡'
-    )
+fn must_pin(c: char) -> bool {
+    Script::of(c).must_pin()
 }
 
 /// `c` as the reading would spell it, for comparing: katakana as hiragana,
@@ -85,14 +115,6 @@ fn fold(c: char) -> char {
         '\u{3000}' => ' ',
         _ => c,
     }
-}
-
-/// Whether a text char can only be itself in the reading. Kana must be:
-/// the model writes the reading's kana back as they are. Anything else that
-/// is not kanji (a digit, a mark) may be itself or may be what kana were
-/// converted to (いち → 1), so it pins when it matches and floats otherwise.
-fn must_pin(c: char) -> bool {
-    is_hiragana(c) || is_katakana(c)
 }
 
 /// For every text position, the reading position it lines up with — `None`
@@ -205,18 +227,15 @@ fn contradicts_dictionary(
 /// Whether a segment starts at `text[i]`, given what the segment before it
 /// holds so far.
 fn starts_segment(text: &[char], i: usize, current: &[char]) -> bool {
-    let (prev, c) = (text[i - 1], text[i]);
-    if is_clause_mark(c) {
-        return false;
+    match (Script::of(text[i - 1]), Script::of(text[i])) {
+        (_, Script::ClauseMark) => false,
+        (Script::ClauseMark, _) => true,
+        // A word begins where hiragana gives way to something that is not:
+        // the particle or inflection before it has ended. 「お茶」「ご飯」
+        // keep their prefix.
+        (Script::Hiragana, next) => next.starts_word() && !matches!(current, ['お'] | ['ご']),
+        _ => false,
     }
-    if is_clause_mark(prev) {
-        return true;
-    }
-    // A word begins where hiragana gives way to something that is not: the
-    // particle or inflection before it has ended. 「お茶」「ご飯」 keep their
-    // prefix.
-    let starts_word = is_kanji(c) || is_katakana(c) || c.is_alphanumeric() && !is_hiragana(c);
-    starts_word && is_hiragana(prev) && !matches!(current, ['お'] | ['ご'])
 }
 
 /// Split `text`, the conversion of `reading`, into segments. Always at
@@ -365,6 +384,16 @@ mod tests {
             split_with("わせだにだいがくへいく", "早稲田に大学へ行く", &entries),
             "わせだに=早稲田に|だいがくへ=大学へ|いく=行く"
         );
+    }
+
+    #[test]
+    fn a_prolonged_mark_never_starts_a_segment() {
+        // Kana typed and left as kana: ー belongs to what it lengthens.
+        assert_eq!(
+            split("でばっぐもーど", "でばっぐもーど"),
+            "でばっぐもーど=でばっぐもーど"
+        );
+        assert_eq!(split("らーめん", "らーめん"), "らーめん=らーめん");
     }
 
     #[test]
