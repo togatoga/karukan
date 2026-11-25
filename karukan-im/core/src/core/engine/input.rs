@@ -257,14 +257,9 @@ impl InputMethodEngine {
                 }
                 // Ctrl+S: convert and cut into segments in one press, so
                 // the live conversion on screen is split without a Space
-                // first. Space's conversion is what is cut; a text that
-                // does not come apart is left as that conversion.
+                // first.
                 Keysym::KEY_S | Keysym::KEY_S_UPPER if self.segments_apply() => {
-                    let converted = self.start_conversion(LearningLookup::Use);
-                    return match self.state {
-                        InputState::Conversion { .. } => self.split_conversion(),
-                        _ => converted,
-                    };
+                    return self.convert_and_split();
                 }
                 _ => {}
             }

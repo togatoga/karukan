@@ -391,6 +391,52 @@ fn ctrl_s_while_typing_converts_and_cuts_in_one_press() {
 }
 
 #[test]
+fn ctrl_s_while_typing_cuts_what_is_on_screen_not_the_history() {
+    // The history has another text for this reading, and a longer phrase
+    // that starts with it; Space would open on the history.
+    let mut engine = typed_university_with_history();
+    set_live_text(&mut engine, "早稲田大学に行く");
+
+    let result = engine.process_key(&press_ctrl_s());
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(preedit_text(&engine), "早稲田大学に行く");
+    // The frontend is told: the split preedit is in the result.
+    assert!(
+        result
+            .actions
+            .iter()
+            .any(|a| matches!(a, EngineAction::UpdatePreedit(_)))
+    );
+}
+
+/// [`typed_university`] with a history that reads the same reading another
+/// way, and has a longer phrase starting with it.
+fn typed_university_with_history() -> InputMethodEngine {
+    let mut engine = engine_with_learned("わせだだいがくにいく", "ワセダ大学に行く");
+    engine.live.enabled = true;
+    if let Some(cache) = engine.learning.as_mut() {
+        cache.record("わせだだいがくにいくよ", "早稲田大学に行くよ");
+    }
+    engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
+        r#"[
+            {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1.0}]},
+            {"reading":"だいがく","candidates":[{"surface":"大学","score":1.0}]},
+            {"reading":"わせだだいがく","candidates":[{"surface":"早稲田大学","score":1.0}]},
+            {"reading":"に","candidates":[{"surface":"に","score":1.0}]},
+            {"reading":"いく","candidates":[{"surface":"行く","score":1.0}]}
+        ]"#,
+    )));
+    seed_model_cache(
+        &mut engine,
+        "ワセダダイガクニイク",
+        "",
+        &["早稲田大学に行く"],
+    );
+    type_keys(&mut engine, "wasedadaigakuniiku");
+    engine
+}
+
+#[test]
 fn ctrl_s_while_typing_one_word_is_a_plain_conversion() {
     let mut engine = engine_with_learned("__none__", "__none__");
     seed_model_cache(&mut engine, "キョウ", "", &["今日"]);

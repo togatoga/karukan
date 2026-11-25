@@ -60,6 +60,28 @@ impl InputMethodEngine {
         self.render_conversion()
     }
 
+    /// Ctrl+S while composing: Space and Ctrl+S in one press. What is cut
+    /// is the text that was on screen — the live conversion — not whatever
+    /// heads Space's list: the history comes first there, and may be a
+    /// different text, or a longer phrase predicted from what was typed,
+    /// which would replace what the user was looking at and meant to fix.
+    /// The history's rows are still in the list for the whole. A text that
+    /// does not come apart is left as that plain conversion.
+    pub(super) fn convert_and_split(&mut self) -> EngineResult {
+        let shown = self.live_text_with_pending();
+        let converted = self.start_conversion(LearningLookup::Use);
+        if !matches!(self.state, InputState::Conversion { .. }) {
+            return converted;
+        }
+        if let Some(list) = self.state.candidates_mut()
+            && let Some(at) = list.candidates().iter().position(|c| c.text == shown)
+        {
+            list.set_cursor(at);
+        }
+        self.split_conversion();
+        self.render_conversion()
+    }
+
     /// Ctrl+S: cut the conversion into segments, the first one focused,
     /// and pressed again cut it the next way, round and round. There are
     /// three ways and no more: the dictionary's longest words

@@ -163,10 +163,10 @@ const KEEP: usize = 8;
 struct Cut {
     /// Compared left to right. Cutting by the dictionary: the chars
     /// outside a dictionary word (marks aside), the unknown words, and
-    /// what the [`Way`] is after — the segments, or the chars that start
-    /// no segment. Cutting by script: the script's boundaries left inside
-    /// a step first, then the same two.
-    cost: (usize, usize, usize),
+    /// what the [`Way`] is after — the words and then the segments, or
+    /// the chars that start no segment. Cutting by script: the script's
+    /// boundaries left inside a step first, then the same two.
+    cost: (usize, usize, usize, usize),
     /// It gives some word a reading the dictionary contradicts.
     doubtful: bool,
     /// Where its segments start after the first: (text, reading)
@@ -192,7 +192,7 @@ impl Cut {
 fn offer(
     kept: &mut Vec<Cut>,
     rest: &Cut,
-    step: (usize, usize, usize),
+    step: (usize, usize, usize, usize),
     doubtful: bool,
     start: Option<(usize, usize)>,
 ) {
@@ -200,6 +200,7 @@ fn offer(
         rest.cost.0 + step.0,
         rest.cost.1 + step.1,
         rest.cost.2 + step.2,
+        rest.cost.3 + step.3,
     );
     match kept.iter().position(|cut| cut.cuts_like(start, rest)) {
         Some(same) if kept[same].cost <= cost => return,
@@ -344,7 +345,7 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
     // kept[i][j]: the cheapest distinct cuts of text[i..] with reading[j..].
     let mut kept: Vec<Vec<Vec<Cut>>> = vec![vec![Vec::new(); m + 1]; n + 1];
     kept[n][m].push(Cut {
-        cost: (0, 0, 0),
+        cost: (0, 0, 0, 0),
         doubtful: false,
         starts: Vec::new(),
     });
@@ -362,17 +363,21 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
                             && i2 - i == 1
                             && Script::of(text[i]) == Script::Hiragana;
                         let starts = i > 0 && !particle && starts_segment(&text, i, kind);
-                        (starts, (outside, unknown, usize::from(starts)))
+                        // The fewest words before the fewest segments:
+                        // that is the longest match, and without it です
+                        // would be で and す, each joining as a particle.
+                        let word = usize::from(kind != Step::Pin);
+                        (starts, (outside, unknown, word, usize::from(starts)))
                     }
                     Way::Shortest => {
                         let starts = i > 0 && starts_segment(&text, i, kind);
                         // Every char that starts no segment is charged, so
                         // the fewest of them is the most segments.
-                        (starts, (outside, unknown, i2 - i - usize::from(starts)))
+                        (starts, (outside, unknown, i2 - i - usize::from(starts), 0))
                     }
                     Way::Script(script) => {
                         let hidden = script[i + 1..i2].iter().filter(|&&s| s).count();
-                        (script[i], (hidden, outside, unknown))
+                        (script[i], (hidden, outside, unknown, 0))
                     }
                 };
                 for rest in &kept[i2][j2] {
@@ -493,12 +498,16 @@ mod tests {
             split_with("きょうはいしゃにいく", "今日は医者に行く", &SENTENCE),
             "きょうは=今日は|いしゃに=医者に|いく=行く"
         );
-        // Two in a row both join; a longer hiragana word is a segment.
+        // Two in a row both join; a longer hiragana word is a segment,
+        // even with each of its kana a word of its own in the dictionary
+        // (as nearly every kana is in the real one).
         let entries = [
             ("がっこう", "学校"),
             ("に", "に"),
             ("は", "は"),
             ("から", "から"),
+            ("か", "か"),
+            ("ら", "ら"),
             ("いく", "行く"),
         ];
         assert_eq!(
