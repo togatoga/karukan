@@ -162,13 +162,10 @@ const KEEP: usize = 8;
 #[derive(Debug, Clone)]
 struct Cut {
     /// Compared left to right: the chars outside a dictionary word
-    /// (hiragana and marks aside: those belong to the word before them);
-    /// the unknown words; the segments; the segments that start with a
-    /// word of a single character. The last two are what the [`Way`]
-    /// makes them: cutting finely, the single-character kanji words and
-    /// the chars that start no segment; by script, the script's
-    /// boundaries left inside a step, and nothing.
-    cost: (usize, usize, usize, usize),
+    /// (marks aside); the unknown words; and what the [`Way`] is after —
+    /// the segments, the chars that start no segment, or the script's
+    /// boundaries left inside a step.
+    cost: (usize, usize, usize),
     /// It gives some word a reading the dictionary contradicts.
     doubtful: bool,
     /// Where its segments start after the first: (text, reading)
@@ -194,7 +191,7 @@ impl Cut {
 fn offer(
     kept: &mut Vec<Cut>,
     rest: &Cut,
-    step: (usize, usize, usize, usize),
+    step: (usize, usize, usize),
     doubtful: bool,
     start: Option<(usize, usize)>,
 ) {
@@ -202,7 +199,6 @@ fn offer(
         rest.cost.0 + step.0,
         rest.cost.1 + step.1,
         rest.cost.2 + step.2,
-        rest.cost.3 + step.3,
     );
     match kept.iter().position(|cut| cut.cuts_like(start, rest)) {
         Some(same) if kept[same].cost <= cost => return,
@@ -236,8 +232,7 @@ fn offer(
 /// outside the dictionary, the ones with the fewest segments come first:
 /// the longest match, then what it gives way to — a word into the words
 /// it is made of (競技|プログラミング). Coverings with the same number of
-/// segments come in no particular order, except that one starting a
-/// segment with a single-character word comes after one that does not.
+/// segments come in no particular order.
 ///
 /// Empty when the text is not the reading's conversion, when it is too
 /// long to rank, or when nothing cuts it.
@@ -272,16 +267,10 @@ pub(in crate::core) fn script_cut(reading: &str, text: &str, words: WordLookup) 
 
 /// `text` cut as finely as the dictionary cuts it: the opposite end from
 /// [`ranked_cuts`], the most segments instead of the fewest, so a word
-/// made of words comes apart (早稲田|大学) and a particle the dictionary
-/// has stands alone (今日|は). The extreme on purpose, for when the
-/// longest match keeps together what is to be fixed apart — and it does
-/// take apart whatever the dictionary can tile (プロ|グラ|ミング).
-///
-/// Two things keep it from going to dust. A word of a single kanji or
-/// katakana counts against a covering before the segments are counted, so
-/// 東京 does not become 東|京. And a single hiragana is a word only right
-/// after something that is not hiragana: は after 今日 is, the あ and る
-/// of ある are not.
+/// made of words comes apart (早稲田|大学, 東|京). The extreme on purpose,
+/// and nothing holds it back: whatever the dictionary can tile comes
+/// apart, down to single characters (プロ|グラ|ミング, あ|る). Which of
+/// those is wanted is not this function's to say.
 ///
 /// Empty when that leaves fewer than two segments.
 pub(in crate::core) fn finest_cut(reading: &str, text: &str, words: WordLookup) -> Vec<Piece> {
@@ -363,7 +352,7 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
     // kept[i][j]: the cheapest distinct cuts of text[i..] with reading[j..].
     let mut kept: Vec<Vec<Vec<Cut>>> = vec![vec![Vec::new(); m + 1]; n + 1];
     kept[n][m].push(Cut {
-        cost: (0, 0, 0, 0),
+        cost: (0, 0, 0),
         doubtful: false,
         starts: Vec::new(),
     });
@@ -371,53 +360,43 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
         for j in (0..m).rev() {
             let mut here = Vec::new();
             let mut take = |i2: usize, j2: usize, kind: Step, outside: usize, doubtful: bool| {
-                let (starts, third, fourth) = match way {
+                let (starts, third) = match way {
                     Way::Longest => {
                         let starts = i > 0 && starts_segment(&text, i, kind);
-                        let single = starts && kind == Step::Word && i2 - i == 1;
-                        (starts, usize::from(starts), usize::from(single))
+                        (starts, usize::from(starts))
                     }
                     Way::Shortest => {
                         let starts = i > 0 && starts_segment(&text, i, kind);
-                        let lone = kind == Step::Word
-                            && i2 - i == 1
-                            && Script::of(text[i]) != Script::Hiragana;
                         // Every char that starts no segment is charged, so
                         // the fewest of them is the most segments.
-                        (starts, usize::from(lone), i2 - i - usize::from(starts))
+                        (starts, i2 - i - usize::from(starts))
                     }
                     Way::Script(script) => {
                         let hidden = script[i + 1..i2].iter().filter(|&&s| s).count();
-                        (script[i], hidden, 0)
+                        (script[i], hidden)
                     }
                 };
-                let step = (outside, usize::from(kind == Step::Unknown), third, fourth);
+                let step = (outside, usize::from(kind == Step::Unknown), third);
                 for rest in &kept[i2][j2] {
                     offer(&mut here, rest, step, doubtful, starts.then_some((i, j)));
                 }
             };
             for (taken, surface) in &words_at[j] {
                 let (i2, j2) = (i + surface.len(), j + taken);
-                // Cutting finely, a hiragana among hiragana is no word.
-                let dust = matches!(way, Way::Shortest)
-                    && surface.len() == 1
-                    && i > 0
-                    && Script::of(text[i]) == Script::Hiragana
-                    && Script::of(text[i - 1]) == Script::Hiragana;
-                if i2 <= n && j2 <= m && folded_text[i..i2] == surface[..] && !dust {
+                if i2 <= n && j2 <= m && folded_text[i..i2] == surface[..] {
                     take(i2, j2, Step::Word, 0, false);
                 }
             }
             if folded_text[i] == folded_reading[j] {
                 // A kana or an alphanumeric no word took is outside the
-                // dictionary. Cutting by its longest words that goes for
+                // dictionary. Cutting by the dictionary that goes for
                 // hiragana too, so a word the dictionary has is a word
                 // (今日|は) and only what it lacks joins the word before;
-                // the other ways leave hiragana free to join.
+                // cutting by script, hiragana is free to join.
                 let script = Script::of(text[i]);
                 let outside = match way {
-                    Way::Longest => script != Script::Other,
-                    Way::Shortest | Way::Script(_) => script.is_word_char(),
+                    Way::Longest | Way::Shortest => script != Script::Other,
+                    Way::Script(_) => script.is_word_char(),
                 };
                 take(i + 1, j + 1, Step::Pin, usize::from(outside), false);
             }
@@ -445,14 +424,9 @@ fn cuts_where(reading: &str, text: &str, words: WordLookup, k: usize, way: Way) 
     let Some(best) = cuts.first().filter(|best| !best.doubtful) else {
         return Vec::new();
     };
-    // Cutting finely, single-kanji words are held to the best covering's
-    // too: a cut that needs more of them (東|京) is no cut.
-    let known = |cut: &Cut| match way {
-        Way::Shortest => (cut.cost.0, cut.cost.1, cut.cost.2),
-        Way::Longest | Way::Script(_) => (cut.cost.0, cut.cost.1, 0),
-    };
+    let known = (best.cost.0, best.cost.1);
     cuts.iter()
-        .filter(|cut| !cut.doubtful && known(cut) == known(best))
+        .filter(|cut| !cut.doubtful && (cut.cost.0, cut.cost.1) == known)
         .filter(|cut| !cut.starts.is_empty())
         .take(k)
         .map(|cut| {
@@ -871,7 +845,7 @@ mod tests {
     }
 
     #[test]
-    fn the_finest_cut_takes_words_and_particles_apart() {
+    fn the_finest_cut_is_every_dictionary_word() {
         let entries = [
             ("わせだだいがく", "早稲田大学"),
             ("わせだ", "早稲田"),
@@ -879,36 +853,29 @@ mod tests {
             ("に", "に"),
             ("は", "は"),
             ("いく", "行く"),
-            ("い", "行"),
-            ("く", "く"),
         ];
         assert_eq!(
             finest("わせだだいがくにはいく", "早稲田大学には行く", &entries),
-            // に comes off its word; は, a hiragana after a hiragana, does
-            // not come off に; 行く is not 行|く.
-            "わせだ=早稲田|だいがく=大学|には=には|いく=行く"
+            "わせだ=早稲田|だいがく=大学|に=に|は=は|いく=行く"
         );
     }
 
     #[test]
-    fn the_finest_cut_stops_short_of_dust() {
+    fn the_finest_cut_goes_down_to_single_characters() {
         let entries = [
             ("とうきょう", "東京"),
             ("とう", "東"),
             ("きょう", "京"),
-            ("と", "都"),
-            ("とうきょうと", "東京都"),
             ("あ", "あ"),
             ("る", "る"),
             ("ある", "ある"),
             ("に", "に"),
         ];
-        // Never down to single kanji while a longer word will do.
-        assert_eq!(finest("とうきょう", "東京", &entries), "");
-        // Nor hiragana into its letters.
+        // Nothing is held back: which cut is wanted is the user's to say.
+        assert_eq!(finest("とうきょう", "東京", &entries), "とう=東|きょう=京");
         assert_eq!(
             finest("とうきょうにある", "東京にある", &entries),
-            "とうきょう=東京|に=に|ある=ある"
+            "とう=東|きょう=京|に=に|あ=あ|る=る"
         );
     }
 
