@@ -171,10 +171,6 @@ pub struct InputMethodEngine {
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
     /// then (or if loading failed) the engine runs dictionary/kana-only.
     model_loading: Option<std::sync::mpsc::Receiver<init::LoadedConverters>>,
-    /// Which of the ways to cut Ctrl+S last picked, as the aux line says
-    /// it (「切り方2/4 辞書2」). None until Ctrl+S is pressed, and again once
-    /// the segments are no longer that cut (a new conversion, a resize).
-    segment_cut: Option<String>,
 }
 
 impl InputMethodEngine {
@@ -204,7 +200,6 @@ impl InputMethodEngine {
             dicts: Dictionaries::default(),
             learning: None,
             model_loading: None,
-            segment_cut: None,
         }
     }
 

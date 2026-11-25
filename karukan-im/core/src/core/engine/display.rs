@@ -232,15 +232,12 @@ impl InputMethodEngine {
         // stands: the composition's chunk counter says nothing about it.
         if self.state.is_segmented() {
             let (left, right) = self.state.neighbours();
-            let cut = self.segment_cut.as_deref().unwrap_or_default();
             return format!(
-                "{} {shown} 文節{}/{} {cut}",
+                "{} {shown} 文節{}/{}",
                 self.segment_outline(),
                 left.len() + 1,
                 left.len() + 1 + right.len()
-            )
-            .trim_end()
-            .to_string();
+            );
         }
         if self.state.reading() == Some(shown) {
             return self.aux_reading();

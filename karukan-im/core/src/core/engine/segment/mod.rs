@@ -16,11 +16,7 @@
 //! already had.
 mod split;
 
-use split::{Granularity, Piece, ranked_cuts, split_by_script, split_segments};
-
-/// How many of the dictionary's own cuts Ctrl+S offers before the cuts
-/// made by a rule.
-const RANKED_CUTS: usize = 3;
+use split::{Piece, ranked_cuts};
 
 use crate::core::state::Segment;
 
@@ -64,94 +60,27 @@ impl InputMethodEngine {
         self.render_conversion()
     }
 
-    /// Ctrl+S: cut the conversion into segments, and with each further
-    /// press cut it the next way ([`Self::cuts`]), round and round. Where
-    /// to cut is a choice the text alone does not settle, so the key
-    /// offers the candidates in order instead of the IME guessing one.
-    ///
-    /// What is cut is the text on screen, so choices already made in a
-    /// segment carry over as text; the first segment is focused each
-    /// time. With one way to cut and that one on screen, or none at all,
-    /// the press does nothing.
-    pub(super) fn cycle_segmentation(&mut self) -> EngineResult {
+    /// Ctrl+S: cut the conversion into segments, the first one focused —
+    /// what the arrow keys do, without moving the focus anywhere. Pressed
+    /// on a conversion already cut, or on one that does not come apart,
+    /// it does nothing: there is one way to cut, and the segments' edges
+    /// are moved from there with Shift+←/→.
+    pub(super) fn split_conversion(&mut self) -> EngineResult {
+        if self.state.is_segmented() {
+            return EngineResult::consumed();
+        }
         let (segments, _) = self.segments();
-        let whole = !self.state.is_segmented();
-        let (reading, text) = match self.state.candidates().and_then(CandidateList::selected) {
-            // A whole conversion that the arrow keys would not split
-            // either (a command, a date) has nothing to cut.
-            Some(c) if whole && !self.splits(c) => return EngineResult::consumed(),
-            // A predicted phrase reads longer than what was typed.
-            Some(c) if whole => (
-                c.reading
-                    .clone()
-                    .unwrap_or_else(|| segments[0].reading.clone()),
-                c.text.clone(),
-            ),
-            _ => (
-                segments.iter().map(|s| s.reading.as_str()).collect(),
-                segments.iter().map(Segment::text).collect(),
-            ),
-        };
-        let mut cuts = self.cuts(&reading, &text);
-        // From the whole, the first; from a cut, the one after it — and
-        // the first again from one the list does not have (a segment was
-        // resized).
-        let shown = |(_, cut): &(String, Vec<Piece>)| {
-            !whole
-                && cut
-                    .iter()
-                    .map(|p| p.reading.as_str())
-                    .eq(segments.iter().map(|s| s.reading.as_str()))
-        };
-        let next = match cuts.iter().position(shown) {
-            Some(_) if cuts.len() == 1 => return EngineResult::consumed(),
-            Some(at) => (at + 1) % cuts.len(),
-            None if cuts.is_empty() => return EngineResult::consumed(),
-            None => 0,
-        };
-        let total = cuts.len();
-        let (name, pieces) = cuts.swap_remove(next);
-        self.put_segments(pieces.into_iter().map(Segment::from).collect(), 0);
-        self.segment_cut = Some(format!("切り方{}/{total} {name}", next + 1));
+        if segments.len() < 2 {
+            return EngineResult::consumed();
+        }
+        self.put_segments(segments, 0);
         self.render_conversion()
     }
 
-    /// The ways to cut `text`, the conversion of `reading`, into two
-    /// segments or more, in the order Ctrl+S offers them. The dictionary's
-    /// own cuts first, the fewest segments first ([`ranked_cuts`]: the
-    /// longest match, then what it gives way to), up to [`RANKED_CUTS`];
-    /// then the cuts made by a rule, which reach what those three may not
-    /// — every particle off its word, every word in its parts, the script
-    /// alone. A cut that an earlier one already gives is left out. Each
-    /// comes with the name the aux line gives it.
-    fn cuts(&self, reading: &str, text: &str) -> Vec<(String, Vec<Piece>)> {
-        let lookup = self.word_lookup(text);
-        let ranked = ranked_cuts(reading, text, &lookup, RANKED_CUTS)
-            .into_iter()
-            .enumerate()
-            .map(|(rank, cut)| (format!("辞書{}", rank + 1), cut));
-        let by_rule = [
-            (Granularity::Phrases, "助詞付き"),
-            (Granularity::Words, "助詞別"),
-            (Granularity::Fine, "部品"),
-        ]
-        .into_iter()
-        .map(|(granularity, name)| {
-            let cut = split_segments(reading, text, &lookup, granularity);
-            (name.to_string(), cut)
-        })
-        .chain([("字種".to_string(), split_by_script(reading, text, &lookup))]);
-        let mut cuts: Vec<(String, Vec<Piece>)> = Vec::new();
-        for (name, cut) in ranked.chain(by_rule) {
-            if cut.len() > 1 && cuts.iter().all(|(_, earlier)| *earlier != cut) {
-                cuts.push((name, cut));
-            }
-        }
-        cuts
-    }
-
-    /// The first way to cut `text`: what the arrow keys split into. One
-    /// piece when nothing cuts it.
+    /// `text`, the conversion of `reading`, cut into segments: the
+    /// dictionary's longest match — the fewest segments, but two at least,
+    /// so a text the dictionary has as one word is cut into its parts
+    /// ([`ranked_cuts`]). One piece when nothing cuts it.
     fn cut(&self, reading: &str, text: &str) -> Vec<Piece> {
         let whole = || {
             vec![Piece {
@@ -159,10 +88,9 @@ impl InputMethodEngine {
                 text: text.to_string(),
             }]
         };
-        self.cuts(reading, text)
-            .into_iter()
-            .next()
-            .map_or_else(whole, |(_, cut)| cut)
+        ranked_cuts(reading, text, &self.word_lookup(text), 1)
+            .pop()
+            .unwrap_or_else(whole)
     }
 
     /// Shift+←/→: move the focused segment's right edge by one character of
@@ -171,8 +99,6 @@ impl InputMethodEngine {
     /// the segments before it are left as they are.
     pub(super) fn resize_segment(&mut self, grow: bool) -> EngineResult {
         let (segments, focus) = self.segments();
-        // The segments stop being the cut Ctrl+S picked.
-        self.segment_cut = None;
         let mut focused: Vec<char> = segments[focus].reading.chars().collect();
         let mut rest: Vec<char> = segments[focus + 1..]
             .iter()
@@ -459,7 +385,7 @@ impl InputMethodEngine {
     }
 
     /// The dictionary words that start a reading and are written in `text`
-    /// — what [`split_segments`] pins the text to the reading with. Both
+    /// — what [`ranked_cuts`] pins the text to the reading with. Both
     /// dictionaries; a word `text` does not contain cannot be one of its
     /// words, and dropping it here keeps the common readings (こう has
     /// hundreds of surfaces) from being copied for nothing.

@@ -388,10 +388,6 @@ fn ctrl_s_while_typing_converts_and_cuts_in_one_press() {
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
     assert_eq!(focused_text(&engine), "早稲田大学に");
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
-
-    // And from there it is the same key as after Space.
-    engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "行く"]);
 }
 
 #[test]
@@ -408,44 +404,21 @@ fn ctrl_s_while_typing_one_word_is_a_plain_conversion() {
 }
 
 #[test]
-fn ctrl_s_enters_segments_and_then_cuts_another_way() {
+fn ctrl_s_cuts_the_conversion_into_segments() {
     let mut engine = converted_university();
 
-    // First press: the dictionary's longest match, the fewest segments,
-    // first segment focused.
+    // The dictionary's longest match, first segment focused.
     engine.process_key(&press_ctrl_s());
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
     assert_eq!(focused_text(&engine), "早稲田大学に");
-
-    // Then the dictionary's next cuts, a segment more each.
-    engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "行く"]);
-    engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
-
-    // Then what only a rule reaches: every word in its parts.
-    engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
-
-    // And round again; the cuts a rule repeats are not offered twice.
-    engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
-
-    // The text never changed.
     assert_eq!(preedit_text(&engine), "早稲田大学に行く");
-}
 
-#[test]
-fn ctrl_s_keeps_what_was_chosen_in_a_segment() {
-    let mut engine = converted_university();
-    seed_model_cache(&mut engine, "イク", "早稲田大学に", &["行く", "逝く"]);
-    engine.process_key(&press_ctrl_s());
-    engine.process_key(&press_key(Keysym::END));
-    engine.process_key(&press_key(Keysym::SPACE));
-    assert_eq!(preedit_text(&engine), "早稲田大学に逝く");
-
-    engine.process_key(&press_ctrl_s());
-    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "逝く"]);
+    // There is one way to cut: pressed again, nothing moves.
+    engine.process_key(&press_key(Keysym::RIGHT));
+    let result = engine.process_key(&press_ctrl_s());
+    assert!(result.consumed);
+    assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
+    assert_eq!(focused_text(&engine), "行く");
 }
 
 #[test]
@@ -484,43 +457,4 @@ fn ctrl_s_does_nothing_where_nothing_comes_apart() {
     assert!(result.consumed);
     assert!(!engine.state().is_segmented());
     assert_eq!(preedit_text(&engine), "今日");
-}
-
-#[test]
-fn the_aux_line_counts_the_segments() {
-    let mut engine = converted_university();
-    let aux = |result: &EngineResult| {
-        result
-            .actions
-            .iter()
-            .find_map(|a| match a {
-                EngineAction::UpdateAuxText(text) => Some(text.clone()),
-                _ => None,
-            })
-            .unwrap()
-    };
-    // Which cut of how many, and what kind it is.
-    let result = engine.process_key(&press_ctrl_s());
-    assert!(
-        aux(&result).contains("文節1/2 切り方1/4 辞書1"),
-        "{}",
-        aux(&result)
-    );
-    let result = engine.process_key(&press_ctrl_s());
-    assert!(
-        aux(&result).contains("文節1/3 切り方2/4 辞書2"),
-        "{}",
-        aux(&result)
-    );
-    engine.process_key(&press_ctrl_s());
-    let result = engine.process_key(&press_ctrl_s());
-    assert!(
-        aux(&result).contains("文節1/4 切り方4/4 部品"),
-        "{}",
-        aux(&result)
-    );
-
-    // Split by an arrow key, or resized, it is no cut Ctrl+S picked.
-    let result = engine.process_key(&press_shift_key(Keysym::RIGHT));
-    assert!(!aux(&result).contains("切り方"), "{}", aux(&result));
 }
