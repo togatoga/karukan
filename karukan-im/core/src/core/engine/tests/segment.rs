@@ -344,6 +344,7 @@ fn converted_university() -> InputMethodEngine {
             {"reading":"わせだ","candidates":[{"surface":"早稲田","score":1.0}]},
             {"reading":"だいがく","candidates":[{"surface":"大学","score":1.0}]},
             {"reading":"わせだだいがく","candidates":[{"surface":"早稲田大学","score":1.0}]},
+            {"reading":"に","candidates":[{"surface":"に","score":1.0}]},
             {"reading":"いく","candidates":[{"surface":"行く","score":1.0}]}
         ]"#,
     )));
@@ -377,17 +378,21 @@ fn press_ctrl_space() -> KeyEvent {
 fn ctrl_space_enters_segments_and_then_cuts_another_way() {
     let mut engine = converted_university();
 
-    // First press: the dictionary's longest words, first segment focused.
+    // First press: 文節 — the dictionary's longest words with the
+    // hiragana after them, first segment focused.
     engine.process_key(&press_ctrl_space());
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
     assert_eq!(focused_text(&engine), "早稲田大学に");
 
-    // Second: the shorter words the long one is made of.
+    // Second: 単語 — the particle the dictionary has stands alone.
     engine.process_key(&press_ctrl_space());
-    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "行く"]);
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "行く"]);
 
-    // The script alone cuts where the longest words did, which is no
-    // change from two presses ago but is one from here.
+    // Third: 細かく — the shorter words the long one is made of.
+    engine.process_key(&press_ctrl_space());
+    assert_eq!(segment_texts(&engine), ["早稲田", "大学", "に", "行く"]);
+
+    // And round again.
     engine.process_key(&press_ctrl_space());
     assert_eq!(segment_texts(&engine), ["早稲田大学に", "行く"]);
 
@@ -405,7 +410,7 @@ fn ctrl_space_keeps_what_was_chosen_in_a_segment() {
     assert_eq!(preedit_text(&engine), "早稲田大学に逝く");
 
     engine.process_key(&press_ctrl_space());
-    assert_eq!(segment_texts(&engine), ["早稲田", "大学に", "逝く"]);
+    assert_eq!(segment_texts(&engine), ["早稲田大学", "に", "逝く"]);
 }
 
 #[test]
