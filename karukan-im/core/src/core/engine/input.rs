@@ -262,7 +262,7 @@ impl InputMethodEngine {
                 Keysym::KEY_S | Keysym::KEY_S_UPPER if self.segments_apply() => {
                     let converted = self.start_conversion(LearningLookup::Use);
                     return match self.state {
-                        InputState::Conversion { .. } => self.split_focus(),
+                        InputState::Conversion { .. } => self.cycle_segmentation(),
                         _ => converted,
                     };
                 }

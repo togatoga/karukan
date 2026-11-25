@@ -722,12 +722,12 @@ impl InputMethodEngine {
                             return self.rebreak_conversion();
                         }
                         // Ctrl+S: cut the conversion into segments, and
-                        // with each further press cut the focused one. Not
+                        // with each further press cut it another way. Not
                         // Ctrl+Space: macOS (previous input source) and
                         // fcitx5 (its trigger key) take that one before
                         // it gets here.
                         Keysym::KEY_S | Keysym::KEY_S_UPPER if self.segments_apply() => {
-                            return self.split_focus();
+                            return self.cycle_segmentation();
                         }
                         // Ctrl+A/B/E/F: Home/←/End/→, as while composing.
                         Keysym::KEY_A | Keysym::KEY_A_UPPER if self.segments_apply() => {

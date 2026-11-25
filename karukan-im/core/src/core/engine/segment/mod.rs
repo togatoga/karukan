@@ -16,8 +16,11 @@
 //! already had.
 mod split;
 
-pub(super) use split::Granularity;
-use split::{Piece, split_segments};
+use split::{Granularity, Piece, ranked_cuts, split_by_script, split_segments};
+
+/// How many of the dictionary's own cuts Ctrl+S offers before the cuts
+/// made by a rule.
+const RANKED_CUTS: usize = 3;
 
 use crate::core::state::Segment;
 
@@ -61,53 +64,94 @@ impl InputMethodEngine {
         self.render_conversion()
     }
 
-    /// Ctrl+S: cut what is focused. The first press cuts the whole
-    /// conversion into segments; each press after that cuts the focused
-    /// segment, and only that one, so how finely a sentence is cut is
-    /// decided place by place instead of for all of it at once.
+    /// Ctrl+S: cut the conversion into segments, and with each further
+    /// press cut it the next way ([`Self::cuts`]), round and round. Where
+    /// to cut is a choice the text alone does not settle, so the key
+    /// offers the candidates in order instead of the IME guessing one.
     ///
-    /// What is focused is cut the coarsest way that cuts it at all
-    /// ([`Granularity::COARSEST_FIRST`]): into 文節, else into words, else
-    /// into the words a word is made of. 早稲田大学に行く thus gives
-    /// 早稲田大学に|行く, then 早稲田大学|に, then 早稲田|大学 — and a
-    /// press on something that does not come apart does nothing.
-    ///
-    /// What is cut is the text on screen, so a choice already made in the
-    /// segment carries over as text.
-    pub(super) fn split_focus(&mut self) -> EngineResult {
+    /// What is cut is the text on screen, so choices already made in a
+    /// segment carry over as text; the first segment is focused each
+    /// time. With one way to cut and that one on screen, or none at all,
+    /// the press does nothing.
+    pub(super) fn cycle_segmentation(&mut self) -> EngineResult {
+        let (segments, _) = self.segments();
         let whole = !self.state.is_segmented();
-        // A whole conversion comes back from `segments` already cut into
-        // 文節 when it can be.
-        let (mut segments, focus) = self.segments();
-        if whole && segments.len() > 1 {
-            self.put_segments(segments, 0);
-            return self.render_conversion();
-        }
         let (reading, text) = match self.state.candidates().and_then(CandidateList::selected) {
             // A whole conversion that the arrow keys would not split
             // either (a command, a date) has nothing to cut.
             Some(c) if whole && !self.splits(c) => return EngineResult::consumed(),
             // A predicted phrase reads longer than what was typed.
-            Some(c) if whole && c.reading.is_some() => {
-                (c.reading.clone().unwrap_or_default(), c.text.clone())
-            }
+            Some(c) if whole => (
+                c.reading
+                    .clone()
+                    .unwrap_or_else(|| segments[0].reading.clone()),
+                c.text.clone(),
+            ),
             _ => (
-                segments[focus].reading.clone(),
-                segments[focus].text().to_string(),
+                segments.iter().map(|s| s.reading.as_str()).collect(),
+                segments.iter().map(Segment::text).collect(),
             ),
         };
-        let lookup = self.word_lookup(&text);
-        let Some(pieces) = Granularity::COARSEST_FIRST
-            .into_iter()
-            .map(|granularity| split_segments(&reading, &text, &lookup, granularity))
-            .find(|pieces| pieces.len() > 1)
-        else {
-            return EngineResult::consumed();
+        let mut cuts = self.cuts(&reading, &text);
+        // From the whole, the first; from a cut, the one after it — and
+        // the first again from one the list does not have (a segment was
+        // resized).
+        let shown = |cut: &Vec<Piece>| {
+            !whole
+                && cut
+                    .iter()
+                    .map(|p| p.reading.as_str())
+                    .eq(segments.iter().map(|s| s.reading.as_str()))
         };
-        drop(lookup);
-        segments.splice(focus..=focus, pieces.into_iter().map(Segment::from));
-        self.put_segments(segments, focus);
+        let next = match cuts.iter().position(shown) {
+            Some(_) if cuts.len() == 1 => return EngineResult::consumed(),
+            Some(at) => (at + 1) % cuts.len(),
+            None if cuts.is_empty() => return EngineResult::consumed(),
+            None => 0,
+        };
+        let pieces = cuts.swap_remove(next);
+        self.put_segments(pieces.into_iter().map(Segment::from).collect(), 0);
         self.render_conversion()
+    }
+
+    /// The ways to cut `text`, the conversion of `reading`, into two
+    /// segments or more, in the order Ctrl+S offers them. The dictionary's
+    /// own cuts first, the fewest segments first ([`ranked_cuts`]: the
+    /// longest match, then what it gives way to), up to [`RANKED_CUTS`];
+    /// then the cuts made by a rule, which reach what those three may not
+    /// — every particle off its word, every word in its parts, the script
+    /// alone. A cut that an earlier one already gives is left out.
+    fn cuts(&self, reading: &str, text: &str) -> Vec<Vec<Piece>> {
+        let lookup = self.word_lookup(text);
+        let by_rule = [Granularity::Phrases, Granularity::Words, Granularity::Fine]
+            .into_iter()
+            .map(|granularity| split_segments(reading, text, &lookup, granularity))
+            .chain([split_by_script(reading, text, &lookup)]);
+        let mut cuts: Vec<Vec<Piece>> = Vec::new();
+        for cut in ranked_cuts(reading, text, &lookup, RANKED_CUTS)
+            .into_iter()
+            .chain(by_rule)
+        {
+            if cut.len() > 1 && !cuts.contains(&cut) {
+                cuts.push(cut);
+            }
+        }
+        cuts
+    }
+
+    /// The first way to cut `text`: what the arrow keys split into. One
+    /// piece when nothing cuts it.
+    fn cut(&self, reading: &str, text: &str) -> Vec<Piece> {
+        let whole = || {
+            vec![Piece {
+                reading: reading.to_string(),
+                text: text.to_string(),
+            }]
+        };
+        self.cuts(reading, text)
+            .into_iter()
+            .next()
+            .unwrap_or_else(whole)
     }
 
     /// Shift+←/→: move the focused segment's right edge by one character of
@@ -271,12 +315,7 @@ impl InputMethodEngine {
         // what was typed reads longer than that, and is cut against its
         // own reading.
         let pieces = match candidates.selected() {
-            Some(c) if self.splits(c) => split_segments(
-                c.reading.as_deref().unwrap_or(reading),
-                &c.text,
-                &self.word_lookup(&c.text),
-                Granularity::Phrases,
-            ),
+            Some(c) if self.splits(c) => self.cut(c.reading.as_deref().unwrap_or(reading), &c.text),
             _ => Vec::new(),
         };
         if pieces.len() < 2 {
@@ -356,12 +395,7 @@ impl InputMethodEngine {
         let converted = self.convert_on_chunk_grid(rest, &ctx);
         self.chunk_breaks = breaks;
         let text = self.settle_text(&converted);
-        split_segments(
-            &reading,
-            &text,
-            &self.word_lookup(&text),
-            Granularity::Phrases,
-        )
+        self.cut(&reading, &text)
     }
 
     /// The left context of a segment's conversion: the editor's text, then

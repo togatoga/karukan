@@ -74,9 +74,6 @@ pub(in crate::core) enum Granularity {
 }
 
 impl Granularity {
-    /// Every way of cutting, the coarsest first.
-    pub(in crate::core) const COARSEST_FIRST: [Self; 3] = [Self::Phrases, Self::Words, Self::Fine];
-
     /// Whether dictionary words written in hiragana alone are units. Not
     /// for 文節: the dictionary has no parts of speech, so は and に would
     /// be words like any other, and what makes a 文節 is that they are not.
@@ -155,7 +152,7 @@ impl Script {
             'ー' => Self::ProlongedMark,
             '\u{3041}'..='\u{309F}' => Self::Hiragana,
             '\u{30A1}'..='\u{30FA}' | '\u{30FD}'..='\u{30FF}' => Self::Katakana,
-            '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '々' | '〆' => Self::Other,
+            c if is_kanji(c) => Self::Other,
             c if c.is_alphanumeric() => Self::Alphanumeric,
             _ => Self::Other,
         }
@@ -392,26 +389,276 @@ pub(in crate::core) fn split_segments(
         take_words_apart(&mut positions, &reading_chars, &text_chars, words);
     }
 
+    pieces_at(&reading_chars, &text_chars, &positions, |i, step| {
+        starts_segment(&text_chars, i, step)
+    })
+}
+
+/// The pieces of `text` and `reading` cut at every step of `positions`
+/// that `starts` a segment.
+fn pieces_at(
+    reading: &[char],
+    text: &[char],
+    positions: &[Option<(usize, Step)>],
+    starts: impl Fn(usize, Step) -> bool,
+) -> Vec<Piece> {
     let mut pieces = Vec::new();
     let (mut text_start, mut reading_start) = (0, 0);
-    for i in 1..text_chars.len() {
+    for i in 1..text.len() {
         let Some((reading_at, step)) = positions[i] else {
             continue;
         };
-        if !starts_segment(&text_chars, i, step) {
+        if !starts(i, step) {
             continue;
         }
         pieces.push(Piece {
-            reading: reading_chars[reading_start..reading_at].iter().collect(),
-            text: text_chars[text_start..i].iter().collect(),
+            reading: reading[reading_start..reading_at].iter().collect(),
+            text: text[text_start..i].iter().collect(),
         });
         (text_start, reading_start) = (i, reading_at);
     }
     pieces.push(Piece {
-        reading: reading_chars[reading_start..].iter().collect(),
-        text: text_chars[text_start..].iter().collect(),
+        reading: reading[reading_start..].iter().collect(),
+        text: text[text_start..].iter().collect(),
     });
     pieces
+}
+
+/// Which run of same-script characters each char of `text` is in, for the
+/// scripts a word is written in — kanji, katakana, alphanumerics — and
+/// `None` for the rest (hiragana, marks), which belong to the run before
+/// them. `ー` goes with whatever it prolongs.
+fn script_runs(text: &[char]) -> Vec<Option<Script>> {
+    let mut runs: Vec<Option<Script>> = Vec::with_capacity(text.len());
+    for &c in text {
+        let run = match Script::of(c) {
+            Script::ProlongedMark => runs.last().copied().flatten(),
+            Script::Hiragana => None,
+            Script::Other if !is_kanji(c) => None,
+            script => Some(script),
+        };
+        runs.push(run);
+    }
+    runs
+}
+
+fn is_kanji(c: char) -> bool {
+    matches!(c, '\u{3400}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '々' | '〆')
+}
+
+/// Split `text` by script alone: a segment starts where a run of kanji, of
+/// katakana or of alphanumerics does, and the hiragana and marks after it
+/// are its own (競技|プログラミングを|学ぶ). The dictionary says nothing
+/// about where to cut here; it only lines the text up with the reading,
+/// so a place it cannot line up — inside one of its words — is not cut.
+pub(in crate::core) fn split_by_script(reading: &str, text: &str, words: WordLookup) -> Vec<Piece> {
+    let reading_chars: Vec<char> = reading.chars().collect();
+    let text_chars: Vec<char> = text.chars().collect();
+    let Some(positions) = align(
+        &reading_chars,
+        &text_chars,
+        words,
+        Granularity::Words,
+        Cover::Sentence,
+    ) else {
+        return vec![Piece {
+            reading: reading.to_string(),
+            text: text.to_string(),
+        }];
+    };
+    let runs = script_runs(&text_chars);
+    pieces_at(&reading_chars, &text_chars, &positions, |i, _| {
+        runs[i].is_some() && runs[i] != runs[i - 1]
+    })
+}
+
+/// Longest reading/text the ranked cuts are searched for: the search keeps
+/// several coverings per position, so it is held to a sentence.
+const MAX_RANKED_CHARS: usize = 80;
+
+/// Coverings kept per position while ranking. More than are asked for,
+/// since some are dropped at the end.
+const KEEP: usize = 8;
+
+/// One way of cutting, while it is being ranked.
+#[derive(Debug, Clone)]
+struct Cut {
+    /// Compared left to right: the chars outside a dictionary word
+    /// (hiragana and marks aside: those belong to the word before them);
+    /// the unknown words; the segments; the segments that start with a
+    /// word of a single character.
+    cost: (usize, usize, usize, usize),
+    /// It gives some word a reading the dictionary contradicts.
+    doubtful: bool,
+    /// Where its segments start after the first: (text, reading)
+    /// positions, the last one first.
+    starts: Vec<(usize, usize)>,
+}
+
+impl Cut {
+    /// Whether it cuts the text at `start` and then where `rest` does.
+    fn cuts_like(&self, start: Option<(usize, usize)>, rest: &Cut) -> bool {
+        let mine = self.starts.iter().map(|&(i, _)| i);
+        let theirs = rest
+            .starts
+            .iter()
+            .map(|&(i, _)| i)
+            .chain(start.map(|(i, _)| i));
+        mine.eq(theirs)
+    }
+}
+
+/// Put the cut made of `step` followed by `rest` into `kept`, which holds
+/// the cheapest [`KEEP`] distinct cuts in order.
+fn offer(
+    kept: &mut Vec<Cut>,
+    rest: &Cut,
+    step: (usize, usize, usize, usize),
+    doubtful: bool,
+    start: Option<(usize, usize)>,
+) {
+    let cost = (
+        rest.cost.0 + step.0,
+        rest.cost.1 + step.1,
+        rest.cost.2 + step.2,
+        rest.cost.3 + step.3,
+    );
+    match kept.iter().position(|cut| cut.cuts_like(start, rest)) {
+        Some(same) if kept[same].cost <= cost => return,
+        Some(same) => {
+            kept.remove(same);
+        }
+        None if kept.len() == KEEP && kept[KEEP - 1].cost <= cost => return,
+        None => {}
+    }
+    let at = kept.partition_point(|cut| cut.cost <= cost);
+    let mut starts = rest.starts.clone();
+    starts.extend(start);
+    kept.insert(
+        at,
+        Cut {
+            cost,
+            doubtful: doubtful || rest.doubtful,
+            starts,
+        },
+    );
+    kept.truncate(KEEP);
+}
+
+/// The best `k` ways the dictionary cuts `text`, the conversion of
+/// `reading`, into two segments or more — the fewest segments first.
+///
+/// Every dictionary word may be a unit here, hiragana ones too, and a
+/// hiragana char or a mark no word took joins the word before it. Among
+/// the coverings that leave the least outside the dictionary, the ones
+/// with the fewest segments come first: the longest match, then what it
+/// gives way to — a particle off its word (今日|は), a word into the words
+/// it is made of (競技|プログラミング). Coverings with the same number of
+/// segments come in no particular order, except that one starting a
+/// segment with a single-character word comes after one that does not.
+///
+/// Empty when the text is not the reading's conversion, when it is too
+/// long to rank, or when nothing cuts it.
+pub(in crate::core) fn ranked_cuts(
+    reading: &str,
+    text: &str,
+    words: WordLookup,
+    k: usize,
+) -> Vec<Vec<Piece>> {
+    let reading: Vec<char> = reading.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    let (n, m) = (text.len(), reading.len());
+    if n == 0 || m == 0 || n > MAX_RANKED_CHARS || m > MAX_RANKED_CHARS {
+        return Vec::new();
+    }
+    let folded_text: Vec<char> = text.iter().map(|&c| fold(c)).collect();
+    let folded_reading: Vec<char> = reading.iter().map(|&c| fold(c)).collect();
+    let words_at: Vec<Vec<(usize, Vec<char>)>> = (0..m)
+        .map(|j| {
+            let rest: String = reading[j..].iter().collect();
+            words(&rest)
+                .into_iter()
+                .map(|(taken, surface)| (taken, surface.chars().map(fold).collect()))
+                .collect()
+        })
+        .collect();
+
+    // kept[i][j]: the cheapest distinct cuts of text[i..] with reading[j..].
+    let mut kept: Vec<Vec<Vec<Cut>>> = vec![vec![Vec::new(); m + 1]; n + 1];
+    kept[n][m].push(Cut {
+        cost: (0, 0, 0, 0),
+        doubtful: false,
+        starts: Vec::new(),
+    });
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            let mut here = Vec::new();
+            let mut take = |i2: usize, j2: usize, kind: Step, outside: usize, doubtful: bool| {
+                let starts = i > 0 && starts_segment(&text, i, kind);
+                let single = starts && kind == Step::Word && i2 - i == 1;
+                let step = (
+                    outside,
+                    usize::from(kind == Step::Unknown),
+                    usize::from(starts),
+                    usize::from(single),
+                );
+                for rest in &kept[i2][j2] {
+                    offer(&mut here, rest, step, doubtful, starts.then_some((i, j)));
+                }
+            };
+            for (taken, surface) in &words_at[j] {
+                let (i2, j2) = (i + surface.len(), j + taken);
+                if i2 <= n && j2 <= m && folded_text[i..i2] == surface[..] {
+                    take(i2, j2, Step::Word, 0, false);
+                }
+            }
+            if folded_text[i] == folded_reading[j] {
+                let outside = usize::from(Script::of(text[i]).is_word_char());
+                take(i + 1, j + 1, Step::Pin, outside, false);
+            }
+            for len in 1..=MAX_RUN.min(n - i) {
+                if Script::of(text[i + len - 1]).is_kana() {
+                    break;
+                }
+                for taken in 1..=(len * MAX_READING_PER_CHAR).min(m - j) {
+                    if kept[i + len][j + taken].is_empty() {
+                        continue;
+                    }
+                    let doubtful =
+                        contradicts_dictionary(&folded_text[i..i + len], j, j + taken, &words_at);
+                    take(i + len, j + taken, Step::Unknown, len, doubtful);
+                }
+            }
+            kept[i][j] = here;
+        }
+    }
+
+    // The cheapest covering says how much the dictionary knows of this
+    // text; one it contradicts means the text is not the reading's
+    // conversion, and then no cut of it can be trusted.
+    let cuts = std::mem::take(&mut kept[0][0]);
+    let Some(best) = cuts.first().filter(|best| !best.doubtful) else {
+        return Vec::new();
+    };
+    let known = (best.cost.0, best.cost.1);
+    cuts.iter()
+        .filter(|cut| !cut.doubtful && (cut.cost.0, cut.cost.1) == known)
+        .filter(|cut| !cut.starts.is_empty())
+        .take(k)
+        .map(|cut| {
+            let ends = cut.starts.iter().rev().copied().chain([(n, m)]);
+            let mut from = (0, 0);
+            ends.map(|to| {
+                let piece = Piece {
+                    reading: reading[from.1..to.1].iter().collect(),
+                    text: text[from.0..to.0].iter().collect(),
+                };
+                from = to;
+                piece
+            })
+            .collect()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -694,5 +941,106 @@ mod tests {
                 assert_eq!((r.as_str(), t.as_str()), (reading, text));
             }
         }
+    }
+
+    /// The ranked cuts, each written like [`split_at`]'s.
+    fn ranked(reading: &str, text: &str, entries: &[(&str, &str)]) -> Vec<String> {
+        ranked_cuts(reading, text, &lookup(entries), 3)
+            .iter()
+            .map(|pieces| {
+                pieces
+                    .iter()
+                    .map(|p| p.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("|")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ranked_cuts_start_from_the_longest_match() {
+        let entries = [
+            ("わせだ", "早稲田"),
+            ("だいがく", "大学"),
+            ("わせだだいがく", "早稲田大学"),
+            ("に", "に"),
+            ("いく", "行く"),
+        ];
+        let cuts = ranked("わせだだいがくにいく", "早稲田大学に行く", &entries);
+        // Fewest segments first: the particle with its word.
+        assert_eq!(cuts[0], "早稲田大学に|行く");
+        // Then one segment more: the long word gives way before the
+        // particle comes off, since に is a single character.
+        assert_eq!(cuts[1], "早稲田|大学に|行く");
+        assert_eq!(cuts[2], "早稲田大学|に|行く");
+    }
+
+    #[test]
+    fn ranked_cuts_of_one_dictionary_word_are_its_parts() {
+        let entries = [
+            ("きょうぎぷろぐらみんぐ", "競技プログラミング"),
+            ("きょうぎ", "競技"),
+            ("ぷろぐらみんぐ", "プログラミング"),
+            ("ぷろ", "プロ"),
+            ("ぐら", "グラ"),
+            ("みんぐ", "ミング"),
+        ];
+        let cuts = ranked("きょうぎぷろぐらみんぐ", "競技プログラミング", &entries);
+        // The whole word is no cut; its two parts are the first.
+        assert_eq!(cuts[0], "競技|プログラミング");
+        // Then all the way down. Nothing in between: プロ with the rest
+        // left over as loose katakana is not a cut.
+        assert_eq!(cuts[1..], ["競技|プロ|グラ|ミング"]);
+    }
+
+    #[test]
+    fn ranked_cuts_split_hiragana_at_its_words() {
+        let entries = [
+            ("これ", "これ"),
+            ("は", "は"),
+            ("ここ", "ここ"),
+            ("に", "に"),
+            ("ある", "ある"),
+        ];
+        let cuts = ranked("これはここにある", "これはここにある", &entries);
+        // Words of two characters before the particles.
+        assert_eq!(cuts[0], "これは|ここにある");
+        assert_eq!(cuts[1], "これはここに|ある");
+    }
+
+    #[test]
+    fn ranked_cuts_trust_nothing_the_dictionary_contradicts() {
+        let entries = [("わせだ", "早稲田"), ("だいがく", "大学")];
+        assert!(ranked("わせだにだいがく", "早稲田大学", &entries).is_empty());
+        // One word, nothing to cut.
+        assert!(ranked("きょう", "今日", &[("きょう", "今日")]).is_empty());
+        // A word the dictionary lacks is not cut at a guess.
+        assert!(ranked("わせだだいがく", "早稲田大学", &[]).is_empty());
+    }
+
+    #[test]
+    fn the_script_alone_cuts_where_a_run_starts() {
+        let entries = [
+            ("きょうぎ", "競技"),
+            ("ぷろぐらみんぐ", "プログラミング"),
+            ("を", "を"),
+            ("まなぶ", "学ぶ"),
+            ("ごぞんじ", "ご存知"),
+        ];
+        let by_script = |reading, text| {
+            split_by_script(reading, text, &lookup(&entries))
+                .iter()
+                .map(|p| format!("{}={}", p.reading, p.text))
+                .collect::<Vec<_>>()
+                .join("|")
+        };
+        assert_eq!(
+            by_script("きょうぎぷろぐらみんぐをまなぶ", "競技プログラミングを学ぶ"),
+            "きょうぎ=競技|ぷろぐらみんぐを=プログラミングを|まなぶ=学ぶ"
+        );
+        // Inside a dictionary word there is no reading position to cut at.
+        assert_eq!(by_script("ごぞんじ", "ご存知"), "ごぞんじ=ご存知");
+        // ー goes with what it prolongs.
+        assert_eq!(by_script("らーめん", "らーめん"), "らーめん=らーめん");
     }
 }
