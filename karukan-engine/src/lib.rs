@@ -22,6 +22,7 @@ pub use rewriter::{
     AlphabetRewriter, DateConfig, DatePhrase, DateRewriter, EmojiRewriter,
     HalfWidthKatakanaRewriter, RewriteOutput, Rewriter, RewriterChain, SingleKanjiRewriter,
     SymbolRewriter, description as symbol_description, single_kanji_description,
+    single_kanji_readings,
 };
 pub use romaji::{
     BracketStyle, ChainTable, Converted, PunctuationStyle, RomajiConverter, SlashStyle, SymbolStyle,

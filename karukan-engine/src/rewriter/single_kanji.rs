@@ -48,6 +48,8 @@ struct Table {
     by_reading: HashMap<String, Vec<String>>,
     /// kanji → annotation.
     descriptions: HashMap<String, String>,
+    /// kanji → its readings.
+    readings: HashMap<String, Vec<String>>,
 }
 
 static TABLE: LazyLock<Table> = LazyLock::new(|| {
@@ -60,6 +62,12 @@ impl From<SingleKanjiFile> for Table {
     fn from(file: SingleKanjiFile) -> Self {
         let mut table = Table::default();
         for entry in file.entries {
+            let readings = table.readings.entry(entry.char.clone()).or_default();
+            for reading in &entry.readings {
+                if !readings.contains(reading) {
+                    readings.push(reading.clone());
+                }
+            }
             for reading in entry.readings {
                 let kanji = table.by_reading.entry(reading).or_default();
                 if !kanji.contains(&entry.char) {
@@ -89,6 +97,15 @@ impl Table {
 /// Annotation for a kanji (`髙` → `高の異体字`), if the data has one.
 pub fn description(text: &str) -> Option<&'static str> {
     TABLE.descriptions.get(text).map(String::as_str)
+}
+
+/// Every reading the data lists for a kanji (`高` → こう, たか, …); empty
+/// for a character it does not have.
+pub fn readings(kanji: char) -> &'static [String] {
+    TABLE
+        .readings
+        .get(kanji.encode_utf8(&mut [0; 4]))
+        .map_or(&[], Vec::as_slice)
 }
 
 /// Rewriter emitting every single kanji for the typed reading.
@@ -136,6 +153,14 @@ mod tests {
         assert_eq!(description("高"), None);
     }
 
+    #[test]
+    fn kanji_lists_its_readings() {
+        let taka = readings('高');
+        assert!(taka.contains(&"こう".to_string()));
+        assert!(taka.contains(&"たか".to_string()));
+        assert!(readings('あ').is_empty());
+    }
+
     fn table(yaml: &str) -> Table {
         Table::from(serde_yaml::from_str::<SingleKanjiFile>(yaml).unwrap())
     }
@@ -178,5 +203,6 @@ mod tests {
             Some("旧字体ではない")
         );
         assert_eq!(t.descriptions["髙"], "高の異体字");
+        assert_eq!(t.readings["高"], ["こう", "たか"]);
     }
 }

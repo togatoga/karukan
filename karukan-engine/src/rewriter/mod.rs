@@ -32,7 +32,9 @@ pub use date::{DateConfig, DatePhrase, DateRewriter};
 pub use emoji::EmojiRewriter;
 pub use half_katakana::HalfWidthKatakanaRewriter;
 pub use number::NumberRewriter;
-pub use single_kanji::{SingleKanjiRewriter, description as single_kanji_description};
+pub use single_kanji::{
+    SingleKanjiRewriter, description as single_kanji_description, readings as single_kanji_readings,
+};
 pub use symbol::{SymbolRewriter, description};
 
 use crate::kana::is_digit;

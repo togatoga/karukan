@@ -16,7 +16,7 @@
 //! already had.
 mod split;
 
-use split::{Piece, finest_cut, ranked_cuts, script_cut};
+use split::{Lexicon, Piece, finest_cut, ranked_cuts, script_cut};
 
 use crate::core::state::Segment;
 
@@ -114,11 +114,15 @@ impl InputMethodEngine {
             ),
         };
         let candidates = {
-            let lookup = self.word_lookup(&text);
+            let words = self.word_lookup(&text);
+            let lexicon = Lexicon {
+                words: &words,
+                readings: &karukan_engine::single_kanji_readings,
+            };
             [
                 ("辞書(最長)", self.cut(&reading, &text)),
-                ("字種", script_cut(&reading, &text, &lookup)),
-                ("辞書(最短)", finest_cut(&reading, &text, &lookup)),
+                ("字種", script_cut(&reading, &text, lexicon)),
+                ("辞書(最短)", finest_cut(&reading, &text, lexicon)),
             ]
         };
         let mut ways: Vec<(&'static str, Vec<Piece>)> = Vec::new();
@@ -168,7 +172,12 @@ impl InputMethodEngine {
                 text: text.to_string(),
             }]
         };
-        ranked_cuts(reading, text, &self.word_lookup(text), 1)
+        let words = self.word_lookup(text);
+        let lexicon = Lexicon {
+            words: &words,
+            readings: &karukan_engine::single_kanji_readings,
+        };
+        ranked_cuts(reading, text, lexicon, 1)
             .pop()
             .unwrap_or_else(whole)
     }
