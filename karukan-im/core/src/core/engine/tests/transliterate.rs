@@ -86,7 +86,14 @@ fn kana_forms_are_learned_alphanumerics_are_not() {
     engine.process_key(&press_key(Keysym::F10));
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result), Some("kai"));
-    assert!(engine.learning.as_ref().unwrap().lookup("かい").is_empty());
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("かい", "")
+            .is_empty()
+    );
 
     type_keys(&mut engine, "kai");
     engine.process_key(&press_key(Keysym::F7));
@@ -96,7 +103,7 @@ fn kana_forms_are_learned_alphanumerics_are_not() {
         .learning
         .as_ref()
         .unwrap()
-        .lookup("かい")
+        .lookup("かい", "")
         .into_iter()
         .map(|(surface, _)| surface)
         .collect();
@@ -214,7 +221,14 @@ fn shared_surface_takes_the_pressed_forms_source() {
     assert_eq!(selected.source, Some(CandidateSource::Transliteration));
     assert_eq!(selected.description.as_deref(), Some("[半]英数"));
     engine.process_key(&press_key(Keysym::RETURN));
-    assert!(engine.learning.as_ref().unwrap().lookup("Linux").is_empty());
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("Linux", "")
+            .is_empty()
+    );
 }
 
 #[test]

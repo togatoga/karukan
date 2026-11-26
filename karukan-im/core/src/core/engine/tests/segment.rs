@@ -63,7 +63,11 @@ fn committed(result: &EngineResult) -> Option<String> {
 
 fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
     let cache = engine.learning.as_ref().unwrap();
-    cache.lookup(reading).into_iter().map(|(s, _)| s).collect()
+    cache
+        .lookup(reading, "")
+        .into_iter()
+        .map(|(s, _)| s)
+        .collect()
 }
 
 #[test]
@@ -426,7 +430,13 @@ fn typed_university_with_history() -> InputMethodEngine {
     let mut engine = engine_with_learned("わせだだいがくにいく", "ワセダ大学に行く");
     engine.live.enabled = true;
     if let Some(cache) = engine.learning.as_mut() {
-        cache.record("わせだだいがくにいくよ", "早稲田大学に行くよ");
+        cache.record(
+            "わせだだいがくにいくよ",
+            "早稲田大学に行くよ",
+            "",
+            Evidence::Chosen,
+            1.0,
+        );
     }
     engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
         r#"[

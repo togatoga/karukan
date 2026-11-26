@@ -102,7 +102,14 @@ fn ctrl_delete_removes_selected_learning_entry() {
     let result = engine.process_key(&press_ctrl(Keysym::DELETE));
     assert!(result.consumed);
     // The entry is gone from the cache...
-    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty()
+    );
     // ...and the window stays up: the conversion is rebuilt in place,
     // staying in Conversion.
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
@@ -143,7 +150,11 @@ fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
     // single deduped row; deleting it must clear both, or the twin under the
     // longer reading pops back on the next conversion of the same input.
     let mut engine = engine_with_learned("あい", "藍");
-    engine.learning.as_mut().unwrap().record("あいさ", "藍");
+    engine
+        .learning
+        .as_mut()
+        .unwrap()
+        .record("あいさ", "藍", "", Evidence::Chosen, 1.0);
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -161,13 +172,20 @@ fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
 
     engine.process_key(&press_ctrl(Keysym::DELETE));
     // Both the exact and the prefix entry are gone.
-    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
     assert!(
         engine
             .learning
             .as_ref()
             .unwrap()
-            .lookup("あいさ")
+            .lookup("あい", "")
+            .is_empty()
+    );
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あいさ", "")
             .is_empty(),
         "the prefix twin (あいさ→藍) must be cleared too, not just the exact entry",
     );
@@ -197,7 +215,14 @@ fn ctrl_delete_keeps_surface_that_another_source_also_produces() {
     assert!(selected.is_deletable());
 
     engine.process_key(&press_ctrl(Keysym::DELETE));
-    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty()
+    );
 
     // `あい` survives as an ordinary fallback candidate.
     let candidates = engine.state().candidates().unwrap();
@@ -229,7 +254,13 @@ fn init_learning_cache_applies_configured_surface_cap() {
     let cache = engine.learning.as_mut().expect("learning enabled");
 
     let before = cache.entry_count();
-    cache.record("__karukan_seam_test__", &"漢".repeat(6));
+    cache.record(
+        "__karukan_seam_test__",
+        &"漢".repeat(6),
+        "",
+        Evidence::Chosen,
+        1.0,
+    );
     assert_eq!(
         cache.entry_count(),
         before,
@@ -251,7 +282,14 @@ fn ctrl_backspace_deletes_learning_entry_like_ctrl_delete() {
 
     let result = engine.process_key(&press_ctrl(Keysym::BACKSPACE));
     assert!(result.consumed);
-    assert!(engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty()
+    );
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 }
 
@@ -284,7 +322,14 @@ fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
     let after = engine.state().candidates().unwrap();
     assert_eq!(after.cursor(), before.cursor());
     assert_eq!(after.selected_text(), before.selected_text());
-    assert!(!engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        !engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -302,7 +347,12 @@ fn ctrl_backspace_in_composing_deletes_char_not_history() {
     assert!(result.consumed);
     assert_eq!(engine.input_buf.reading(), "あ");
     assert!(
-        !engine.learning.as_ref().unwrap().lookup("あい").is_empty(),
+        !engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty(),
         "the learning entry must survive — deletion only works in Conversion",
     );
 }
@@ -330,7 +380,12 @@ fn ctrl_alt_delete_leaves_history_alone() {
     let result = engine.process_key(&press_ctrl_alt(Keysym::DELETE));
     assert!(!result.consumed, "Ctrl+Alt+Delete must reach the desktop");
     assert!(
-        !engine.learning.as_ref().unwrap().lookup("あい").is_empty(),
+        !engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty(),
         "Ctrl+Alt+Delete must not delete the learning entry"
     );
 }
@@ -348,7 +403,14 @@ fn plain_backspace_still_cancels_conversion() {
     // Backspace without Ctrl keeps its cancel-to-composing behavior and
     // deletes nothing from the history.
     assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert!(!engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        !engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -377,7 +439,14 @@ fn ctrl_delete_ignores_non_learning_candidate() {
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
     assert_eq!(engine.state().candidates().unwrap().len(), before_len);
-    assert!(!engine.learning.as_ref().unwrap().lookup("あい").is_empty());
+    assert!(
+        !engine
+            .learning
+            .as_ref()
+            .unwrap()
+            .lookup("あい", "")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -407,7 +476,7 @@ fn ctrl_delete_removes_prefix_matched_entry_by_full_reading() {
             .learning
             .as_ref()
             .unwrap()
-            .lookup("あいさつ")
+            .lookup("あいさつ", "")
             .is_empty()
     );
 }

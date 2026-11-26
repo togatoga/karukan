@@ -397,7 +397,11 @@ fn test_learning_filter_shows_full_history() {
     // is a history browser and shows them all.
     let mut engine = engine_with_learned("あい", "愛");
     for surface in ["藍", "相", "合い", "間"] {
-        engine.learning.as_mut().unwrap().record("あい", surface);
+        engine
+            .learning
+            .as_mut()
+            .unwrap()
+            .record("あい", surface, "", Evidence::Chosen, 1.0);
     }
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -418,7 +422,11 @@ fn test_learning_delete_keeps_the_filter() {
     // the filter, so consecutive deletes stay in that view; deleting the
     // last one leaves an empty 「候補なし」 view, still filtered.
     let mut engine = engine_with_learned("あい", "愛");
-    engine.learning.as_mut().unwrap().record("あい", "藍");
+    engine
+        .learning
+        .as_mut()
+        .unwrap()
+        .record("あい", "藍", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -491,8 +499,16 @@ fn test_delete_keeps_cursor_position() {
     // Deleting row N leaves the cursor at N (the old N+1 slides in), so
     // consecutive deletes chew through the list without jumping to the top.
     let mut engine = engine_with_learned("あい", "愛");
-    engine.learning.as_mut().unwrap().record("あい", "藍");
-    engine.learning.as_mut().unwrap().record("あい", "相");
+    engine
+        .learning
+        .as_mut()
+        .unwrap()
+        .record("あい", "藍", "", Evidence::Chosen, 1.0);
+    engine
+        .learning
+        .as_mut()
+        .unwrap()
+        .record("あい", "相", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -544,7 +560,11 @@ fn test_pending_tail_narrows_the_learning_view() {
     // about to grow), so it drops while a prediction the tail can still
     // reach stays.
     let mut engine = engine_with_learned("あい", "愛");
-    engine.learning.as_mut().unwrap().record("あいか", "愛香");
+    engine
+        .learning
+        .as_mut()
+        .unwrap()
+        .record("あいか", "愛香", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));

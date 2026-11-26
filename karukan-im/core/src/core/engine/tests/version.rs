@@ -85,7 +85,7 @@ fn committing_the_version_records_no_learning() {
             .learning
             .as_ref()
             .unwrap()
-            .lookup("ばーじょん")
+            .lookup("ばーじょん", "")
             .is_empty(),
         "version commit leaked into the learning cache"
     );

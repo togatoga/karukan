@@ -207,7 +207,7 @@ fn test_emoji_digit_selection_does_not_pollute_learning() {
     assert_eq!(engine.mode.current(), InputMode::Hiragana);
     let learned = engine.learning.as_ref().unwrap();
     assert!(
-        learned.lookup(":smile").is_empty(),
+        learned.lookup(":smile", "").is_empty(),
         "emoji query must not enter the learning cache"
     );
 }

@@ -1,6 +1,6 @@
 //! Tests for the IME engine
 
-use karukan_engine::{LearningCache, LearningConfig};
+use karukan_engine::{Evidence, LearningCache, LearningConfig};
 
 use super::*;
 use crate::core::keycode::KeyModifiers;
@@ -41,7 +41,7 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     let mut engine = InputMethodEngine::new();
     engine.converters.kanji = None;
     let mut cache = LearningCache::new(LearningConfig::default());
-    cache.record(reading, surface);
+    cache.record(reading, surface, "", Evidence::Chosen, 1.0);
     engine.learning = Some(cache);
     engine
 }

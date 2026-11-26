@@ -486,7 +486,7 @@ impl InputMethodEngine {
         // Exact match — only when no romaji tail is pending (an exact hit
         // on the base would ignore the typed tail)
         if pending.is_empty() {
-            for (surface, _score) in cache.lookup(reading) {
+            for (surface, _score) in cache.lookup(reading, "") {
                 if candidates.len() >= max {
                     break;
                 }
@@ -503,7 +503,7 @@ impl InputMethodEngine {
 
         // Prefix match (predictive), narrowed to the kana the tail can
         // still become — mirrors the dictionary's expanded search
-        for (full_reading, surface, _score) in cache.prefix_lookup(reading) {
+        for (full_reading, surface, _score) in cache.prefix_lookup(reading, "") {
             if candidates.len() >= max {
                 break;
             }
@@ -869,7 +869,7 @@ impl InputMethodEngine {
             return;
         }
         if let Some(cache) = &mut self.learning {
-            cache.record(reading, surface);
+            cache.record(reading, surface, "", Evidence::Chosen, 1.0);
         }
     }
 

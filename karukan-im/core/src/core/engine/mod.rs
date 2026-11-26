@@ -33,8 +33,8 @@ use input_buffer::InputBuffer;
 mod tests;
 
 use karukan_engine::{
-    DateRewriter, Dictionary, EmojiRewriter, KanaKanjiConverter, LearningCache, LearningConfig,
-    RewriteOutput, Rewriter, RewriterChain, RomajiConverter,
+    DateRewriter, Dictionary, EmojiRewriter, Evidence, KanaKanjiConverter, LearningCache,
+    LearningConfig, RewriteOutput, Rewriter, RewriterChain, RomajiConverter,
 };
 use tracing::{debug, trace};
 

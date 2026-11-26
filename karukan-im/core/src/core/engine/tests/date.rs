@@ -135,7 +135,7 @@ fn committing_a_date_candidate_records_no_learning() {
             .learning
             .as_ref()
             .unwrap()
-            .lookup("きょう")
+            .lookup("きょう", "")
             .is_empty(),
         "date commit leaked into the learning cache"
     );

@@ -1,23 +1,63 @@
-//! Learning cache for remembering user-selected conversion results.
+//! Learning cache: what the user did with conversions, as decaying evidence.
 //!
-//! Records which surface forms the user chose for each reading, and
-//! boosts those candidates on subsequent conversions. Persisted as a
-//! simple TSV file (`reading\tsurface\tfrequency\tlast_access`).
+//! The unit is a stretch of reading with a surface. Each unit keeps one
+//! value per kind of [`Evidence`], decaying with a half-life of
+//! [`HALF_LIFE_SECS`] (`v ← v·2^(−Δt/H) + w`, so only the value and the
+//! time it was last updated are stored), plus the same tally split by up to
+//! [`MAX_CONTEXTS`] contexts: the last [`CONTEXT_CHARS`] chars of the text
+//! before the unit. A unit's score is [`Evidence::WEIGHTS`] applied to its
+//! tally, plus its tally under the context being looked up when there is
+//! one.
+//!
+//! Persisted as TSV (see [`LearningCache::save`]); a file in the earlier
+//! four-column format (`reading surface frequency last_access`) still
+//! loads, each row as `confirmed` evidence.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// A single learned conversion entry.
-#[derive(Debug, Clone)]
-pub struct LearningEntry {
-    /// Surface form (e.g. "今日")
-    pub surface: String,
-    /// Number of times this surface was selected
-    pub frequency: u32,
-    /// Last selection time as Unix timestamp (seconds)
-    pub last_access: u64,
+/// How long evidence takes to lose half its weight.
+pub const HALF_LIFE_SECS: f64 = 30.0 * 86400.0;
+
+/// Chars of preceding text a context is keyed by.
+pub const CONTEXT_CHARS: usize = 2;
+
+/// Contexts kept per unit; the weakest goes when another arrives.
+pub const MAX_CONTEXTS: usize = 4;
+
+/// First line of a file in the current format.
+const HEADER: &str = "# karukan learning cache v2";
+
+/// What happened to a unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Evidence {
+    /// Picked over what was shown as the default.
+    Chosen,
+    /// Kept as the default after the list was opened or the segment focused.
+    Confirmed,
+    /// Committed as shown, possibly unseen.
+    Accepted,
+    /// Shown as the default, then replaced by another candidate.
+    Displaced,
+}
+
+impl Evidence {
+    /// Every kind, in the order of a tally's values and of the TSV columns.
+    pub const ALL: [Self; 4] = [
+        Self::Chosen,
+        Self::Confirmed,
+        Self::Accepted,
+        Self::Displaced,
+    ];
+
+    /// What one unit of each kind adds to a score, in [`Self::ALL`] order.
+    pub const WEIGHTS: [f64; 4] = [1.0, 0.4, 0.1, -1.0];
+
+    fn index(self) -> usize {
+        self as usize
+    }
 }
 
 /// Size limits for a [`LearningCache`].
@@ -27,8 +67,8 @@ pub struct LearningEntry {
 /// other — there is no post-construction setter to miss.
 #[derive(Debug, Clone, Copy)]
 pub struct LearningConfig {
-    /// Maximum number of total entries across all readings; lowest-score
-    /// entries are evicted on save when over this limit.
+    /// Maximum number of units across all readings; the ones with the least
+    /// evidence are evicted on save when over this limit.
     pub max_entries: usize,
     /// Maximum surface length (Unicode chars) that [`LearningCache::record`]
     /// accepts. Keeps whole-sentence live-conversion commits — one-off text
@@ -52,16 +92,97 @@ impl Default for LearningConfig {
     }
 }
 
-/// In-memory cache of user learning data.
-///
-/// Keyed by reading (hiragana). Each reading maps to a list of surface
-/// entries with frequency and recency metadata.
+/// How much of a value recorded at `updated` is left at `now`.
+fn decay(updated: u64, now: u64) -> f64 {
+    let elapsed = now.saturating_sub(updated) as f64;
+    (-elapsed / HALF_LIFE_SECS).exp2()
+}
+
+/// One value per kind of evidence, all as of `updated`.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Tally {
+    values: [f64; 4],
+    updated: u64,
+}
+
+impl Tally {
+    fn at(&self, now: u64) -> [f64; 4] {
+        let factor = decay(self.updated, now);
+        self.values.map(|v| v * factor)
+    }
+
+    fn add(&mut self, evidence: Evidence, weight: f64, now: u64) {
+        self.values = self.at(now);
+        self.values[evidence.index()] += weight;
+        self.updated = self.updated.max(now);
+    }
+
+    fn score(&self, now: u64) -> f64 {
+        self.at(now)
+            .iter()
+            .zip(Evidence::WEIGHTS)
+            .map(|(v, w)| v * w)
+            .sum()
+    }
+
+    /// How much evidence there is, whichever way it points.
+    fn mass(&self, now: u64) -> f64 {
+        self.at(now).iter().sum()
+    }
+}
+
+/// A surface learned for a reading.
+#[derive(Debug, Clone)]
+struct Unit {
+    surface: String,
+    tally: Tally,
+    /// The same evidence, split by the context it was recorded in.
+    contexts: Vec<(String, Tally)>,
+}
+
+impl Unit {
+    fn score(&self, context: &str, now: u64) -> f64 {
+        let in_context = self
+            .contexts
+            .iter()
+            .find(|(c, _)| !context.is_empty() && c == context)
+            .map_or(0.0, |(_, t)| t.score(now));
+        self.tally.score(now) + in_context
+    }
+}
+
+/// A place in a reading where the user moved a segment edge to, as a
+/// decaying count.
+#[derive(Debug, Clone)]
+struct Boundary {
+    position: usize,
+    value: f64,
+    updated: u64,
+}
+
+/// In-memory cache of user learning data, keyed by reading (hiragana).
 #[derive(Debug)]
 pub struct LearningCache {
-    entries: HashMap<String, Vec<LearningEntry>>,
+    entries: HashMap<String, Vec<Unit>>,
+    boundaries: HashMap<String, Vec<Boundary>>,
     max_entries: usize,
     max_surface_chars: usize,
     dirty: bool,
+}
+
+/// The key a context is stored under: the tail of the preceding text, or
+/// none when that tail holds a tab or a newline the TSV cannot carry.
+fn context_key(preceding: &str) -> String {
+    let count = preceding.chars().count();
+    let key: String = preceding
+        .chars()
+        .skip(count.saturating_sub(CONTEXT_CHARS))
+        .collect();
+    if key.chars().any(char::is_control) {
+        String::new()
+    } else {
+        key
+    }
 }
 
 impl LearningCache {
@@ -69,52 +190,105 @@ impl LearningCache {
     pub fn new(config: LearningConfig) -> Self {
         Self {
             entries: HashMap::new(),
+            boundaries: HashMap::new(),
             max_entries: config.max_entries,
             max_surface_chars: config.max_surface_chars,
             dirty: false,
         }
     }
 
-    /// Record a user selection. Increments frequency and updates last_access.
+    /// Record `weight` of `evidence` for `surface` under `reading`, after
+    /// the text `preceding` (empty for none; only its tail is kept).
     ///
     /// Surfaces longer than `max_surface_chars` are skipped; see
     /// [`LearningConfig::max_surface_chars`] for why.
-    pub fn record(&mut self, reading: &str, surface: &str) {
-        if surface.chars().count() > self.max_surface_chars {
+    pub fn record(
+        &mut self,
+        reading: &str,
+        surface: &str,
+        preceding: &str,
+        evidence: Evidence,
+        weight: f64,
+    ) {
+        if reading.is_empty()
+            || surface.is_empty()
+            || surface.chars().count() > self.max_surface_chars
+        {
             return;
         }
         let now = now_unix();
-        let entries = self.entries.entry(reading.to_string()).or_default();
-
-        if let Some(entry) = entries.iter_mut().find(|e| e.surface == surface) {
-            entry.frequency += 1;
-            entry.last_access = now;
-        } else {
-            entries.push(LearningEntry {
-                surface: surface.to_string(),
-                frequency: 1,
-                last_access: now,
-            });
+        let unit = self.unit_mut(reading, surface);
+        unit.tally.add(evidence, weight, now);
+        let context = context_key(preceding);
+        if !context.is_empty() {
+            let at = match unit.contexts.iter().position(|(c, _)| *c == context) {
+                Some(at) => at,
+                None => {
+                    if unit.contexts.len() >= MAX_CONTEXTS {
+                        let weakest = (0..unit.contexts.len())
+                            .min_by(|&a, &b| {
+                                let mass = |i: usize| unit.contexts[i].1.mass(now);
+                                mass(a).total_cmp(&mass(b))
+                            })
+                            .expect("full");
+                        unit.contexts.remove(weakest);
+                    }
+                    unit.contexts.push((context, Tally::default()));
+                    unit.contexts.len() - 1
+                }
+            };
+            unit.contexts[at].1.add(evidence, weight, now);
         }
         self.dirty = true;
     }
 
-    /// Remove every learned entry that would resurface `surface` for input
-    /// `reading`: the exact-reading entry plus every longer reading with
+    /// Record that the user put a segment edge at `position` (chars) of
+    /// `reading`.
+    pub fn record_boundary(&mut self, reading: &str, position: usize) {
+        let now = now_unix();
+        let boundaries = self.boundaries.entry(reading.to_string()).or_default();
+        match boundaries.iter_mut().find(|b| b.position == position) {
+            Some(b) => {
+                b.value = b.value * decay(b.updated, now) + 1.0;
+                b.updated = b.updated.max(now);
+            }
+            None => boundaries.push(Boundary {
+                position,
+                value: 1.0,
+                updated: now,
+            }),
+        }
+        self.dirty = true;
+    }
+
+    /// The segment edge the user has put in `reading` most, if any.
+    pub fn preferred_boundary(&self, reading: &str) -> Option<usize> {
+        let now = now_unix();
+        self.boundaries
+            .get(reading)?
+            .iter()
+            .max_by(|a, b| {
+                (a.value * decay(a.updated, now)).total_cmp(&(b.value * decay(b.updated, now)))
+            })
+            .map(|b| b.position)
+    }
+
+    /// Remove every learned unit that would resurface `surface` for input
+    /// `reading`: the exact-reading unit plus every longer reading with
     /// `reading` as a prefix (the [`prefix_lookup`](Self::prefix_lookup)
     /// fan-out) — an exact-only delete would leave a twin that pops back on
     /// the next conversion. Returns whether anything was removed; persisted
     /// at the next `save`.
     pub fn remove_suggestion(&mut self, reading: &str, surface: &str) -> bool {
         let mut removed = false;
-        self.entries.retain(|r, entries| {
+        self.entries.retain(|r, units| {
             if !r.starts_with(reading) {
                 return true;
             }
-            let before = entries.len();
-            entries.retain(|e| e.surface != surface);
-            removed |= entries.len() != before;
-            !entries.is_empty()
+            let before = units.len();
+            units.retain(|u| u.surface != surface);
+            removed |= units.len() != before;
+            !units.is_empty()
         });
         if removed {
             self.dirty = true;
@@ -122,23 +296,41 @@ impl LearningCache {
         removed
     }
 
-    /// Exact-match lookup: returns `(surface, score)` pairs sorted by score descending.
-    pub fn lookup(&self, reading: &str) -> Vec<(String, f64)> {
+    /// Whether anything is learned under `reading`.
+    pub fn contains_reading(&self, reading: &str) -> bool {
+        self.entries.contains_key(reading)
+    }
+
+    /// Score of `surface` under `reading` after `preceding`; 0 when nothing
+    /// is learned for it.
+    pub fn score(&self, reading: &str, surface: &str, preceding: &str) -> f64 {
+        let context = context_key(preceding);
         let now = now_unix();
-        let Some(entries) = self.entries.get(reading) else {
+        self.entries
+            .get(reading)
+            .and_then(|units| units.iter().find(|u| u.surface == surface))
+            .map_or(0.0, |u| u.score(&context, now))
+    }
+
+    /// Every surface learned under `reading` with its score after
+    /// `preceding`, best first.
+    pub fn lookup(&self, reading: &str, preceding: &str) -> Vec<(String, f64)> {
+        let context = context_key(preceding);
+        let now = now_unix();
+        let Some(units) = self.entries.get(reading) else {
             return Vec::new();
         };
-        let mut scored: Vec<(String, f64)> = entries
+        let mut scored: Vec<(String, f64)> = units
             .iter()
-            .map(|e| (e.surface.clone(), score(e, now)))
+            .map(|u| (u.surface.clone(), u.score(&context, now)))
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
         scored
     }
 
     /// Score of each of `surfaces` summed over every reading it was
-    /// committed under: how much the text itself is used, whatever it was
-    /// typed as. Surfaces never committed are absent.
+    /// learned under: how much the text itself is used, whatever it was
+    /// typed as. Surfaces never learned are absent.
     pub fn surface_scores<'a>(
         &self,
         surfaces: impl IntoIterator<Item = &'a str>,
@@ -146,23 +338,28 @@ impl LearningCache {
         let wanted: HashSet<&str> = surfaces.into_iter().collect();
         let now = now_unix();
         let mut scores = HashMap::new();
-        for entry in self.entries.values().flatten() {
-            if wanted.contains(entry.surface.as_str()) {
-                *scores.entry(entry.surface.clone()).or_insert(0.0) += score(entry, now);
+        for unit in self.entries.values().flatten() {
+            if wanted.contains(unit.surface.as_str()) {
+                *scores.entry(unit.surface.clone()).or_insert(0.0) += unit.score("", now);
             }
         }
         scores
     }
 
-    /// Prefix-match lookup: returns `(reading, surface, score)` triples
-    /// for all readings that start with `prefix`, sorted by score descending.
-    pub fn prefix_lookup(&self, prefix: &str) -> Vec<(String, String, f64)> {
+    /// `(reading, surface, score)` for every reading that starts with
+    /// `prefix`, best first.
+    pub fn prefix_lookup(&self, prefix: &str, preceding: &str) -> Vec<(String, String, f64)> {
+        let context = context_key(preceding);
         let now = now_unix();
         let mut results: Vec<(String, String, f64)> = Vec::new();
-        for (reading, entries) in &self.entries {
+        for (reading, units) in &self.entries {
             if reading.starts_with(prefix) {
-                for entry in entries {
-                    results.push((reading.clone(), entry.surface.clone(), score(entry, now)));
+                for unit in units {
+                    results.push((
+                        reading.clone(),
+                        unit.surface.clone(),
+                        unit.score(&context, now),
+                    ));
                 }
             }
         }
@@ -170,45 +367,31 @@ impl LearningCache {
         results
     }
 
-    /// Load a learning cache from a TSV file.
+    /// Load a learning cache from a TSV file, in either format.
     ///
-    /// Format: `reading\tsurface\tfrequency\tlast_access`
-    /// Lines starting with `#` are comments.
+    /// Lines starting with `#` are comments; malformed lines are skipped.
     pub fn load(path: &Path, config: LearningConfig) -> anyhow::Result<Self> {
         let file = std::fs::File::open(path)?;
         let reader = std::io::BufReader::new(file);
         let mut cache = Self::new(config);
+        let mut current = false;
 
-        for line in reader.lines() {
+        for (i, line) in reader.lines().enumerate() {
             let line = line?;
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
+            let line = line.trim_end_matches(['\r', '\n']);
+            if i == 0 && line == HEADER {
+                current = true;
+                continue;
+            }
+            if line.trim().is_empty() || line.starts_with('#') {
                 continue;
             }
             let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() < 4 {
-                continue;
+            if current {
+                cache.load_row(&parts);
+            } else {
+                cache.load_legacy_row(&parts);
             }
-            let reading = parts[0];
-            let surface = parts[1];
-            let frequency: u32 = match parts[2].parse() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let last_access: u64 = match parts[3].parse() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            cache
-                .entries
-                .entry(reading.to_string())
-                .or_default()
-                .push(LearningEntry {
-                    surface: surface.to_string(),
-                    frequency,
-                    last_access,
-                });
         }
 
         // Not dirty — just loaded from disk
@@ -216,7 +399,97 @@ impl LearningCache {
         Ok(cache)
     }
 
-    /// Save the cache to a TSV file, evicting low-score entries if over capacity.
+    /// `reading surface frequency last_access`: which kind of evidence the
+    /// count was is unknown, so it is taken as `confirmed`.
+    fn load_legacy_row(&mut self, parts: &[&str]) {
+        let &[reading, surface, frequency, last_access, ..] = parts else {
+            return;
+        };
+        let (Ok(frequency), Ok(last_access)) = (frequency.parse::<u32>(), last_access.parse())
+        else {
+            return;
+        };
+        let mut tally = Tally {
+            values: [0.0; 4],
+            updated: last_access,
+        };
+        tally.values[Evidence::Confirmed.index()] = frequency as f64;
+        self.unit_mut(reading, surface).tally = tally;
+    }
+
+    fn load_row(&mut self, parts: &[&str]) {
+        let tally = |fields: &[&str]| -> Option<Tally> {
+            let [updated, values @ ..] = fields else {
+                return None;
+            };
+            let values: Vec<f64> = values
+                .iter()
+                .map(|v| v.parse())
+                .collect::<Result<_, _>>()
+                .ok()?;
+            Some(Tally {
+                values: values.try_into().ok()?,
+                updated: updated.parse().ok()?,
+            })
+        };
+        match parts {
+            ["U", reading, surface, rest @ ..] => {
+                if let Some(t) = tally(rest) {
+                    self.unit_mut(reading, surface).tally = t;
+                }
+            }
+            ["C", reading, surface, context, rest @ ..] => {
+                if let Some(t) = tally(rest) {
+                    let unit = self.unit_mut(reading, surface);
+                    if unit.contexts.len() < MAX_CONTEXTS {
+                        unit.contexts.push((context.to_string(), t));
+                    }
+                }
+            }
+            ["B", reading, position, updated, value] => {
+                if let (Ok(position), Ok(updated), Ok(value)) =
+                    (position.parse(), updated.parse(), value.parse())
+                {
+                    self.boundaries
+                        .entry(reading.to_string())
+                        .or_default()
+                        .push(Boundary {
+                            position,
+                            value,
+                            updated,
+                        });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The unit for `(reading, surface)`, created empty if new.
+    fn unit_mut(&mut self, reading: &str, surface: &str) -> &mut Unit {
+        let units = self.entries.entry(reading.to_string()).or_default();
+        let at = match units.iter().position(|u| u.surface == surface) {
+            Some(at) => at,
+            None => {
+                units.push(Unit {
+                    surface: surface.to_string(),
+                    tally: Tally::default(),
+                    contexts: Vec::new(),
+                });
+                units.len() - 1
+            }
+        };
+        &mut units[at]
+    }
+
+    /// Save the cache to a TSV file, evicting the units with the least
+    /// evidence if over capacity.
+    ///
+    /// After the [`HEADER`] line, the first column says what a row is:
+    ///
+    /// - `U reading surface updated chosen confirmed accepted displaced`
+    /// - `C reading surface context updated chosen confirmed accepted displaced`
+    ///   (a unit's evidence in one context)
+    /// - `B reading position updated value` (a segment edge the user moved)
     pub fn save(&mut self, path: &Path) -> anyhow::Result<()> {
         self.evict();
 
@@ -226,21 +499,42 @@ impl LearningCache {
 
         let file = std::fs::File::create(path)?;
         let mut writer = std::io::BufWriter::new(file);
-        writeln!(writer, "# karukan learning cache v1")?;
+        writeln!(writer, "{HEADER}")?;
+        let values = |t: &Tally| {
+            let v = t.values.map(|v| format!("{v:.4}"));
+            format!("{}\t{}", t.updated, v.join("\t"))
+        };
 
-        // Sort readings for deterministic output
+        // Sorted for deterministic output
         let mut readings: Vec<&String> = self.entries.keys().collect();
         readings.sort();
-
         for reading in readings {
-            if let Some(entries) = self.entries.get(reading) {
-                for entry in entries {
+            for unit in &self.entries[reading] {
+                writeln!(
+                    writer,
+                    "U\t{reading}\t{}\t{}",
+                    unit.surface,
+                    values(&unit.tally)
+                )?;
+                for (context, tally) in &unit.contexts {
                     writeln!(
                         writer,
-                        "{}\t{}\t{}\t{}",
-                        reading, entry.surface, entry.frequency, entry.last_access
+                        "C\t{reading}\t{}\t{context}\t{}",
+                        unit.surface,
+                        values(tally)
                     )?;
                 }
+            }
+        }
+        let mut readings: Vec<&String> = self.boundaries.keys().collect();
+        readings.sort();
+        for reading in readings {
+            for b in &self.boundaries[reading] {
+                writeln!(
+                    writer,
+                    "B\t{reading}\t{}\t{}\t{:.4}",
+                    b.position, b.updated, b.value
+                )?;
             }
         }
 
@@ -254,67 +548,56 @@ impl LearningCache {
         self.dirty
     }
 
-    /// Total number of (reading, surface) pairs across all readings.
+    /// Total number of (reading, surface) units across all readings.
     pub fn entry_count(&self) -> usize {
         self.entries.values().map(|v| v.len()).sum()
     }
 
-    /// Evict lowest-score entries until total count is within `max_entries`.
+    /// Drop the units with the least evidence until at most `max_entries`
+    /// are left, and the weakest segment edges likewise. By how much
+    /// evidence a unit holds rather than by its score: a unit the user
+    /// keeps replacing scores low, and is worth keeping for that.
     fn evict(&mut self) {
-        let total = self.entry_count();
-        if total <= self.max_entries {
-            return;
-        }
-
         let now = now_unix();
-        // Collect all entries with their (reading, index, score)
-        let mut all: Vec<(String, usize, f64)> = Vec::with_capacity(total);
-        for (reading, entries) in &self.entries {
-            for (i, entry) in entries.iter().enumerate() {
-                all.push((reading.clone(), i, score(entry, now)));
-            }
+        let total = self.entry_count();
+        if total > self.max_entries {
+            let mut all: Vec<(f64, &str, &str)> = self
+                .entries
+                .iter()
+                .flat_map(|(r, units)| {
+                    units
+                        .iter()
+                        .map(move |u| (u.tally.mass(now), r.as_str(), u.surface.as_str()))
+                })
+                .collect();
+            all.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let doomed: HashSet<(String, String)> = all
+                .iter()
+                .take(total - self.max_entries)
+                .map(|&(_, r, s)| (r.to_string(), s.to_string()))
+                .collect();
+            self.entries.retain(|r, units| {
+                units.retain(|u| !doomed.contains(&(r.clone(), u.surface.clone())));
+                !units.is_empty()
+            });
         }
-        // Sort by score ascending (lowest first = eviction candidates)
-        all.sort_by(|a, b| a.2.total_cmp(&b.2));
 
-        let to_remove = total - self.max_entries;
-        // Collect indices to remove, grouped by reading
-        let mut remove_set: HashMap<String, Vec<usize>> = HashMap::new();
-        for &(ref reading, idx, _) in all.iter().take(to_remove) {
-            remove_set.entry(reading.clone()).or_default().push(idx);
-        }
-
-        // Remove entries in reverse index order to preserve indices
-        for (reading, indices) in &mut remove_set {
-            indices.sort_unstable();
-            indices.reverse();
-            if let Some(entries) = self.entries.get_mut(reading) {
-                for &idx in indices.iter() {
-                    if idx < entries.len() {
-                        entries.remove(idx);
-                    }
-                }
-                if entries.is_empty() {
-                    self.entries.remove(reading);
-                }
-            }
+        let total: usize = self.boundaries.values().map(Vec::len).sum();
+        if total > self.max_entries {
+            let mut values: Vec<f64> = self
+                .boundaries
+                .values()
+                .flatten()
+                .map(|b| b.value * decay(b.updated, now))
+                .collect();
+            values.sort_by(f64::total_cmp);
+            let floor = values[total - self.max_entries];
+            self.boundaries.retain(|_, bs| {
+                bs.retain(|b| b.value * decay(b.updated, now) >= floor);
+                !bs.is_empty()
+            });
         }
     }
-}
-
-/// Compute a candidate score: recency-weighted with frequency bonus.
-///
-/// Inspired by mozc's UserHistoryPredictor: recent selections rank higher,
-/// with a logarithmic frequency term to reward repeated use.
-fn score(entry: &LearningEntry, now: u64) -> f64 {
-    let age_days = if now > entry.last_access {
-        (now - entry.last_access) / 86400
-    } else {
-        0
-    };
-    let recency = 1.0 / (1.0 + age_days as f64);
-    let freq = (entry.frequency as f64).ln_1p();
-    recency * 10.0 + freq
 }
 
 /// Current time as Unix timestamp in seconds.
@@ -328,6 +611,7 @@ fn now_unix() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::NamedTempFile;
 
     /// Config/cache with a custom entry limit and the default surface cap.
     fn config_with(max_entries: usize) -> LearningConfig {
@@ -340,86 +624,161 @@ mod tests {
     fn cache_with(max_entries: usize) -> LearningCache {
         LearningCache::new(config_with(max_entries))
     }
-    use tempfile::NamedTempFile;
+
+    fn chose(cache: &mut LearningCache, reading: &str, surface: &str) {
+        cache.record(reading, surface, "", Evidence::Chosen, 1.0);
+    }
+
+    const DAY: u64 = 86400;
+
+    #[test]
+    fn evidence_halves_every_half_life() {
+        let mut tally = Tally::default();
+        tally.add(Evidence::Chosen, 1.0, 1_000_000);
+        let later = 1_000_000 + 30 * DAY;
+        assert!((tally.at(later)[0] - 0.5).abs() < 1e-9);
+        assert!((tally.at(later + 30 * DAY)[0] - 0.25).abs() < 1e-9);
+        // Adding decays what was there first.
+        tally.add(Evidence::Chosen, 1.0, later);
+        assert!((tally.at(later)[0] - 1.5).abs() < 1e-9);
+        // A clock that went backwards neither grows nor rewinds the value.
+        assert!((tally.at(later - DAY)[0] - 1.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_score_weighs_each_kind() {
+        let mut tally = Tally::default();
+        let now = 1_000_000;
+        for (evidence, weight) in Evidence::ALL.into_iter().zip(Evidence::WEIGHTS) {
+            let mut one = Tally::default();
+            one.add(evidence, 1.0, now);
+            assert!((one.score(now) - weight).abs() < 1e-9);
+            tally.add(evidence, 1.0, now);
+        }
+        assert!((tally.score(now) - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn displaced_lowers_a_surface_below_another() {
+        let mut cache = cache_with(100);
+        cache.record("きのう", "機能", "", Evidence::Accepted, 1.0);
+        cache.record("きのう", "機能", "", Evidence::Displaced, 1.0);
+        chose(&mut cache, "きのう", "昨日");
+        let results = cache.lookup("きのう", "");
+        assert_eq!(results[0].0, "昨日");
+        assert!(results[1].1 < 0.0);
+        assert_eq!(cache.score("きのう", "なし", ""), 0.0);
+    }
+
+    #[test]
+    fn a_context_adds_its_own_evidence() {
+        let mut cache = cache_with(100);
+        cache.record("かいとう", "解答", "試験の", Evidence::Chosen, 1.0);
+        cache.record("かいとう", "回答", "質問へ", Evidence::Chosen, 1.0);
+        // The key is the tail of the preceding text.
+        assert_eq!(cache.lookup("かいとう", "試験の")[0].0, "解答");
+        assert_eq!(cache.lookup("かいとう", "の")[0].1, 1.0);
+        assert_eq!(cache.lookup("かいとう", "質問へ")[0].0, "回答");
+        assert!((cache.score("かいとう", "回答", "問へ") - 2.0).abs() < 1e-6);
+        assert!((cache.score("かいとう", "回答", "") - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_unit_keeps_its_strongest_contexts() {
+        let mut cache = cache_with(100);
+        for (context, times) in [("あa", 3), ("いi", 2), ("うu", 2), ("えe", 2)] {
+            for _ in 0..times {
+                cache.record("よみ", "読み", context, Evidence::Chosen, 1.0);
+            }
+        }
+        cache.record("よみ", "読み", "おo", Evidence::Chosen, 1.0);
+        let unit = &cache.entries["よみ"][0];
+        assert_eq!(unit.contexts.len(), MAX_CONTEXTS);
+        assert!(unit.contexts.iter().any(|(c, _)| c == "あa"));
+        assert!(unit.contexts.iter().any(|(c, _)| c == "おo"));
+    }
 
     #[test]
     fn surface_scores_sum_over_readings() {
         let mut cache = LearningCache::new(LearningConfig::default());
-        cache.record("こう", "高");
-        cache.record("こう", "高");
-        cache.record("たか", "高");
-        cache.record("かさ", "嵩");
+        chose(&mut cache, "こう", "高");
+        chose(&mut cache, "こう", "高");
+        chose(&mut cache, "たか", "高");
+        chose(&mut cache, "かさ", "嵩");
         let scores = cache.surface_scores(["高", "嵩", "鷹"]);
         assert!(scores["高"] > scores["嵩"]);
         assert!(!scores.contains_key("鷹"));
     }
 
     #[test]
-    fn test_record_and_lookup() {
-        let mut cache = cache_with(100);
-
-        cache.record("きょう", "今日");
-        cache.record("きょう", "京");
-        cache.record("きょう", "今日"); // frequency bump
-
-        let results = cache.lookup("きょう");
-        assert_eq!(results.len(), 2);
-        // "今日" should have higher score (frequency 2 vs 1)
-        assert_eq!(results[0].0, "今日");
-        assert_eq!(results[1].0, "京");
-    }
-
-    #[test]
-    fn test_lookup_empty() {
-        let cache = cache_with(100);
-        let results = cache.lookup("きょう");
-        assert!(results.is_empty());
-    }
-
-    #[test]
     fn test_prefix_lookup() {
         let mut cache = cache_with(100);
-        cache.record("きょう", "今日");
-        cache.record("きょうと", "京都");
-        cache.record("あした", "明日");
+        chose(&mut cache, "きょう", "今日");
+        chose(&mut cache, "きょうと", "京都");
+        chose(&mut cache, "あした", "明日");
 
-        let results = cache.prefix_lookup("きょう");
-        assert_eq!(results.len(), 2);
-        // Both "きょう" and "きょうと" should match
+        let results = cache.prefix_lookup("きょう", "");
         let readings: Vec<&str> = results.iter().map(|(r, _, _)| r.as_str()).collect();
+        assert_eq!(readings.len(), 2);
         assert!(readings.contains(&"きょう"));
         assert!(readings.contains(&"きょうと"));
+        assert!(cache.prefix_lookup("い", "").is_empty());
     }
 
     #[test]
-    fn test_prefix_lookup_no_match() {
+    fn saves_and_loads_every_row_kind() {
         let mut cache = cache_with(100);
-        cache.record("きょう", "今日");
-        let results = cache.prefix_lookup("あ");
-        assert!(results.is_empty());
-    }
-
-    #[test]
-    fn test_save_and_load() {
-        let mut cache = cache_with(100);
-        cache.record("きょう", "今日");
-        cache.record("きょう", "今日");
-        cache.record("きょう", "京");
-        cache.record("あした", "明日");
+        chose(&mut cache, "きょう", "今日");
+        cache.record("きょう", "京", "東の", Evidence::Displaced, 0.5);
+        cache.record("あした", "明日", "", Evidence::Accepted, 1.0);
+        cache.record_boundary("きょうは", 3);
 
         let file = NamedTempFile::new().unwrap();
-        let path = file.path().to_path_buf();
-
-        cache.save(&path).unwrap();
+        cache.save(file.path()).unwrap();
         assert!(!cache.is_dirty());
+        let content = std::fs::read_to_string(file.path()).unwrap();
+        assert!(content.starts_with(HEADER));
+        assert!(content.contains("U\tきょう\t今日\t"));
+        assert!(content.contains("C\tきょう\t京\t東の\t"));
+        assert!(content.contains("B\tきょうは\t3\t"));
 
-        let loaded = LearningCache::load(&path, config_with(100)).unwrap();
+        let loaded = LearningCache::load(file.path(), config_with(100)).unwrap();
         assert!(!loaded.is_dirty());
         assert_eq!(loaded.entry_count(), 3);
+        for (reading, surface, context) in [
+            ("きょう", "今日", ""),
+            ("きょう", "京", "東の"),
+            ("あした", "明日", ""),
+        ] {
+            let (a, b) = (
+                cache.score(reading, surface, context),
+                loaded.score(reading, surface, context),
+            );
+            assert!((a - b).abs() < 1e-3, "{surface}: {a} vs {b}");
+        }
+        assert_eq!(loaded.preferred_boundary("きょうは"), Some(3));
+    }
 
-        let results = loaded.lookup("きょう");
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].0, "今日"); // frequency 2
+    #[test]
+    fn the_four_column_format_loads_as_confirmed() {
+        let file = NamedTempFile::new().unwrap();
+        let now = now_unix();
+        std::fs::write(
+            file.path(),
+            format!(
+                "# karukan learning cache v1\n\nきょう\t今日\t5\t{now}\nmalformed_line\n\
+                 きょう\t京\tbad\t{now}\nあした\t明日\t1\t{}\n",
+                now - 30 * DAY
+            ),
+        )
+        .unwrap();
+
+        let cache = LearningCache::load(file.path(), config_with(100)).unwrap();
+        assert_eq!(cache.entry_count(), 2);
+        // 5 confirmations, weighed 0.4 each, recorded just now.
+        assert!((cache.score("きょう", "今日", "") - 2.0).abs() < 1e-3);
+        // One a half-life ago counts half.
+        assert!((cache.score("あした", "明日", "") - 0.2).abs() < 1e-3);
     }
 
     #[test]
@@ -427,7 +786,7 @@ mod tests {
         let mut cache = cache_with(100);
         assert!(!cache.is_dirty());
 
-        cache.record("きょう", "今日");
+        chose(&mut cache, "きょう", "今日");
         assert!(cache.is_dirty());
 
         let file = NamedTempFile::new().unwrap();
@@ -436,58 +795,20 @@ mod tests {
     }
 
     #[test]
-    fn test_eviction() {
+    fn eviction_drops_the_least_evidence_first() {
         let mut cache = cache_with(3);
-
-        // Add 5 entries
-        cache.record("a", "A");
-        cache.record("b", "B");
-        cache.record("c", "C");
-        cache.record("d", "D");
-        cache.record("e", "E");
-
-        // Boost some to give them higher scores
-        cache.record("a", "A");
-        cache.record("a", "A");
-        cache.record("c", "C");
+        for r in ["a", "b", "c", "d", "e"] {
+            cache.record(r, r, "", Evidence::Accepted, 1.0);
+        }
+        // Replaced often: a low score, and much evidence.
+        cache.record("a", "a", "", Evidence::Displaced, 3.0);
+        chose(&mut cache, "c", "c");
 
         let file = NamedTempFile::new().unwrap();
         cache.save(file.path()).unwrap();
-
-        // After eviction, should be at most 3 entries
-        assert!(cache.entry_count() <= 3);
-    }
-
-    #[test]
-    fn test_score_recency() {
-        let now = now_unix();
-        let recent = LearningEntry {
-            surface: "A".to_string(),
-            frequency: 1,
-            last_access: now,
-        };
-        let old = LearningEntry {
-            surface: "B".to_string(),
-            frequency: 1,
-            last_access: now.saturating_sub(30 * 86400), // 30 days ago
-        };
-        assert!(score(&recent, now) > score(&old, now));
-    }
-
-    #[test]
-    fn test_score_frequency() {
-        let now = now_unix();
-        let high_freq = LearningEntry {
-            surface: "A".to_string(),
-            frequency: 100,
-            last_access: now,
-        };
-        let low_freq = LearningEntry {
-            surface: "B".to_string(),
-            frequency: 1,
-            last_access: now,
-        };
-        assert!(score(&high_freq, now) > score(&low_freq, now));
+        assert_eq!(cache.entry_count(), 3);
+        assert!(cache.contains_reading("a"));
+        assert!(cache.contains_reading("c"));
     }
 
     #[test]
@@ -497,52 +818,12 @@ mod tests {
     }
 
     #[test]
-    fn test_tsv_format() {
-        let mut cache = cache_with(100);
-        cache.record("きょう", "今日");
-
-        let file = NamedTempFile::new().unwrap();
-        cache.save(file.path()).unwrap();
-
-        let content = std::fs::read_to_string(file.path()).unwrap();
-        assert!(content.starts_with("# karukan learning cache v1"));
-        assert!(content.contains("きょう\t今日\t1\t"));
-    }
-
-    #[test]
-    fn test_tsv_comments_and_blanks_ignored() {
-        let file = NamedTempFile::new().unwrap();
-        std::fs::write(
-            file.path(),
-            "# comment\n\nきょう\t今日\t5\t1700000000\n# another comment\n",
-        )
-        .unwrap();
-
-        let cache = LearningCache::load(file.path(), config_with(100)).unwrap();
-        assert_eq!(cache.entry_count(), 1);
-        let results = cache.lookup("きょう");
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, "今日");
-    }
-
-    #[test]
-    fn test_remove_suggestion_last_surface_drops_reading() {
-        let mut cache = cache_with(100);
-        cache.record("きょう", "今日");
-
-        assert!(cache.remove_suggestion("きょう", "今日"));
-        assert_eq!(cache.entry_count(), 0);
-        assert!(cache.lookup("きょう").is_empty());
-        assert!(cache.prefix_lookup("き").is_empty());
-    }
-
-    #[test]
     fn test_remove_suggestion_clears_exact_and_prefix_twins() {
         let mut cache = cache_with(100);
-        cache.record("あい", "藍");
-        cache.record("あいさ", "藍"); // same surface, longer reading (a twin)
-        cache.record("あい", "愛"); // different surface under the same reading
-        cache.record("うみ", "藍"); // same surface, unrelated reading
+        chose(&mut cache, "あい", "藍");
+        chose(&mut cache, "あいさ", "藍"); // same surface, longer reading (a twin)
+        chose(&mut cache, "あい", "愛"); // different surface under the same reading
+        chose(&mut cache, "うみ", "藍"); // same surface, unrelated reading
 
         let file = NamedTempFile::new().unwrap();
         cache.save(file.path()).unwrap();
@@ -551,19 +832,16 @@ mod tests {
         assert!(cache.remove_suggestion("あい", "藍"));
         assert!(cache.is_dirty(), "removal must mark the cache dirty");
 
-        // Both the exact entry and the prefix twin are gone...
-        assert!(cache.lookup("あい").iter().all(|(s, _)| s != "藍"));
-        assert!(cache.lookup("あいさ").is_empty());
-        // ...but a different surface under the same reading survives...
-        assert!(cache.lookup("あい").iter().any(|(s, _)| s == "愛"));
-        // ...and the same surface under an unrelated reading is untouched.
-        assert!(cache.lookup("うみ").iter().any(|(s, _)| s == "藍"));
+        assert!(cache.lookup("あい", "").iter().all(|(s, _)| s != "藍"));
+        assert!(!cache.contains_reading("あいさ"));
+        assert!(cache.lookup("あい", "").iter().any(|(s, _)| s == "愛"));
+        assert!(cache.lookup("うみ", "").iter().any(|(s, _)| s == "藍"));
     }
 
     #[test]
     fn test_remove_suggestion_nonexistent_is_noop() {
         let mut cache = cache_with(100);
-        cache.record("あい", "藍");
+        chose(&mut cache, "あい", "藍");
 
         let file = NamedTempFile::new().unwrap();
         cache.save(file.path()).unwrap();
@@ -580,56 +858,23 @@ mod tests {
             max_surface_chars: 5,
         });
 
-        cache.record("あ", &"漢".repeat(6));
+        chose(&mut cache, "あ", &"漢".repeat(6));
         assert_eq!(cache.entry_count(), 0);
         assert!(!cache.is_dirty());
 
         // Boundary: exactly max_surface_chars is accepted.
-        cache.record("あ", &"漢".repeat(5));
+        chose(&mut cache, "あ", &"漢".repeat(5));
         assert_eq!(cache.entry_count(), 1);
+
+        // Only the surface is capped, not the reading.
+        chose(&mut cache, &"あ".repeat(30), "短い");
+        assert_eq!(cache.entry_count(), 2);
     }
 
     #[test]
-    fn test_record_ignores_reading_length() {
-        let mut cache = LearningCache::new(LearningConfig {
-            max_entries: 100,
-            max_surface_chars: 5,
-        });
-
-        // Only the surface is capped; a long reading with a short surface
-        // is fine (e.g. a long kana reading converting to a short word).
-        cache.record(&"あ".repeat(30), "短い");
-        assert_eq!(cache.entry_count(), 1);
-    }
-
-    #[test]
-    fn test_default_max_surface_chars() {
+    fn a_context_with_a_tab_is_none() {
         let mut cache = cache_with(100);
-
-        cache.record(
-            "よみ",
-            &"あ".repeat(LearningConfig::DEFAULT_MAX_SURFACE_CHARS + 1),
-        );
-        assert_eq!(cache.entry_count(), 0);
-
-        cache.record(
-            "よみ",
-            &"あ".repeat(LearningConfig::DEFAULT_MAX_SURFACE_CHARS),
-        );
-        assert_eq!(cache.entry_count(), 1);
-    }
-
-    #[test]
-    fn test_tsv_malformed_lines_skipped() {
-        let file = NamedTempFile::new().unwrap();
-        std::fs::write(
-            file.path(),
-            "きょう\t今日\t5\t1700000000\nmalformed_line\nきょう\t京\tbad\t1700000000\n",
-        )
-        .unwrap();
-
-        let cache = LearningCache::load(file.path(), config_with(100)).unwrap();
-        // Only the first valid line should be loaded
-        assert_eq!(cache.entry_count(), 1);
+        cache.record("よみ", "読み", "a\t", Evidence::Chosen, 1.0);
+        assert!(cache.entries["よみ"][0].contexts.is_empty());
     }
 }
