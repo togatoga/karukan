@@ -96,6 +96,7 @@ impl InputMethodEngine {
             .collect();
         append_candidates_dedup(&mut all_candidates, model_candidates);
         append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(reading));
+        self.put_rewrite_first(&mut all_candidates, reading);
         let aux = self.format_aux_suggest();
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(preedit))
@@ -401,7 +402,8 @@ impl InputMethodEngine {
                 .with_action(EngineAction::HideAuxText);
         }
 
-        self.record_learning(&reading, &text);
+        let lessons = self.live_lessons(&reading, &text);
+        self.learn(&lessons);
         self.end_composition();
 
         // HideCandidates is required here: the auto-suggest/live-conversion

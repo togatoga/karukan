@@ -35,7 +35,7 @@
 //! right to be safe.
 
 /// One segment: a stretch of the reading and the text it converted to.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(in crate::core) struct Piece {
     pub reading: String,
     pub text: String,

@@ -355,12 +355,20 @@ impl InputMethodEngine {
         if self.state.is_segmented() {
             let breaks = std::mem::take(&mut self.chunk_breaks);
             let base_ctx = self.segment_ctx(false);
-            let candidates = self.model_candidates_after(reading, num_candidates, &base_ctx);
+            let before: String = self
+                .state
+                .neighbours()
+                .0
+                .iter()
+                .map(|s| s.reading.as_str())
+                .collect();
+            let candidates =
+                self.model_candidates_after(reading, num_candidates, &base_ctx, &before);
             self.chunk_breaks = breaks;
             return candidates;
         }
         let base_ctx = self.truncate_context_for_api();
-        self.model_candidates_after(reading, num_candidates, &base_ctx)
+        self.model_candidates_after(reading, num_candidates, &base_ctx, "")
     }
 
     /// [`Self::model_candidates`] with `base_ctx` as the text before the
@@ -370,13 +378,16 @@ impl InputMethodEngine {
         reading: &str,
         num_candidates: usize,
         base_ctx: &str,
+        reading_before: &str,
     ) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
         }
         let chars: Vec<char> = reading.chars().collect();
         let span_start = self.beam_span_start(&chars);
-        let prefix = self.convert_on_chunk_grid(&chars[..span_start], base_ctx);
+        let span: String = chars[span_start..].iter().collect();
+        let prefix =
+            self.convert_on_chunk_grid(&chars[..span_start], base_ctx, reading_before, &span);
 
         // Nothing to beam (the reading ends outside Japanese): the grid
         // conversion is the only candidate.
@@ -394,14 +405,26 @@ impl InputMethodEngine {
         // that greedy IS the head, no separate pass. ParallelBeam runs it
         // alongside the light beam and puts it first, so the head costs no
         // extra wall time instead of a serial conversion before the beam.
-        let span: String = chars[span_start..].iter().collect();
         let lctx = self.lctx_for(base_ctx, &prefix);
         // An empty beam means the model produced nothing (unavailable, or a
         // conversion error), which is what "no model suggestion" means to
         // the callers. A beam that returns the reading unchanged is a real
         // answer — words that stay in kana (きゃりーぱみゅぱみゅ) convert to
         // themselves — so it rides like any other candidate.
-        self.run_kana_kanji_conversion(&span, &lctx, num_candidates, Budget::Space)
+        let mut tails = self.run_kana_kanji_conversion(&span, &lctx, num_candidates, Budget::Space);
+        // The head is what the live conversion showed, so it is rewritten by
+        // the history as the live conversion was; the model's own text stays
+        // in the list right after it, for picking it back.
+        if let Some(greedy) = tails.first().cloned() {
+            let before: String = chars[..span_start].iter().collect();
+            let before = format!("{reading_before}{before}");
+            let (rewritten, rewrites) =
+                self.convert_with_history(&span, greedy, base_ctx, &prefix, &before, "");
+            if !rewrites.is_empty() {
+                tails.insert(0, rewritten);
+            }
+        }
+        tails
             .into_iter()
             .map(|tail| format!("{prefix}{tail}"))
             .collect()

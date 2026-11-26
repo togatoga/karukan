@@ -1,6 +1,6 @@
 //! Tests for the IME engine
 
-use karukan_engine::{LearningCache, LearningConfig};
+use karukan_engine::{Evidence, LearningCache, LearningConfig};
 
 use super::*;
 use crate::core::keycode::KeyModifiers;
@@ -15,6 +15,7 @@ mod conversion;
 mod cursor;
 mod date;
 mod emoji;
+mod history;
 mod katakana;
 mod learning;
 mod live_conversion;
@@ -24,6 +25,7 @@ mod passthrough;
 mod pending_romaji;
 mod persona;
 mod predictive;
+mod rewrite;
 mod rewriter;
 mod segment;
 mod single_kanji;
@@ -31,6 +33,7 @@ mod source_filter;
 mod strategy;
 mod surrounding;
 mod transliterate;
+mod undo;
 mod version;
 mod width;
 
@@ -41,9 +44,22 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     let mut engine = InputMethodEngine::new();
     engine.converters.kanji = None;
     let mut cache = LearningCache::new(LearningConfig::default());
-    cache.record(reading, surface);
-    engine.learning = Some(cache);
+    cache.record(reading, surface, "", "", Evidence::Chosen, 1.0);
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(cache)));
     engine
+}
+
+/// The surfaces the history offers for `reading`, best first: those with
+/// more evidence for than against.
+fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
+    engine
+        .learning_cache()
+        .unwrap()
+        .lookup(reading, "", "")
+        .into_iter()
+        .filter(|(_, score)| *score > 0.0)
+        .map(|(s, _)| s)
+        .collect()
 }
 
 /// Seed the conversion cache so a main-model greedy call for `katakana`
@@ -168,6 +184,8 @@ fn set_live_text(engine: &mut InputMethodEngine, converted: &str) {
     engine.chunks = vec![ComposingChunk {
         reading: engine.input_buf.reading(),
         converted: converted.to_string(),
+        model: converted.to_string(),
+        rewrites: Vec::new(),
     }];
     engine.live.shown = true;
 }

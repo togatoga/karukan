@@ -61,11 +61,6 @@ fn committed(result: &EngineResult) -> Option<String> {
     })
 }
 
-fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
-    let cache = engine.learning.as_ref().unwrap();
-    cache.lookup(reading).into_iter().map(|(s, _)| s).collect()
-}
-
 #[test]
 fn a_conversion_opens_whole() {
     // Space shows what it always did: the list for the whole reading.
@@ -187,7 +182,8 @@ fn enter_commits_every_segment_and_learns_the_chosen_ones() {
     assert!(engine.state().is_empty());
     // A segment that was focused is learned under its own reading: its
     // text was chosen from a list built for that reading.
-    assert_eq!(learned(&engine, "いしゃに"), ["慰謝に"]);
+    // The stretch that changed, its particle left to the context.
+    assert_eq!(learned(&engine, "いしゃ"), ["慰謝"]);
     // A segment never focused was cut out of the whole conversion: its
     // pairing with the reading is a guess, and teaches nothing.
     assert!(learned(&engine, "きょうは").is_empty());
@@ -425,8 +421,15 @@ fn ctrl_s_while_typing_cuts_what_is_on_screen_not_the_history() {
 fn typed_university_with_history() -> InputMethodEngine {
     let mut engine = engine_with_learned("わせだだいがくにいく", "ワセダ大学に行く");
     engine.live.enabled = true;
-    if let Some(cache) = engine.learning.as_mut() {
-        cache.record("わせだだいがくにいくよ", "早稲田大学に行くよ");
+    if let Some(mut cache) = engine.learning_cache() {
+        cache.record(
+            "わせだだいがくにいくよ",
+            "早稲田大学に行くよ",
+            "",
+            "",
+            Evidence::Chosen,
+            1.0,
+        );
     }
     engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
         r#"[

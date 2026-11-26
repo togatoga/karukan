@@ -183,15 +183,17 @@ timeout_ms = 500   # 0 にすると制限なし（これまでの動作）
 
 ## Learning Cache
 
-ユーザーが選択した変換結果を記憶し、次回以降の変換で優先表示します。
+変換したときに何が起きたか（選んだ、既定のまま確定した、差し替えた…）を覚えて、候補の並びとライブ変換の表示に使います。詳しくは [学習](learning.md) を参照してください。
 
 - 保存先: `~/.local/share/karukan-im/learning.tsv`（macOS: `~/Library/Application Support/com.karukan.karukan-im/learning.tsv`）
 - 完全一致と前方一致（予測変換）の両方に対応
   - 例: 「早稲田大学」を一度変換すると、次回「わせだ」と入力した時点で候補に表示
 - 学習候補は変換時・入力中（auto-suggest）の両方で最大3件表示
-- スコアはrecency（最終使用日時）重視 + 頻度補正
+- 一覧から選び直した表記は、前後に打った読みと合わせて覚え、次からその読みのまわりが一致するところではライブ変換の表示にも使われる（例: `アンソロピック` を `Anthropic` に選び直すと、次からは `Anthropic` と表示）。置き換えたときも AI の元の結果がすぐ次の候補に残る（[学習](learning.md)）
+- 出来事ごとの点数は 30 日で半分に薄れる
 - 50文字（`max_surface_chars`）を超える変換結果は学習しない
 - 変換中に学習候補（📝）を選択して `Ctrl+Backspace`（macOSでは Ctrl+delete。`Ctrl+Delete` でも可）を押すと、そのエントリを学習履歴から削除できる。学習候補の選択中はフッターに「Ctrl+Backspaceで履歴から削除」と表示される
+- 確定した直後に `Backspace`（macOSでは delete）を押すと、その確定で学習した分が取り消される。キーはそのままアプリに渡るので、文字も普段どおり1文字消える。取り消せるのは確定の直後に押したキーだけ（[学習](learning.md#保存と削除)）
 - IME切り替え・ウィンドウ切り替え時に自動保存（commit のたびには保存しない）
 - `[learning] enabled = false` で無効化可能
 - 学習履歴をすべて削除するには: `rm ~/.local/share/karukan-im/learning.tsv`

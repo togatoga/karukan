@@ -7,10 +7,11 @@ use std::collections::HashSet;
 use tracing::debug;
 
 use super::filter::source_for_key;
+use super::history::Lesson;
 use super::segment::Focus;
 use super::transliterate::Transliteration;
 use super::*;
-use crate::core::state::Segment;
+use crate::core::state::{Segment, Shown};
 
 /// Maximum number of learning candidates to show
 const MAX_LEARNING_CANDIDATES: usize = 3;
@@ -142,7 +143,7 @@ impl InputMethodEngine {
         {
             candidates.insert(
                 0,
-                AnnotatedCandidate::new(prev_suggest_text, CandidateSource::Model),
+                AnnotatedCandidate::new(prev_suggest_text.clone(), CandidateSource::Model),
             );
         }
 
@@ -153,8 +154,30 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-        self.enter_conversion_state(&reading, candidate_list)
+        let mut candidate_list = self.to_conversion_candidate_list(candidates, &reading);
+        // A rewrite on screen heads the list as the history's, the model's
+        // own text right after it. Not for Tab, which asks for no history.
+        if learning == LearningLookup::Use
+            && self
+                .rewritten_live()
+                .is_some_and(|(rewritten, _)| rewritten == prev_suggest_text)
+        {
+            let mut rows = candidate_list.candidates().to_vec();
+            self.put_rewrite_first(&mut rows, &reading);
+            candidate_list = self.settle_candidates(rows);
+        }
+        // What was on screen when Space was pressed, or else the list head.
+        let shown = match candidate_list.selected() {
+            Some(head) if prev_suggest_text.is_empty() => Shown {
+                reading: head.reading.clone().unwrap_or_else(|| reading.clone()),
+                text: head.text.clone(),
+            },
+            _ => Shown {
+                reading: reading.clone(),
+                text: prev_suggest_text,
+            },
+        };
+        self.enter_conversion_state(&reading, candidate_list, shown)
     }
 
     /// Map builder output to the public [`CandidateList`] shown in the
@@ -186,6 +209,7 @@ impl InputMethodEngine {
         &mut self,
         reading: &str,
         candidates: CandidateList,
+        shown: Shown,
     ) -> EngineResult {
         let selected_text = candidates.selected_text().unwrap_or(reading).to_string();
 
@@ -201,6 +225,7 @@ impl InputMethodEngine {
             // and as one segment
             left: Vec::new(),
             right: Vec::new(),
+            shown,
         };
 
         // After the state assignment: the aux header reads the active filter.
@@ -336,7 +361,8 @@ impl InputMethodEngine {
         // just means no model candidates: symbol-only and early keystrokes
         // still get dictionary/rewriter/fallback candidates. Loading here
         // synchronously would block the key-event thread on the download.
-        let candidates = self.model_candidates(reading, num_candidates);
+        let mut candidates = self.model_candidates(reading, num_candidates);
+        self.rank_model_candidates(reading, &mut candidates);
 
         let hiragana = reading.to_string();
         let katakana = karukan_engine::hiragana_to_katakana(reading);
@@ -352,6 +378,14 @@ impl InputMethodEngine {
         if learning == LearningLookup::Use {
             for c in self.lookup_learning_candidates(reading) {
                 if segmented && c.reading.as_deref() != Some(reading) {
+                    continue;
+                }
+                // Only what was picked heads the list: what was merely
+                // committed as shown is the model's output again.
+                let picked = self.learning_cache().is_some_and(|cache| {
+                    cache.picked(c.reading.as_deref().unwrap_or(reading), &c.text)
+                });
+                if !picked {
                     continue;
                 }
                 // Exact matches have reading == input reading; use None to avoid redundancy
@@ -473,7 +507,7 @@ impl InputMethodEngine {
     }
 
     fn lookup_learning(&self, reading: &str, pending: &str, max: usize) -> Vec<Candidate> {
-        let Some(cache) = &self.learning else {
+        let Some(cache) = self.learning_cache() else {
             return vec![];
         };
         let constraint = self.tail_constraint(pending);
@@ -482,13 +516,20 @@ impl InputMethodEngine {
         }
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut seen = HashSet::new();
+        let (left, right) = self.learning_context();
 
         // Exact match — only when no romaji tail is pending (an exact hit
         // on the base would ignore the typed tail)
         if pending.is_empty() {
-            for (surface, _score) in cache.lookup(reading) {
-                if candidates.len() >= max {
+            for (surface, score) in cache.lookup(reading, &left, &right) {
+                // Evidence against a surface (replaced more than picked)
+                // is no reason to offer it, nor is having been committed as
+                // shown; a longer reading below may still be predicted.
+                if candidates.len() >= max || score <= 0.0 {
                     break;
+                }
+                if !cache.picked(reading, &surface) {
+                    continue;
                 }
                 if seen.insert(surface.clone()) {
                     candidates.push(Candidate {
@@ -503,8 +544,8 @@ impl InputMethodEngine {
 
         // Prefix match (predictive), narrowed to the kana the tail can
         // still become — mirrors the dictionary's expanded search
-        for (full_reading, surface, _score) in cache.prefix_lookup(reading) {
-            if candidates.len() >= max {
+        for (full_reading, surface, score) in cache.prefix_lookup(reading, &left) {
+            if candidates.len() >= max || score <= 0.0 {
                 break;
             }
             if full_reading == reading {
@@ -565,7 +606,7 @@ impl InputMethodEngine {
     /// the single-kanji rows are ranked (`Rewriter::is_catalog`), so ﾀｶ
     /// and the symbols stay where the chain puts them.
     fn rank_by_use(&self, variants: &mut [RewriteOutput]) {
-        let Some(learning) = &self.learning else {
+        let Some(learning) = self.learning_cache() else {
             return;
         };
         let scores = learning.surface_scores(variants.iter().map(|(text, _)| text.as_str()));
@@ -861,63 +902,30 @@ impl InputMethodEngine {
         }
     }
 
-    /// Record a selection in the learning cache. No-op in emoji mode — the
-    /// buffer is a `:query`, not a kana reading, and would corrupt the
-    /// kana-keyed cache.
-    pub(super) fn record_learning(&mut self, reading: &str, surface: &str) {
-        if self.mode.current() == InputMode::Emoji {
-            return;
-        }
-        if let Some(cache) = &mut self.learning {
-            cache.record(reading, surface);
-        }
-    }
-
-    /// What committing the conversion types, and the `(reading, text)`
-    /// pairs it teaches: every segment's text in order; one pair per
-    /// segment whose text was chosen from a list built for its reading;
-    /// and, when the conversion was split, the whole reading with the
-    /// whole text — the pair an unsplit commit has always taught, which is
-    /// right however the segments were cut, since the readings add up to
-    /// what was typed and the texts to what was committed.
-    pub(super) fn conversion_commit(&self) -> Option<(String, Vec<(String, String)>)> {
+    /// What committing the conversion types, and what it teaches: told
+    /// apart from the default the conversion opened with, and when split,
+    /// segment by segment ([`Self::segment_lessons`]).
+    pub(super) fn conversion_commit(&mut self) -> Option<(String, Vec<Lesson>)> {
         let (focused, reading) = self.selected_conversion_info()?;
-        let (left, right) = self.state.neighbours();
-        let mut text: String = left.iter().map(Segment::text).collect();
-        let mut learned: Vec<_> = left.iter().filter_map(Segment::learned).collect();
-        text.push_str(&focused);
-        learned.extend(reading.map(|reading| (reading, focused)));
-        text.extend(right.iter().map(Segment::text));
-        learned.extend(right.iter().filter_map(Segment::learned));
-
-        if self.state.is_segmented() {
-            // Not when a segment holds something that must not be learned
-            // (a date is stale tomorrow): the sentence would carry it.
-            let learnable = |list: &CandidateList| {
-                list.selected()
-                    .is_none_or(|c| c.source.is_none_or(|s| s.is_learnable()))
+        if !self.state.is_segmented() {
+            let lessons = match (reading, self.state.shown().cloned()) {
+                (Some(reading), Some(shown)) => {
+                    let ctx = self.truncate_context_for_api();
+                    self.choice_lessons(&shown, &reading, &focused, &ctx)
+                }
+                _ => Vec::new(),
             };
-            let all_learnable = self.state.candidates().is_some_and(learnable)
-                && left.iter().chain(right).all(|s| learnable(&s.candidates));
-            if all_learnable {
-                let whole: String = left
-                    .iter()
-                    .map(|s| s.reading.as_str())
-                    .chain(self.state.reading())
-                    .chain(right.iter().map(|s| s.reading.as_str()))
-                    .collect();
-                learned.push((whole, text.clone()));
-            }
+            return Some((focused, lessons));
         }
-        Some((text, learned))
+        let (segments, _) = self.segments();
+        let text = segments.iter().map(Segment::text).collect();
+        Some((text, self.segment_lessons(&segments)))
     }
 
     /// Record the committed conversion in the learning cache and end the
     /// composition.
-    pub(super) fn finish_conversion(&mut self, learned: &[(String, String)]) {
-        for (reading, text) in learned {
-            self.record_learning(reading, text);
-        }
+    pub(super) fn finish_conversion(&mut self, lessons: &[Lesson]) {
+        self.learn(lessons);
         self.end_composition();
     }
 
@@ -970,10 +978,26 @@ impl InputMethodEngine {
         let Some(reading) = self.state.reading().map(str::to_string) else {
             return EngineResult::consumed();
         };
-        let removed = self
-            .learning
-            .as_mut()
-            .is_some_and(|cache| cache.remove_suggestion(&reading, &surface));
+        // The live conversion's rewrite goes with the units it came from,
+        // and the chunks show the model's own text again.
+        let rewrites: Vec<_> = match self.rewritten_live() {
+            Some((rewritten, _)) if rewritten == surface => self
+                .chunks
+                .iter_mut()
+                .flat_map(|c| {
+                    c.converted = c.model.clone();
+                    std::mem::take(&mut c.rewrites)
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let removed = self.learning_cache().is_some_and(|mut cache| {
+            let mut removed = cache.remove_suggestion(&reading, &surface);
+            for r in &rewrites {
+                removed |= cache.remove_suggestion(&r.reading, &r.text);
+            }
+            removed
+        });
         if !removed {
             return EngineResult::consumed();
         }
@@ -999,7 +1023,8 @@ impl InputMethodEngine {
                 return self.cancel_conversion();
             }
             let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-            self.enter_conversion_state(&reading, candidate_list)
+            let shown = self.state.shown().cloned().unwrap_or_default();
+            self.enter_conversion_state(&reading, candidate_list, shown)
         };
 
         if let Some(source) = prev_filter {
@@ -1082,6 +1107,9 @@ impl InputMethodEngine {
     pub fn select_candidate_on_page(&mut self, page_index: usize) -> EngineResult {
         let start = std::time::Instant::now();
         self.metrics.conversion_ms = 0;
+        // A click is an input like a key: it closes the previous commit's
+        // revert window, and what this commit teaches opens the next.
+        self.learning_undo.clear();
         let result = self.select_shown_candidate(page_index + 1);
         self.metrics.process_key_ms = start.elapsed().as_millis() as u64;
         result

@@ -37,7 +37,9 @@ fn the_setting_is_offered_second() {
 #[test]
 fn choosing_it_flips_the_setting_and_inputs_nothing() {
     let mut engine = InputMethodEngine::new();
-    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(
+        LearningCache::new(LearningConfig::default()),
+    )));
     assert!(!engine.config.verbose);
 
     convert(&mut engine, "debaggumo-do");
@@ -52,10 +54,9 @@ fn choosing_it_flips_the_setting_and_inputs_nothing() {
     );
     assert!(
         engine
-            .learning
-            .as_ref()
+            .learning_cache()
             .unwrap()
-            .lookup("でばっぐもーど")
+            .lookup("でばっぐもーど", "", "")
             .is_empty()
     );
 

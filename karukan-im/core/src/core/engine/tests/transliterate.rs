@@ -86,21 +86,19 @@ fn kana_forms_are_learned_alphanumerics_are_not() {
     engine.process_key(&press_key(Keysym::F10));
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result), Some("kai"));
-    assert!(engine.learning.as_ref().unwrap().lookup("かい").is_empty());
+    assert!(
+        engine
+            .learning_cache()
+            .unwrap()
+            .lookup("かい", "", "")
+            .is_empty()
+    );
 
     type_keys(&mut engine, "kai");
     engine.process_key(&press_key(Keysym::F7));
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result), Some("カイ"));
-    let learned: Vec<String> = engine
-        .learning
-        .as_ref()
-        .unwrap()
-        .lookup("かい")
-        .into_iter()
-        .map(|(surface, _)| surface)
-        .collect();
-    assert_eq!(learned, ["カイ"]);
+    assert_eq!(learned(&engine, "かい"), ["カイ"]);
 }
 
 #[test]
@@ -202,7 +200,9 @@ fn shared_surface_takes_the_pressed_forms_source() {
     // Direct input reads the same as kana and alphanumeric: the row F10
     // selects must still be the non-learnable alphanumeric one.
     let mut engine = InputMethodEngine::new();
-    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(
+        LearningCache::new(LearningConfig::default()),
+    )));
     engine.process_key(&press_shift('L'));
     type_keys(&mut engine, "inux");
     engine.process_key(&press_key(Keysym::F10));
@@ -214,7 +214,13 @@ fn shared_surface_takes_the_pressed_forms_source() {
     assert_eq!(selected.source, Some(CandidateSource::Transliteration));
     assert_eq!(selected.description.as_deref(), Some("[半]英数"));
     engine.process_key(&press_key(Keysym::RETURN));
-    assert!(engine.learning.as_ref().unwrap().lookup("Linux").is_empty());
+    assert!(
+        engine
+            .learning_cache()
+            .unwrap()
+            .lookup("Linux", "", "")
+            .is_empty()
+    );
 }
 
 #[test]

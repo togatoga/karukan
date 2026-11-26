@@ -264,6 +264,25 @@ pub(in crate::core) struct ComposingChunk {
     /// Model conversion of `reading` — this chunk's slice of the live preedit.
     /// Falls back to `reading` when the model yields nothing.
     pub converted: String,
+    /// The model's own answer, before the history rewrote any of it.
+    pub model: String,
+    /// Stretches of it the history rewrote.
+    pub rewrites: Vec<Rewrite>,
+}
+
+/// A stretch of a chunk the history rewrote, and the rule that did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(in crate::core) struct Rewrite {
+    /// Where it starts in the chunk's reading, in chars.
+    pub start: usize,
+    pub reading: String,
+    /// The model's text for it (empty when the model's answer did not show
+    /// it), and the history's put in its place.
+    pub original: String,
+    pub text: String,
+    /// The context of the rule that put it there.
+    pub left: String,
+    pub right: String,
 }
 
 /// Live conversion state. The displayed text itself is not stored: it is

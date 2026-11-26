@@ -37,7 +37,7 @@ impl InputMethodEngine {
         let text: Vec<char> = full_reading.chars().collect();
         let base_ctx = self.truncate_context_for_api();
 
-        let chunks = self.convert_chunks(&text, &base_ctx);
+        let chunks = self.convert_chunks(&text, &base_ctx, "", "");
         let combined: String = chunks.iter().map(|c| c.converted.as_str()).collect();
 
         self.chunks = chunks;
@@ -51,13 +51,26 @@ impl InputMethodEngine {
     /// preceding chunks as its left context. Live conversion and the
     /// explicit conversion's grid replay share it, so the two can never
     /// disagree about where the boundaries are.
-    fn convert_chunks(&mut self, chars: &[char], base_ctx: &str) -> Vec<ComposingChunk> {
+    ///
+    /// `reading_before` and `reading_after` are what is typed around
+    /// `chars` in this composition (a segment's neighbours), the history's
+    /// context.
+    fn convert_chunks(
+        &mut self,
+        chars: &[char],
+        base_ctx: &str,
+        reading_before: &str,
+        reading_after: &str,
+    ) -> Vec<ComposingChunk> {
         let groups = self.split_chunks(chars);
         let mut chunks: Vec<ComposingChunk> = Vec::new();
         let mut combined = String::new();
-        for reading in groups {
-            let new = self.convert_new_chunk(reading, base_ctx, &combined);
+        let mut read = reading_before.to_string();
+        for (k, reading) in groups.iter().enumerate() {
+            let after: String = groups[k + 1..].concat() + reading_after;
+            let new = self.convert_new_chunk(reading.clone(), base_ctx, &combined, &read, &after);
             combined.push_str(&new.converted);
+            read.push_str(&new.reading);
             chunks.push(new);
         }
         chunks
@@ -109,8 +122,14 @@ impl InputMethodEngine {
     /// while the user types), purely non-Japanese chunks pass through
     /// verbatim, and each chunk's lctx is `base_ctx` plus the converted text
     /// before it.
-    pub(super) fn convert_on_chunk_grid(&mut self, chars: &[char], base_ctx: &str) -> String {
-        self.convert_chunks(chars, base_ctx)
+    pub(super) fn convert_on_chunk_grid(
+        &mut self,
+        chars: &[char],
+        base_ctx: &str,
+        reading_before: &str,
+        reading_after: &str,
+    ) -> String {
+        self.convert_chunks(chars, base_ctx, reading_before, reading_after)
             .into_iter()
             .map(|c| c.converted)
             .collect()
@@ -118,21 +137,43 @@ impl InputMethodEngine {
 
     /// Build one converted chunk: a reading containing any Japanese goes to
     /// the model with `base_ctx` + `combined` as its left context (absorbed
-    /// marks included); a purely non-Japanese one passes through verbatim,
-    /// so digit and symbol runs stay exact.
+    /// marks included), and the history rewrites what it gives; a purely
+    /// non-Japanese one passes through verbatim, so digit and symbol runs
+    /// stay exact.
     fn convert_new_chunk(
         &mut self,
         reading: String,
         base_ctx: &str,
         combined: &str,
+        reading_before: &str,
+        reading_after: &str,
     ) -> ComposingChunk {
-        let converted = if reading.chars().any(is_japanese) {
-            let lctx = self.lctx_for(base_ctx, combined);
-            self.convert_chunk(&reading, &lctx)
-        } else {
-            reading.clone()
-        };
-        ComposingChunk { reading, converted }
+        if !reading.chars().any(is_japanese) {
+            return ComposingChunk {
+                converted: reading.clone(),
+                model: reading.clone(),
+                reading,
+                rewrites: Vec::new(),
+            };
+        }
+        let lctx = self.lctx_for(base_ctx, combined);
+        let model = self.convert_chunk(&reading, &lctx);
+        // The cache holds the model's answer; the history is applied to it
+        // afresh on every call.
+        let (converted, rewrites) = self.convert_with_history(
+            &reading,
+            model.clone(),
+            base_ctx,
+            combined,
+            reading_before,
+            reading_after,
+        );
+        ComposingChunk {
+            reading,
+            converted,
+            model,
+            rewrites,
+        }
     }
 
     /// Configured maximum chunk length in chars, clamped to at least 1.
@@ -170,7 +211,7 @@ impl InputMethodEngine {
 
     /// Model conversion of one chunk's `reading` given `lctx`, falling back to
     /// the reading itself when the model yields nothing.
-    fn convert_chunk(&mut self, reading: &str, lctx: &str) -> String {
+    pub(super) fn convert_chunk(&mut self, reading: &str, lctx: &str) -> String {
         self.run_kana_kanji_conversion(reading, lctx, 1, Budget::Live)
             .into_iter()
             .next()

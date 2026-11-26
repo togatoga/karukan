@@ -11,6 +11,7 @@ mod cursor;
 mod display;
 mod filter;
 mod guard;
+mod history;
 mod init;
 mod input;
 mod input_buffer;
@@ -20,8 +21,10 @@ mod segment;
 mod strategy;
 mod transliterate;
 mod types;
+mod undo;
 
 pub use types::*;
+use undo::{LearningUndo, is_plain_backspace};
 
 use std::collections::HashSet;
 
@@ -164,8 +167,13 @@ pub struct InputMethodEngine {
     shown_suggestions: CandidateList,
     /// Dictionaries (system, user)
     dicts: Dictionaries,
-    /// Learning cache (user conversion history)
-    learning: Option<LearningCache>,
+    /// Learning cache (user conversion history), shared with the other
+    /// engines of the process (`init::shared_learning`)
+    learning: Option<init::SharedLearning>,
+    /// What the last commit taught, as the units stood before it, so a
+    /// Backspace right after the commit can take it back. Kept only until
+    /// the next key: see `dispatch_key`.
+    learning_undo: LearningUndo,
     /// Receiver for the background model-loading thread: model resolution
     /// can block on the network, so it never runs on the key-event thread.
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
@@ -176,6 +184,9 @@ pub struct InputMethodEngine {
     /// once the segments are no longer that cut (a new conversion, a
     /// resize).
     segment_cut: Option<&'static str>,
+    /// Cuts of converted text against its reading, kept for the next
+    /// keystroke
+    alignments: history::Alignments,
 }
 
 impl InputMethodEngine {
@@ -204,8 +215,10 @@ impl InputMethodEngine {
             shown_suggestions: CandidateList::default(),
             dicts: Dictionaries::default(),
             learning: None,
+            learning_undo: LearningUndo::default(),
             model_loading: None,
             segment_cut: None,
+            alignments: Default::default(),
         }
     }
 
@@ -294,6 +307,9 @@ impl InputMethodEngine {
         self.mode = ModeState::default();
         self.clear_composition();
         self.metrics = ConversionMetrics::default();
+        // A focus change or a caret the application moved: the next
+        // Backspace is not about the text just committed.
+        self.learning_undo.clear();
     }
 
     /// Drop all composition-scoped state in one place: the input buffer, the
@@ -349,29 +365,32 @@ impl InputMethodEngine {
         if self.state.is_segmented() {
             return self.after_segment_pick();
         }
-        let Some(candidates) = self.shown_candidates_mut() else {
-            return EngineResult::consumed();
+        let (text, lessons) = if matches!(self.state, InputState::Conversion { .. }) {
+            let Some(commit) = self.conversion_commit() else {
+                return EngineResult::consumed();
+            };
+            commit
+        } else {
+            let Some(selected) = self.shown_suggestions.selected().cloned() else {
+                return EngineResult::consumed();
+            };
+            // A non-learnable source (a date is stale tomorrow) records
+            // nothing; the default it is told apart from is the live
+            // conversion on screen.
+            let lessons = if selected.source.is_none_or(|s| s.is_learnable()) {
+                let reading = selected.reading.unwrap_or_else(|| self.input_buf.reading());
+                let shown = self.composing_shown();
+                let ctx = self.truncate_context_for_api();
+                self.choice_lessons(&shown, &reading, &selected.text, &ctx)
+            } else {
+                Vec::new()
+            };
+            (selected.text, lessons)
         };
-        let Some(selected) = candidates.selected() else {
-            return EngineResult::consumed();
-        };
-        let text = selected.text.clone();
-        let reading = selected.reading.clone();
-        let source = selected.source;
         if text.is_empty() {
             return EngineResult::consumed();
         }
-
-        // A suggestion always carries its reading; fall back to the buffer
-        // so a candidate built without one still records under a key. A
-        // non-learnable source (a date is stale tomorrow) records nothing.
-        let reading = if source.is_none_or(|s| s.is_learnable()) {
-            reading.or_else(|| Some(self.input_buf.reading()))
-        } else {
-            None
-        };
-        let learned: Vec<_> = reading.map(|r| (r, text.clone())).into_iter().collect();
-        self.finish_conversion(&learned);
+        self.finish_conversion(&lessons);
 
         EngineResult::consumed()
             .with_action(EngineAction::Commit(text))
@@ -639,6 +658,18 @@ impl InputMethodEngine {
             return EngineResult::not_consumed();
         }
 
+        // The last commit's teaching can be taken back by the very next
+        // key, and only by it: whatever else is pressed, the window closes.
+        // Modifier presses and key releases returned above, so holding
+        // Shift does not close it.
+        let undo = std::mem::take(&mut self.learning_undo);
+        if matches!(self.state, InputState::Empty) && is_plain_backspace(key) && !undo.is_empty() {
+            self.revert_learning(undo);
+            // Not consumed: the application deletes the character as it
+            // would without the IME. Only the teaching is undone here.
+            return EngineResult::not_consumed();
+        }
+
         // Ctrl+Shift+L: toggle live conversion (works in all states)
         if key.modifiers.control_key
             && key.modifiers.shift_key
@@ -713,7 +744,8 @@ impl InputMethodEngine {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
                 let (reading, text) = self.resolve_composing_commit();
-                self.record_learning(&reading, &text);
+                let lessons = self.live_lessons(&reading, &text);
+                self.learn(&lessons);
                 self.end_composition();
                 text
             }
@@ -731,6 +763,8 @@ impl InputMethodEngine {
             }
         };
         self.surrounding_context = None;
+        // Focus is leaving: the next Backspace lands in another field.
+        self.learning_undo.clear();
         text
     }
 
@@ -751,9 +785,19 @@ impl InputMethodEngine {
             .with_action(EngineAction::HideAuxText)
     }
 
+    /// The learning cache, locked for this use; None when learning is off.
+    fn learning_cache(&self) -> Option<std::sync::MutexGuard<'_, LearningCache>> {
+        let shared = self.learning.as_ref()?;
+        Some(
+            shared
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
     /// Save the learning cache to disk if it has unsaved changes.
     pub fn save_learning(&mut self) {
-        if let Some(cache) = &mut self.learning
+        if let Some(mut cache) = self.learning_cache()
             && cache.is_dirty()
             && let Some(path) = Settings::learning_file()
         {
