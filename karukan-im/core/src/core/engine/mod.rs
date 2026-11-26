@@ -21,8 +21,10 @@ mod segment;
 mod strategy;
 mod transliterate;
 mod types;
+mod undo;
 
 pub use types::*;
+use undo::{LearningUndo, is_plain_backspace};
 
 use std::collections::HashSet;
 
@@ -167,6 +169,10 @@ pub struct InputMethodEngine {
     dicts: Dictionaries,
     /// Learning cache (user conversion history)
     learning: Option<LearningCache>,
+    /// What the last commit taught, as the entries stood before it, so a
+    /// Backspace right after the commit can take that teaching back
+    /// (Mozc's Revert). Kept only until the next key: see `dispatch_key`.
+    learning_undo: LearningUndo,
     /// Receiver for the background model-loading thread: model resolution
     /// can block on the network, so it never runs on the key-event thread.
     /// Drained by `poll_loaded_models` at the top of `process_key`; until
@@ -208,6 +214,7 @@ impl InputMethodEngine {
             shown_suggestions: CandidateList::default(),
             dicts: Dictionaries::default(),
             learning: None,
+            learning_undo: LearningUndo::default(),
             model_loading: None,
             segment_cut: None,
             alignments: Default::default(),
@@ -299,6 +306,9 @@ impl InputMethodEngine {
         self.mode = ModeState::default();
         self.clear_composition();
         self.metrics = ConversionMetrics::default();
+        // A reset is a focus change or a caret moved by the application:
+        // the next Backspace is not about the text just committed.
+        self.learning_undo.clear();
     }
 
     /// Drop all composition-scoped state in one place: the input buffer, the
@@ -647,6 +657,18 @@ impl InputMethodEngine {
             return EngineResult::not_consumed();
         }
 
+        // The last commit's teaching can be taken back by the very next
+        // key, and only by it: whatever else is pressed, the window closes.
+        // Modifier presses and key releases returned above, so holding
+        // Shift does not close it.
+        let undo = std::mem::take(&mut self.learning_undo);
+        if matches!(self.state, InputState::Empty) && is_plain_backspace(key) && !undo.is_empty() {
+            self.revert_learning(undo);
+            // Not consumed: the application deletes the character as it
+            // would without the IME. Only the teaching is undone here.
+            return EngineResult::not_consumed();
+        }
+
         // Ctrl+Shift+L: toggle live conversion (works in all states)
         if key.modifiers.control_key
             && key.modifiers.shift_key
@@ -740,6 +762,8 @@ impl InputMethodEngine {
             }
         };
         self.surrounding_context = None;
+        // Focus is leaving: the next Backspace lands in another field.
+        self.learning_undo.clear();
         text
     }
 

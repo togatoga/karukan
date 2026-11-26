@@ -192,6 +192,8 @@ impl InputMethodEngine {
         }
         if let Some(cache) = &mut self.learning {
             for l in lessons {
+                // A Backspace right after the commit puts it back (`undo.rs`).
+                self.learning_undo.save(cache, &l.reading, &l.text);
                 if l.create {
                     cache.record(&l.reading, &l.text, &l.preceding, l.evidence, l.weight);
                 } else {

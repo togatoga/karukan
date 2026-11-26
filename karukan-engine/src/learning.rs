@@ -673,7 +673,45 @@ impl LearningCache {
             });
         }
     }
+
+    /// The unit `(reading, surface)` as it stands, whole — its tally and
+    /// every context — for [`restore`](Self::restore) to put back after a
+    /// `record` or `reinforce` changed it.
+    pub fn snapshot(&self, reading: &str, surface: &str) -> UnitSnapshot {
+        UnitSnapshot(
+            self.entries
+                .get(reading)
+                .and_then(|units| units.iter().find(|u| u.surface == surface))
+                .cloned(),
+        )
+    }
+
+    /// Put `(reading, surface)` back to `snapshot`, taken by
+    /// [`snapshot`](Self::snapshot) before a change: the unit as it was, or
+    /// no unit at all when the change created it. Only that unit is
+    /// touched, which is all one `record` or `reinforce` changes.
+    pub fn restore(&mut self, reading: &str, surface: &str, snapshot: UnitSnapshot) {
+        let units = self.entries.entry(reading.to_string()).or_default();
+        let index = units.iter().position(|u| u.surface == surface);
+        match (index, snapshot.0) {
+            (Some(i), Some(unit)) => units[i] = unit,
+            (Some(i), None) => {
+                units.remove(i);
+            }
+            (None, Some(unit)) => units.push(unit),
+            (None, None) => {}
+        }
+        if units.is_empty() {
+            self.entries.remove(reading);
+        }
+        self.dirty = true;
+    }
 }
+
+/// A unit as it stood, or its absence: what [`LearningCache::restore`]
+/// puts back. Opaque, since a unit's insides are the cache's own.
+#[derive(Debug, Clone)]
+pub struct UnitSnapshot(Option<Unit>);
 
 /// Current time as Unix timestamp in seconds.
 fn now_unix() -> u64 {
