@@ -7,7 +7,10 @@
 //! `confirmed`, and committing the live conversion as it stood is only
 //! `accepted`. Each is recorded with the readings typed around it, and a
 //! pick so recorded is a rule: where those readings come round again, the
-//! picked text stands in for the model's ([`convert_with_history`]).
+//! picked text stands in for the model's ([`convert_with_history`]). A rule
+//! rewrites in one of two ways, by how much of what is typed around it
+//! agrees: strongly, on the reading itself whatever the model wrote, or
+//! weakly, only the word the model wrote there.
 //!
 //! [`convert_with_history`]: InputMethodEngine::convert_with_history
 
@@ -31,11 +34,13 @@ use crate::core::state::{Segment, Shown};
 const REWRITE_MARGIN: f64 = 0.3;
 
 /// Chars a rule's reading and the readings around it must agree on, all
-/// told, to apply: when the model's answer cuts into segments, which show
-/// where its words start, and when it does not (its kana rewritten, or left
-/// unconverted), where a wrong place is harder to rule out.
-const RULE_CHARS: usize = 4;
-const RULE_CHARS_UNCUT: usize = 6;
+/// told, for a strong rewrite: the reading is fixed to the rule's text
+/// whatever the model wrote.
+const STRONG_CHARS: usize = 6;
+
+/// The same for a weak rewrite, which only replaces a word the model wrote
+/// for that reading.
+const WEAK_CHARS: usize = 4;
 
 /// Something a commit teaches.
 #[derive(Debug, Clone, PartialEq)]
@@ -111,14 +116,57 @@ fn pick_lessons(
     ]
 }
 
-/// A rule found in a chunk's reading: the stretch it covers (chars), the
-/// text it puts there, and how many chars it agrees on with its context.
+/// A rule applied to a chunk: the stretch of its reading it covers (chars),
+/// how many chars it agrees on with its context, and what the model wrote
+/// there, when its text shows it.
 struct Hit {
     start: usize,
     end: usize,
     agree: usize,
     rule: Rule,
-    original: String,
+    written: Option<String>,
+}
+
+impl Hit {
+    fn into_rewrite(self, reading: &[char], original: String) -> Rewrite {
+        Rewrite {
+            start: self.start,
+            reading: reading[self.start..self.end].iter().collect(),
+            original,
+            text: self.rule.surface,
+            left: self.rule.left,
+            right: self.rule.right,
+        }
+    }
+}
+
+/// The hits that agree on the most, none overlapping another, in reading
+/// order.
+fn take_hits(mut hits: Vec<Hit>) -> Vec<Hit> {
+    hits.sort_by_key(|h| std::cmp::Reverse((h.agree, h.end - h.start)));
+    let mut taken: Vec<Hit> = Vec::new();
+    for hit in hits {
+        if taken
+            .iter()
+            .all(|t| hit.end <= t.start || t.end <= hit.start)
+        {
+            taken.push(hit);
+        }
+    }
+    taken.sort_by_key(|h| h.start);
+    taken
+}
+
+/// Where each of `pieces` starts in their reading (chars).
+fn piece_starts(pieces: &[Piece]) -> Vec<usize> {
+    pieces
+        .iter()
+        .scan(0, |at, p| {
+            let start = *at;
+            *at += p.reading.chars().count();
+            Some(start)
+        })
+        .collect()
 }
 
 /// The text `pieces` give the stretch `start..end` of their reading, when
@@ -368,16 +416,21 @@ impl InputMethodEngine {
     }
 
     /// The model's `model` text for a chunk's `reading`, with the rules the
-    /// history holds applied: where a learned reading turns up between
-    /// readings that agree with a rule's context ([`RULE_CHARS`], or
-    /// [`RULE_CHARS_UNCUT`] when the model's text does not show where its
-    /// words start), and the rule outscores what the model wrote there by
-    /// [`REWRITE_MARGIN`], that stretch is the rule's text. The reading is
-    /// cut there rather than the text: what precedes the first rule is the
-    /// model's text for it, and the rest is converted again on the model,
-    /// each part after what is before it, the way chunks are. So it works
-    /// however the model wrote that stretch, its kana rewritten or not
-    /// converted at all.
+    /// history holds applied, strong ones first. Every stretch of the
+    /// reading the history has learned is a place a rule may apply, at the
+    /// start of a segment where the model's text cuts into them (so never
+    /// inside a word), and when it outscores what the model wrote there by
+    /// [`REWRITE_MARGIN`].
+    ///
+    /// - Strong: the rule and the readings around it agree on
+    ///   [`STRONG_CHARS`] chars all told (its own reading counted). The
+    ///   reading is cut there: the rule's text is fixed, and what lies
+    ///   between and after is converted on the model after what precedes
+    ///   it, the way chunks are. It works however the model wrote that
+    ///   stretch, its kana rewritten or left unconverted.
+    /// - Weak: [`WEAK_CHARS`] chars, in what the strong ones left: the
+    ///   model wrote a word for the stretch, and only that word is
+    ///   replaced ([`text_of`]).
     ///
     /// `base_ctx` and `combined` are the chunk's lctx; `reading_before` and
     /// `reading_after` what is typed around it in the composition. Only
@@ -396,42 +449,116 @@ impl InputMethodEngine {
             return (model, Vec::new());
         }
         let chars: Vec<char> = reading.chars().collect();
-        let found: Vec<(usize, usize, Rule)> = {
-            let Some(cache) = self.learning_cache() else {
-                return (model, Vec::new());
-            };
-            (0..chars.len())
-                .flat_map(|i| (i + 1..=chars.len()).map(move |j| (i, j)))
-                .flat_map(|(i, j)| {
-                    let stretch: String = chars[i..j].iter().collect();
-                    if !cache.contains_reading(&stretch) {
-                        return Vec::new();
-                    }
-                    cache
-                        .rules(&stretch)
-                        .into_iter()
-                        .map(|rule| (i, j, rule))
-                        .collect()
-                })
-                .collect()
-        };
+        let found = self.rules_in(&chars);
         if found.is_empty() {
             return (model, Vec::new());
         }
-
         let pieces = self.align(reading, &model);
-        let cut = pieces.len() > 1;
-        let starts: Vec<usize> = pieces
-            .iter()
-            .scan(0, |at, p| {
-                let start = *at;
-                *at += p.reading.chars().count();
-                Some(start)
+        let strong = take_hits(self.hits(
+            &chars,
+            &pieces,
+            &found,
+            reading_before,
+            reading_after,
+            STRONG_CHARS,
+        ));
+        if strong.is_empty() {
+            return self.rewrite_weakly(&chars, model, &found, reading_before, reading_after);
+        }
+
+        let mut out = String::new();
+        let mut rewrites = Vec::new();
+        let mut at = 0;
+        // The stretches between strong hits, and after the last, are what
+        // the weak ones may still rewrite, each as converted for itself.
+        let part = |engine: &mut Self, from: usize, to: usize, out: &mut String| {
+            let text = match from {
+                0 => text_of(&pieces, 0, to),
+                _ => None,
+            };
+            let text = match text {
+                Some(text) => text,
+                None => engine.convert_gap(&chars[from..to], base_ctx, combined, out),
+            };
+            let before: String = reading_before
+                .chars()
+                .chain(chars[..from].iter().copied())
+                .collect();
+            let after: String = chars[to..].iter().collect::<String>() + reading_after;
+            let inside: Vec<(usize, usize, Rule)> = found
+                .iter()
+                .filter(|(i, j, _)| from <= *i && *j <= to)
+                .map(|(i, j, rule)| (i - from, j - from, rule.clone()))
+                .collect();
+            let (text, weak) =
+                engine.rewrite_weakly(&chars[from..to], text, &inside, &before, &after);
+            out.push_str(&text);
+            weak.into_iter().map(move |mut r| {
+                r.start += from;
+                r
             })
-            .collect();
+        };
+        for hit in strong {
+            if at < hit.start {
+                let weak: Vec<_> = part(self, at, hit.start, &mut out).collect();
+                rewrites.extend(weak);
+            }
+            out.push_str(&hit.rule.surface);
+            at = hit.end;
+            let original = hit
+                .written
+                .as_deref()
+                .map(|w| self.settle_text(w))
+                .unwrap_or_default();
+            rewrites.push(hit.into_rewrite(&chars, original));
+        }
+        if at < chars.len() {
+            let weak: Vec<_> = part(self, at, chars.len(), &mut out).collect();
+            rewrites.extend(weak);
+        }
+        rewrites.sort_by_key(|r| r.start);
+        (out, rewrites)
+    }
+
+    /// Every learned stretch of `chars` with each of its rules.
+    fn rules_in(&self, chars: &[char]) -> Vec<(usize, usize, Rule)> {
+        let Some(cache) = self.learning_cache() else {
+            return Vec::new();
+        };
+        (0..chars.len())
+            .flat_map(|i| (i + 1..=chars.len()).map(move |j| (i, j)))
+            .flat_map(|(i, j)| {
+                let stretch: String = chars[i..j].iter().collect();
+                if !cache.contains_reading(&stretch) {
+                    return Vec::new();
+                }
+                cache
+                    .rules(&stretch)
+                    .into_iter()
+                    .map(|rule| (i, j, rule))
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The rules of `found` that apply to `chars`, converted as `pieces`,
+    /// agreeing on `needed` chars or more: at a segment start, not giving
+    /// what the model already wrote, and outscoring it by
+    /// [`REWRITE_MARGIN`] in its closest context.
+    fn hits(
+        &self,
+        chars: &[char],
+        pieces: &[Piece],
+        found: &[(usize, usize, Rule)],
+        reading_before: &str,
+        reading_after: &str,
+        needed: usize,
+    ) -> Vec<Hit> {
+        let starts = piece_starts(pieces);
         let mut hits = Vec::new();
         for (i, j, rule) in found {
-            if cut && !starts.contains(&i) {
+            let (i, j) = (*i, *j);
+            if !starts.contains(&i) {
                 continue;
             }
             let before: String = reading_before
@@ -442,21 +569,18 @@ impl InputMethodEngine {
             let right: String = chars[j..].iter().collect::<String>() + reading_after;
             let (l, r) = context_match(&rule.left, &rule.right, &left, &right);
             let agree = (j - i) + l + r;
-            if agree < if cut { RULE_CHARS } else { RULE_CHARS_UNCUT } {
+            if agree < needed {
                 continue;
             }
-            let original = if cut {
-                text_of(&pieces, i, j).map(|t| self.settle_text(&t))
-            } else {
-                None
-            };
-            if original.as_deref() == Some(rule.surface.as_str()) {
+            let written = text_of(pieces, i, j);
+            let shown = written.as_deref().map(|w| self.settle_text(w));
+            if shown.as_deref() == Some(rule.surface.as_str()) {
                 continue;
             }
             let stretch: String = chars[i..j].iter().collect();
-            let against = original.as_deref().map_or(0.0, |o| {
+            let against = shown.as_deref().map_or(0.0, |w| {
                 self.learning_cache()
-                    .map_or(0.0, |c| c.context_score(&stretch, o, &left, &right))
+                    .map_or(0.0, |c| c.context_score(&stretch, w, &left, &right))
             });
             if rule.score <= against + REWRITE_MARGIN {
                 continue;
@@ -465,61 +589,60 @@ impl InputMethodEngine {
                 start: i,
                 end: j,
                 agree,
-                rule,
-                original: original.unwrap_or_default(),
+                rule: rule.clone(),
+                written,
             });
         }
-        // The rules that agree on the most go first; none overlaps another.
-        hits.sort_by_key(|h| std::cmp::Reverse((h.agree, h.end - h.start)));
-        let mut taken: Vec<Hit> = Vec::new();
-        for hit in hits {
-            if taken
-                .iter()
-                .all(|t| hit.end <= t.start || t.end <= hit.start)
-            {
-                taken.push(hit);
-            }
-        }
-        if taken.is_empty() {
-            return (model, Vec::new());
-        }
-        taken.sort_by_key(|h| h.start);
+        hits
+    }
 
-        let mut out = String::new();
-        let mut rewrites = Vec::new();
-        let mut at = 0;
-        for hit in taken {
-            if at < hit.start {
-                let gap = if at == 0 && cut {
-                    text_of(&pieces, 0, hit.start)
-                } else {
-                    None
-                };
-                let gap = match gap {
-                    Some(text) => text,
-                    None => self.convert_gap(&chars[at..hit.start], base_ctx, combined, &out),
-                };
-                out.push_str(&gap);
-            }
-            out.push_str(&hit.rule.surface);
-            rewrites.push(Rewrite {
-                start: hit.start,
-                reading: chars[hit.start..hit.end].iter().collect(),
-                original: hit.original,
-                text: hit.rule.surface,
-                left: hit.rule.left,
-                right: hit.rule.right,
-            });
-            at = hit.end;
+    /// `text`, the model's for `chars`, with the weak rules of `found`
+    /// applied: each word the model wrote for a learned stretch replaced by
+    /// the rule's text, nothing converted again.
+    fn rewrite_weakly(
+        &mut self,
+        chars: &[char],
+        text: String,
+        found: &[(usize, usize, Rule)],
+        reading_before: &str,
+        reading_after: &str,
+    ) -> (String, Vec<Rewrite>) {
+        if found.is_empty() {
+            return (text, Vec::new());
         }
-        if at < chars.len() {
-            let gap = self.convert_gap(&chars[at..], base_ctx, combined, &out);
-            out.push_str(&gap);
+        let reading: String = chars.iter().collect();
+        let pieces = self.align(&reading, &text);
+        let hits: Vec<Hit> = take_hits(self.hits(
+            chars,
+            &pieces,
+            found,
+            reading_before,
+            reading_after,
+            WEAK_CHARS,
+        ))
+        .into_iter()
+        .filter(|h| h.written.is_some())
+        .collect();
+        if hits.is_empty() {
+            return (text, Vec::new());
         }
-        if out == model {
-            return (model, Vec::new());
+        let mut out: Vec<char> = text.chars().collect();
+        for hit in hits.iter().rev() {
+            let at = match hit.start {
+                0 => 0,
+                start => text_of(&pieces, 0, start).map_or(0, |t| t.chars().count()),
+            };
+            let written = hit.written.as_deref().unwrap_or_default().chars().count();
+            out.splice(at..at + written, hit.rule.surface.chars());
         }
-        (out, rewrites)
+        let rewrites = hits
+            .into_iter()
+            .map(|hit| {
+                let original = self.settle_text(hit.written.as_deref().unwrap_or_default());
+                hit.into_rewrite(chars, original)
+            })
+            .collect();
+        (out.into_iter().collect(), rewrites)
     }
 
     /// A stretch of a chunk between rules, on the model, after the chunk's

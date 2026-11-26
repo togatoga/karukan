@@ -459,3 +459,77 @@ fn a_rule_applies_however_the_model_wrote_its_reading() {
     );
     assert_eq!(live(&mut engine, "kyoujuuniyaru"), "今日中にやる");
 }
+
+#[test]
+fn a_long_rule_cuts_the_reading_when_the_model_text_does_not_show_it() {
+    let mut engine = anthropic_engine();
+    type_keys(&mut engine, "ansoropikku");
+    pick(&mut engine, "Anthropic");
+    // The model left the particle in katakana: its text no longer shows
+    // where あんそろぴっく ends. Long enough to be strong, the rule cuts the
+    // reading, and the rest is converted after it.
+    seed_model_cache(
+        &mut engine,
+        "アンソロピックノモデル",
+        "",
+        &["アンソロピックノモデル"],
+    );
+    assert_eq!(
+        live(&mut engine, "ansoropikkunomoderu"),
+        "Anthropicのモデル"
+    );
+}
+
+#[test]
+fn a_weak_rewrite_replaces_only_the_word_the_model_wrote() {
+    let mut engine = odds_engine();
+    fix_the_odds(&mut engine);
+    // は before and がわ after: 4 chars, weak. The model wrote 部 there,
+    // and only that is replaced: nothing is converted again (no
+    // conversion of がわ after 分 is seeded).
+    seed_model_cache(
+        &mut engine,
+        "コノショウブハブガワ",
+        "",
+        &["この勝負は部が輪"],
+    );
+    assert_eq!(live(&mut engine, "konoshoubuhabugawa"), "この勝負は分が輪");
+}
+
+#[test]
+fn a_rule_agreeing_on_too_little_for_a_strong_rewrite_needs_the_models_word() {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    engine.live.enabled = true;
+    // The model's katakana does not show where こども ends, and 3 chars of
+    // reading with が after are 4, not enough to force it.
+    seed_model_cache(&mut engine, "コドモガ", "", &["コドモガ"]);
+    record(
+        &mut engine,
+        "こども",
+        "子ども",
+        ("", "が"),
+        Evidence::Chosen,
+    );
+    assert_eq!(live(&mut engine, "kodomoga"), "コドモガ");
+    // Written as a word, it is replaced.
+    seed_model_cache(&mut engine, "コドモガ", "", &["子供が"]);
+    assert_eq!(live(&mut engine, "kodomoga"), "子どもが");
+}
+
+#[test]
+fn six_chars_of_reading_alone_force_the_rule() {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    engine.live.enabled = true;
+    // Kana rewritten and the rest in katakana: nothing in the model's text
+    // shows where きょうじゅう ends, so only a strong rewrite can put it.
+    seed_model_cache(&mut engine, "キョウジュウニヤル", "", &["教授ウニヤル"]);
+    seed_model_cache(&mut engine, "ニヤル", "今日中", &["にやる"]);
+    record(
+        &mut engine,
+        "きょうじゅう",
+        "今日中",
+        ("", ""),
+        Evidence::Chosen,
+    );
+    assert_eq!(live(&mut engine, "kyoujuuniyaru"), "今日中にやる");
+}
