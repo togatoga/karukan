@@ -349,13 +349,34 @@ impl InputMethodEngine {
     /// result means "the model produced nothing"; a candidate equal to the
     /// reading is a real answer (kana-only words convert to themselves).
     pub(super) fn model_candidates(&mut self, reading: &str, num_candidates: usize) -> Vec<String> {
+        // A segment is converted on its own: the text of the segments
+        // before it is its left context, and the composition's manual
+        // breaks, which are positions in the whole reading, do not apply.
+        if self.state.is_segmented() {
+            let breaks = std::mem::take(&mut self.chunk_breaks);
+            let base_ctx = self.segment_ctx(false);
+            let candidates = self.model_candidates_after(reading, num_candidates, &base_ctx);
+            self.chunk_breaks = breaks;
+            return candidates;
+        }
+        let base_ctx = self.truncate_context_for_api();
+        self.model_candidates_after(reading, num_candidates, &base_ctx)
+    }
+
+    /// [`Self::model_candidates`] with `base_ctx` as the text before the
+    /// reading.
+    fn model_candidates_after(
+        &mut self,
+        reading: &str,
+        num_candidates: usize,
+        base_ctx: &str,
+    ) -> Vec<String> {
         if !karukan_engine::contains_kana(reading) {
             return Vec::new();
         }
-        let base_ctx = self.truncate_context_for_api();
         let chars: Vec<char> = reading.chars().collect();
         let span_start = self.beam_span_start(&chars);
-        let prefix = self.convert_on_chunk_grid(&chars[..span_start], &base_ctx);
+        let prefix = self.convert_on_chunk_grid(&chars[..span_start], base_ctx);
 
         // Nothing to beam (the reading ends outside Japanese): the grid
         // conversion is the only candidate.
@@ -374,7 +395,7 @@ impl InputMethodEngine {
         // alongside the light beam and puts it first, so the head costs no
         // extra wall time instead of a serial conversion before the beam.
         let span: String = chars[span_start..].iter().collect();
-        let lctx = self.lctx_for(&base_ctx, &prefix);
+        let lctx = self.lctx_for(base_ctx, &prefix);
         // An empty beam means the model produced nothing (unavailable, or a
         // conversion error), which is what "no model suggestion" means to
         // the callers. A beam that returns the reading unchanged is a real

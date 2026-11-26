@@ -201,9 +201,21 @@ void KarukanState::updateUI() {
         uint32_t preeditLen = karukan_engine_get_preedit_len(rustEngine_);
         uint32_t preeditCaret = karukan_engine_get_preedit_caret(rustEngine_);
 
+        uint32_t focusStart = karukan_engine_get_preedit_focus_start(rustEngine_);
+        uint32_t focusLen = karukan_engine_get_preedit_focus_len(rustEngine_);
+
         Text preedit;
         if (preeditText && preeditLen > 0) {
-            preedit.append(std::string(preeditText, preeditLen), TextFormatFlag::Underline);
+            std::string text(preeditText, preeditLen);
+            if (focusLen > 0 && focusStart + focusLen <= preeditLen) {
+                // A conversion split into segments: the focused one stands
+                // out from the ones around it.
+                preedit.append(text.substr(0, focusStart), TextFormatFlag::Underline);
+                preedit.append(text.substr(focusStart, focusLen), TextFormatFlag::HighLight);
+                preedit.append(text.substr(focusStart + focusLen), TextFormatFlag::Underline);
+            } else {
+                preedit.append(text, TextFormatFlag::Underline);
+            }
             preedit.setCursor(static_cast<int>(preeditCaret));
         }
 

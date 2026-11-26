@@ -91,6 +91,27 @@ fn test_aux_indicator_shows_persona_only_in_verbose_mode() {
 }
 
 #[test]
+fn test_aux_indicator_names_the_build_only_in_verbose_mode() {
+    // Verbose is what a bug report is copied from.
+    let version = format!("v{}", karukan_engine::VERSION);
+
+    let mut engine = persona_engine("");
+    let result = engine.process_key(&press('a'));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(!aux.contains(&version), "aux was: {aux}");
+
+    let mut engine = verbose_persona_engine("");
+    let result = engine.process_key(&press('a'));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains(&format!("[あ] {version}")), "aux was: {aux}");
+
+    let mut engine = verbose_persona_engine("太郎");
+    let result = engine.process_key(&press('a'));
+    let aux = last_aux_text(&result).expect("aux text action");
+    assert!(aux.contains(&format!("P:太郎 {version}")), "aux was: {aux}");
+}
+
+#[test]
 fn test_persona_applies_to_every_chunk_lctx() {
     // Chunked live conversion: each chunk's lctx gets the same persona
     // prefix, with the preceding chunks' converted text after the space.

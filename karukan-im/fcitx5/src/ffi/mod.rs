@@ -66,6 +66,9 @@ fn init_logging() {
 struct PreeditCache {
     text: CString,
     caret_bytes: u32,
+    /// The focused segment as a byte range, when the preedit has one that
+    /// is not the whole text; `(0, 0)` otherwise.
+    focus_bytes: (u32, u32),
     dirty: bool,
 }
 
@@ -95,6 +98,27 @@ struct CommitCache {
 struct AuxCache {
     text: CString,
     dirty: bool,
+}
+
+/// The highlighted part of `preedit` as `(start, length)` in bytes: the
+/// focused segment of a conversion split into several. `(0, 0)` when
+/// nothing is highlighted or everything is — a conversion that is one
+/// segment is drawn as it always was.
+fn focus_bytes(preedit: &karukan_im::core::preedit::Preedit) -> (u32, u32) {
+    use karukan_im::core::preedit::AttributeType;
+    let text = preedit.text();
+    let byte_at = |chars: usize| {
+        text.char_indices()
+            .nth(chars)
+            .map_or(text.len(), |(i, _)| i)
+    };
+    preedit
+        .attributes()
+        .iter()
+        .find(|a| a.attr_type == AttributeType::Highlight)
+        .map(|a| (byte_at(a.start), byte_at(a.end)))
+        .filter(|&(start, end)| start < end && (start, end) != (0, text.len()))
+        .map_or((0, 0), |(start, end)| (start as u32, (end - start) as u32))
 }
 
 /// Opaque handle to an IME engine instance
@@ -158,6 +182,7 @@ impl KarukanEngine {
                         .map(|(i, _)| i)
                         .unwrap_or(preedit.text().len());
                     self.preedit.caret_bytes = caret_bytes as u32;
+                    self.preedit.focus_bytes = focus_bytes(&preedit);
                     self.preedit.text = CString::new(preedit.text()).unwrap_or_default();
                     self.preedit.dirty = true;
                 }

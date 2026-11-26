@@ -262,7 +262,10 @@ class KarukanInputController: IMKInputController {
             string: text,
             attributes: [.underlineStyle: NSUnderlineStyle.single.rawValue]
         )
-        for attr in attributes {
+        // The focused segment of a conversion split into several: the one
+        // highlighted range that is not the whole text.
+        var focused: NSRange?
+        for (index, attr) in attributes.enumerated() {
             guard let range = utf16Range(of: attr.start..<attr.end, in: text) else { continue }
             let style: NSUnderlineStyle
             switch attr.style {
@@ -271,16 +274,27 @@ class KarukanInputController: IMKInputController {
             // text, since background colors are unreliable across apps).
             case "underline_double", "highlight", "reverse":
                 style = .thick
+                if range.length < (text as NSString).length {
+                    focused = range
+                }
             default:
                 style = .single
             }
             attributed.addAttribute(.underlineStyle, value: style.rawValue, range: range)
+            // Tells the client where the clauses are, so it can draw each
+            // one's underline apart from its neighbours'.
+            attributed.addAttribute(.markedClauseSegment, value: index, range: range)
         }
 
+        // Many clients draw every underline alike, so the thick one alone
+        // does not say which segment has the focus. Selecting the focused
+        // segment does: clients show the selected part of the marked text
+        // in their selection colour, which is how the system input methods
+        // mark the clause being converted.
         let caretUTF16 = utf16Offset(ofScalarOffset: caret, in: text)
         client.setMarkedText(
             attributed,
-            selectionRange: NSRange(location: caretUTF16, length: 0),
+            selectionRange: focused ?? NSRange(location: caretUTF16, length: 0),
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
     }

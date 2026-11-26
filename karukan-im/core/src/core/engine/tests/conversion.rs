@@ -213,30 +213,32 @@ fn test_emoji_digit_selection_does_not_pollute_learning() {
 }
 
 #[test]
-fn test_arrow_in_conversion_returns_to_composing_and_moves_caret() {
-    // Matching live conversion: a caret key dissolves the conversion and
-    // moves the caret in the raw composition.
+fn test_arrow_in_conversion_of_one_segment_stays_put() {
+    // The arrow keys move between segments. A conversion that is one
+    // segment has nowhere to go: the key is consumed and nothing changes
+    // (Esc or Backspace is the way back to editing).
     let mut engine = InputMethodEngine::new();
     for ch in "kyou".chars() {
         engine.process_key(&press(ch));
     }
-    assert_eq!(engine.input_buf.cursor(), 3); // き ょ う
     engine.process_key(&press_key(Keysym::SPACE));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
-    let result = engine.process_key(&press_key(Keysym::LEFT));
-    assert!(result.consumed);
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.input_buf.cursor(), 2, "caret must move left");
-
-    engine.process_key(&press_key(Keysym::END));
-    assert_eq!(engine.input_buf.cursor(), 3);
+    for key in [Keysym::LEFT, Keysym::RIGHT, Keysym::HOME, Keysym::END] {
+        let result = engine.process_key(&press_key(key));
+        assert!(result.consumed);
+        assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    }
+    for key in [Keysym::KEY_A, Keysym::KEY_B, Keysym::KEY_E, Keysym::KEY_F] {
+        let result = engine.process_key(&press_ctrl(key));
+        assert!(result.consumed);
+        assert!(matches!(engine.state(), InputState::Conversion { .. }));
+    }
+    assert_eq!(engine.input_buf.cursor(), 3, "the composition is untouched");
 }
 
 #[test]
-fn test_arrow_in_source_view_dissolves_the_filter() {
-    // From the Ctrl+I model view: the caret key exits to editing and the
-    // filter dies with the conversion state.
+fn test_arrow_in_source_view_keeps_the_filter() {
     let mut engine = InputMethodEngine::new();
     for ch in "kyou".chars() {
         engine.process_key(&press(ch));
@@ -246,24 +248,23 @@ fn test_arrow_in_source_view_dissolves_the_filter() {
 
     let result = engine.process_key(&press_key(Keysym::LEFT));
     assert!(result.consumed);
-    assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.input_buf.cursor(), 2);
-    assert!(engine.state().filter().is_none());
+    assert_eq!(engine.state().filter(), Some(CandidateSource::Model));
 }
 
 #[test]
-fn test_ctrl_b_in_conversion_moves_caret_like_left() {
+fn test_arrow_in_direct_input_conversion_returns_to_editing() {
+    // Direct input holds one literal string: there are no segments, and
+    // the caret keys drop back to editing it as they always have.
     let mut engine = InputMethodEngine::new();
-    for ch in "kyou".chars() {
-        engine.process_key(&press(ch));
-    }
-    engine.process_key(&press_key(Keysym::SPACE));
+    engine.process_key(&press_shift('A'));
+    engine.process_key(&press('b'));
+    engine.process_key(&press_key(Keysym::DOWN));
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
 
-    let result = engine.process_key(&press_ctrl(Keysym::KEY_B));
+    let result = engine.process_key(&press_key(Keysym::LEFT));
     assert!(result.consumed);
     assert!(matches!(engine.state(), InputState::Composing { .. }));
-    assert_eq!(engine.input_buf.cursor(), 2);
+    assert_eq!(engine.input_buf.cursor(), 1);
 }
 
 #[test]
