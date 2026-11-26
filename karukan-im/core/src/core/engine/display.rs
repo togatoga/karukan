@@ -176,11 +176,15 @@ impl InputMethodEngine {
         } else {
             ""
         };
-        let persona = &self.config.persona;
-        if persona.is_empty() || !self.config.verbose {
-            format!("{live}{base}")
-        } else {
-            format!("{live}{base}P:{persona}")
+        if !self.config.verbose {
+            return format!("{live}{base}");
+        }
+        // Verbose is what a bug report is copied from, so the line says
+        // which build it came from.
+        let version = karukan_engine::VERSION;
+        match self.config.persona.as_str() {
+            "" => format!("{live}{base} v{version}"),
+            persona => format!("{live}{base}P:{persona} v{version}"),
         }
     }
 
@@ -228,6 +232,26 @@ impl InputMethodEngine {
     /// reading」) is not a chunk, so that text stays and only the counter is
     /// taken from the chunk.
     fn conversion_reading(&self, shown: &str) -> String {
+        // Split into segments, the field is the focused segment's reading:
+        // the composition's chunk counter says nothing about it. Where
+        // the focus stands among the segments and how they were cut is
+        // debug detail, shown in verbose mode only.
+        if self.state.is_segmented() && !self.config.verbose {
+            return shown.to_string();
+        }
+        if self.state.is_segmented() {
+            let (left, right) = self.state.neighbours();
+            let cut = self
+                .segment_cut
+                .map(|way| format!(" 区切り:{way}"))
+                .unwrap_or_default();
+            return format!(
+                "{} {shown} 文節{}/{}{cut}",
+                self.segment_outline(),
+                left.len() + 1,
+                left.len() + 1 + right.len()
+            );
+        }
         if self.state.reading() == Some(shown) {
             return self.aux_reading();
         }
@@ -243,7 +267,9 @@ impl InputMethodEngine {
     /// and a selected predictive candidate carries a reading of its own.
     /// Both cases keep `shown` as it is.
     fn conversion_chunk_reading(&self, shown: &str) -> Option<String> {
-        if !matches!(self.state.filter(), None | Some(CandidateSource::Model)) {
+        if !matches!(self.state.filter(), None | Some(CandidateSource::Model))
+            || self.state.is_segmented()
+        {
             return None;
         }
         let reading = self.state.reading().filter(|r| *r == shown)?;

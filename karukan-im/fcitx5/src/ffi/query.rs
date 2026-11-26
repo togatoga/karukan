@@ -34,6 +34,21 @@ pub extern "C" fn karukan_engine_get_preedit_caret(engine: *const KarukanEngine)
     engine.preedit.caret_bytes as c_uint
 }
 
+/// Get where the focused segment starts in the preedit, in bytes
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_get_preedit_focus_start(engine: *const KarukanEngine) -> c_uint {
+    let engine = ffi_ref!(engine, 0);
+    engine.preedit.focus_bytes.0 as c_uint
+}
+
+/// Get the focused segment's length in bytes; 0 when the preedit has no
+/// segment to set apart
+#[unsafe(no_mangle)]
+pub extern "C" fn karukan_engine_get_preedit_focus_len(engine: *const KarukanEngine) -> c_uint {
+    let engine = ffi_ref!(engine, 0);
+    engine.preedit.focus_bytes.1 as c_uint
+}
+
 /// Check if there's a commit pending
 #[unsafe(no_mangle)]
 pub extern "C" fn karukan_engine_has_commit(engine: *const KarukanEngine) -> c_int {

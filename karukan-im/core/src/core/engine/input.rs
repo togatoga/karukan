@@ -255,6 +255,12 @@ impl InputMethodEngine {
                 Keysym::KEY_T | Keysym::KEY_T_UPPER => {
                     return self.start_filtered_conversion(FilterDirection::Forward);
                 }
+                // Ctrl+S: convert and cut into segments in one press, so
+                // the live conversion on screen is split without a Space
+                // first.
+                Keysym::KEY_S | Keysym::KEY_S_UPPER if self.segments_apply() => {
+                    return self.convert_and_split();
+                }
                 _ => {}
             }
             // Ctrl+Y/U/I/O: jump straight to one source's view.

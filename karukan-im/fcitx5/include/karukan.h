@@ -104,6 +104,14 @@ uint32_t karukan_engine_get_preedit_len(const KarukanEngine* engine);
  */
 uint32_t karukan_engine_get_preedit_caret(const KarukanEngine* engine);
 
+/*
+ * Get the focused segment of the preedit as a byte range: where it starts,
+ * and its length. The length is 0 when the preedit has no segment to set
+ * apart (while composing, or a conversion that is a single segment).
+ */
+uint32_t karukan_engine_get_preedit_focus_start(const KarukanEngine* engine);
+uint32_t karukan_engine_get_preedit_focus_len(const KarukanEngine* engine);
+
 /* --- Commit text --- */
 
 /*

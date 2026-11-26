@@ -113,8 +113,6 @@ impl InputMethodEngine {
         };
         let view = self.source_view(next, &reading);
         let list = self.settle_candidates(view);
-        let selected = list.selected_text().unwrap_or(&reading).to_string();
-        let preedit = Preedit::with_text_highlighted(&selected);
         // The aux leads with what the user typed, tail included — typing
         // refines the view in place, and the selected candidate's own
         // reading would otherwise be the only thing on the line, leaving no
@@ -128,15 +126,17 @@ impl InputMethodEngine {
             _ => typed,
         };
         if let InputState::Conversion {
-            filter,
-            candidates,
-            preedit: state_preedit,
-            ..
+            filter, candidates, ..
         } = &mut self.state
         {
             *filter = Some(next);
             *candidates = list.clone();
-            *state_preedit = preedit.clone();
+        }
+        // After the assignment too: the preedit is every segment's text
+        // around the focused one's selection.
+        let preedit = self.conversion_preedit();
+        if let Some(p) = self.state.preedit_mut() {
+            *p = preedit.clone();
         }
         debug!("candidate filter → {:?}", next);
         // After the state assignment: the aux header reads the active filter.
@@ -156,8 +156,24 @@ impl InputMethodEngine {
         // model and rewriter cannot consume a tail and use the settled
         // `reading` — the exact text Enter commits.
         let (base, pending) = self.live_query_split(reading);
+        let mut view = self.source_candidates(source, reading, &base, &pending);
+        // A segment's reading is fixed: an entry reading longer than it is
+        // not an answer to it.
+        if self.state.is_segmented() {
+            view.retain(|c| c.reading.as_deref().is_none_or(|r| r == reading));
+        }
+        view
+    }
+
+    fn source_candidates(
+        &mut self,
+        source: CandidateSource,
+        reading: &str,
+        base: &str,
+        pending: &str,
+    ) -> Vec<Candidate> {
         match source {
-            CandidateSource::Learning => self.lookup_learning_history(&base, &pending),
+            CandidateSource::Learning => self.lookup_learning_history(base, pending),
             // One dictionary view over both dictionaries: usually the user
             // just wants to look the reading up, not to pick which book it
             // comes from. `search_dictionaries` puts their own entries first
@@ -168,9 +184,9 @@ impl InputMethodEngine {
             // A paged dictionary browser wants everything: uncapped, and
             // predictive from the first char (no flood guard).
             CandidateSource::UserDictionary | CandidateSource::Dictionary => self
-                .search_dictionaries(&base, &pending, usize::MAX, usize::MAX, 1, None)
+                .search_dictionaries(base, pending, usize::MAX, usize::MAX, 1, None)
                 .into_candidates()
-                .map(|ac| ac.into_candidate(&base))
+                .map(|ac| ac.into_candidate(base))
                 .collect(),
             CandidateSource::Model => self.model_source_view(reading),
             // Rewriter variants regenerate from the reading; the plain kana
@@ -232,7 +248,9 @@ impl InputMethodEngine {
     /// the composition (あk|い settles to あkい, never あいか…); otherwise
     /// fall back to the settled `reading` with no tail.
     fn live_query_split(&self, reading: &str) -> (String, String) {
-        if self.input_buf.cursor() == self.input_buf.char_count() {
+        // A segment is a stretch of the settled reading: the buffer's tail
+        // is not its tail.
+        if !self.state.is_segmented() && self.input_buf.cursor() == self.input_buf.char_count() {
             (self.input_buf.reading(), self.input_buf.pending())
         } else {
             (reading.to_string(), String::new())

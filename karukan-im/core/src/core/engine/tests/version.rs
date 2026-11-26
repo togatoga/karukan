@@ -67,6 +67,8 @@ fn committing_the_version_records_no_learning() {
         candidates: CandidateList::new(vec![version]),
         reading: "ばーじょん".to_string(),
         filter: None,
+        left: Vec::new(),
+        right: Vec::new(),
     };
 
     let result = engine.process_key(&press_key(Keysym::RETURN));
