@@ -83,7 +83,7 @@ fn a_pick_rewrites_the_word_inside_a_sentence() {
             .any(|a| matches!(a, EngineAction::Commit(t) if t == "Anthropicのモデル"))
     );
     // Committed as shown, the rewrite is only accepted.
-    let cache = engine.learning.as_ref().unwrap();
+    let cache = engine.learning_cache().unwrap();
     assert!((cache.score("あんそろぴっく", "Anthropic", "〓〓") - 1.1).abs() < 1e-3);
 }
 
@@ -123,9 +123,10 @@ fn picking_the_model_text_back_undoes_the_rewrite() {
 fn the_context_picks_between_rewrites() {
     let mut engine = engine_with_learned("__none__", "__none__");
     engine.live.enabled = true;
-    let cache = engine.learning.as_mut().unwrap();
+    let mut cache = engine.learning_cache().unwrap();
     cache.record("かいとう", "解答", "試験の", Evidence::Chosen, 1.0);
     cache.record("かいとう", "回答", "質問へ", Evidence::Chosen, 1.0);
+    drop(cache);
     for (before, expected) in [("試験の", "解答"), ("質問へ", "回答")] {
         seed_model_cache(&mut engine, "カイトウ", before, &["回答"]);
         engine.set_surrounding_context(before, "");
@@ -173,7 +174,7 @@ fn chopsticks_engine() -> InputMethodEngine {
 }
 
 fn record(engine: &mut InputMethodEngine, reading: &str, surface: &str, before: &str, e: Evidence) {
-    let cache = engine.learning.as_mut().unwrap();
+    let mut cache = engine.learning_cache().unwrap();
     cache.record(reading, surface, before, e, 1.0);
 }
 
@@ -259,7 +260,7 @@ fn ctrl_backspace_on_the_rewrite_forgets_what_made_it() {
         Some("ご飯を箸で")
     );
     engine.process_key(&press_ctrl(Keysym::BACKSPACE));
-    assert!(!engine.learning.as_ref().unwrap().contains_reading("はし"));
+    assert!(!engine.learning_cache().unwrap().contains_reading("はし"));
     engine.process_key(&press_key(Keysym::ESCAPE));
     engine.process_key(&press_key(Keysym::ESCAPE));
     engine.process_key(&press_key(Keysym::ESCAPE));

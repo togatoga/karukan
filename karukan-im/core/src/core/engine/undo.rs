@@ -53,7 +53,7 @@ pub(super) fn is_plain_backspace(key: &KeyEvent) -> bool {
 impl InputMethodEngine {
     /// Put back every unit `undo` saved, newest first.
     pub(super) fn revert_learning(&mut self, undo: LearningUndo) {
-        let Some(cache) = &mut self.learning else {
+        let Some(mut cache) = self.learning_cache() else {
             return;
         };
         for (reading, surface, snapshot) in undo.snapshots.into_iter().rev() {

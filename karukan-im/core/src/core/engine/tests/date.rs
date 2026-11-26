@@ -105,7 +105,9 @@ fn committing_a_date_candidate_records_no_learning() {
     // priority, so Enter on a date candidate must record nothing.
     let settings = Settings::default();
     let mut engine = date_engine(settings.date.clone(), "きょう");
-    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(
+        LearningCache::new(LearningConfig::default()),
+    )));
     let date = engine
         .lookup_rewriter_variants("きょう")
         .into_iter()
@@ -133,8 +135,7 @@ fn committing_a_date_candidate_records_no_learning() {
     );
     assert!(
         engine
-            .learning
-            .as_ref()
+            .learning_cache()
             .unwrap()
             .lookup("きょう", "")
             .is_empty(),

@@ -56,7 +56,9 @@ fn version_heads_the_rewriter_view() {
 #[test]
 fn committing_the_version_records_no_learning() {
     let mut engine = version_engine("ばーじょん");
-    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(
+        LearningCache::new(LearningConfig::default()),
+    )));
     let version = engine
         .lookup_rewriter_variants("ばーじょん")
         .into_iter()
@@ -83,8 +85,7 @@ fn committing_the_version_records_no_learning() {
     );
     assert!(
         engine
-            .learning
-            .as_ref()
+            .learning_cache()
             .unwrap()
             .lookup("ばーじょん", "")
             .is_empty(),

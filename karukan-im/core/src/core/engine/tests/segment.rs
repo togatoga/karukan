@@ -420,7 +420,7 @@ fn ctrl_s_while_typing_cuts_what_is_on_screen_not_the_history() {
 fn typed_university_with_history() -> InputMethodEngine {
     let mut engine = engine_with_learned("わせだだいがくにいく", "ワセダ大学に行く");
     engine.live.enabled = true;
-    if let Some(cache) = engine.learning.as_mut() {
+    if let Some(mut cache) = engine.learning_cache() {
         cache.record(
             "わせだだいがくにいくよ",
             "早稲田大学に行くよ",

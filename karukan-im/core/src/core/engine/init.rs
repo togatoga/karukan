@@ -1,6 +1,7 @@
 //! Engine initialization (model loading, dictionary setup)
 
-use std::sync::mpsc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError, Weak, mpsc};
 
 use anyhow::{Context, Result};
 use karukan_engine::ModelSource;
@@ -18,6 +19,55 @@ use super::*;
 /// re-merged all dictionaries.
 static USER_DICT_CACHE: std::sync::OnceLock<Option<std::sync::Arc<Dictionary>>> =
     std::sync::OnceLock::new();
+
+/// The learning cache an engine reads and records into, shared by every
+/// engine of the process that learns into the same file.
+pub(super) type SharedLearning = Arc<Mutex<LearningCache>>;
+
+/// The learning caches alive in this process, one per file. fcitx5 runs an
+/// engine per input field: with a copy each, learning in one field never
+/// reached the others, and whichever saved last wrote over the rest. Held
+/// weakly, so once every engine on a file is gone the next one reads the
+/// file again, saved by the last of them.
+static SHARED_LEARNING: Mutex<Vec<(PathBuf, Weak<Mutex<LearningCache>>)>> = Mutex::new(Vec::new());
+
+/// The cache for `path`: the one engines of this process already share,
+/// or else loaded from the file (empty when there is none yet).
+pub(super) fn shared_learning(path: &Path, config: LearningConfig) -> SharedLearning {
+    let mut caches = SHARED_LEARNING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    caches.retain(|(_, cache)| cache.strong_count() > 0);
+    if let Some(cache) = caches
+        .iter()
+        .find(|(p, _)| p == path)
+        .and_then(|(_, cache)| cache.upgrade())
+    {
+        return cache;
+    }
+    let cache = if path.exists() {
+        match LearningCache::load(path, config) {
+            Ok(cache) => {
+                debug!(
+                    "Learning cache loaded from {:?} ({} entries)",
+                    path,
+                    cache.entry_count()
+                );
+                cache
+            }
+            Err(e) => {
+                debug!("Failed to load learning cache from {:?}: {}", path, e);
+                LearningCache::new(config)
+            }
+        }
+    } else {
+        debug!("Learning cache not found at {:?}, starting empty", path);
+        LearningCache::new(config)
+    };
+    let cache = Arc::new(Mutex::new(cache));
+    caches.push((path.to_path_buf(), Arc::downgrade(&cache)));
+    cache
+}
 
 /// Converters produced by the background model-loading thread, handed to the
 /// engine through the `model_loading` channel.
@@ -212,41 +262,22 @@ impl InputMethodEngine {
 
     /// Initialize the learning cache from disk.
     ///
-    /// Loads `~/.local/share/karukan-im/learning.tsv` if it exists.
-    /// If the file doesn't exist, creates an empty in-memory cache.
-    /// `config.max_surface_chars` caps the surface length `record` accepts;
-    /// entries already on disk are loaded regardless (they can be removed
-    /// with Ctrl+Delete or by eviction).
+    /// Shares the cache other engines of this process already hold for
+    /// `~/.local/share/karukan-im/learning.tsv` ([`shared_learning`]), or
+    /// loads the file, or starts empty. `config.max_surface_chars` caps the
+    /// surface length `record` accepts; entries already on disk are loaded
+    /// regardless (they can be removed with Ctrl+Delete or by eviction).
     pub fn init_learning_cache(&mut self, enabled: bool, config: LearningConfig) {
         if !enabled || self.learning.is_some() {
             return;
         }
-
-        let cache = match Settings::learning_file() {
-            Some(path) if path.exists() => match LearningCache::load(&path, config) {
-                Ok(cache) => {
-                    debug!(
-                        "Learning cache loaded from {:?} ({} entries)",
-                        path,
-                        cache.entry_count()
-                    );
-                    cache
-                }
-                Err(e) => {
-                    debug!("Failed to load learning cache from {:?}: {}", path, e);
-                    LearningCache::new(config)
-                }
-            },
-            Some(path) => {
-                debug!("Learning cache not found at {:?}, starting empty", path);
-                LearningCache::new(config)
-            }
+        self.learning = Some(match Settings::learning_file() {
+            Some(path) => shared_learning(&path, config),
             None => {
                 debug!("Could not determine learning cache path");
-                LearningCache::new(config)
+                Arc::new(Mutex::new(LearningCache::new(config)))
             }
-        };
-        self.learning = Some(cache);
+        });
     }
 
     /// Initialize user dictionaries by scanning the user dictionary directory.

@@ -382,7 +382,7 @@ impl InputMethodEngine {
                 }
                 // Only what was picked heads the list: what was merely
                 // committed as shown is the model's output again.
-                let picked = self.learning.as_ref().is_some_and(|cache| {
+                let picked = self.learning_cache().is_some_and(|cache| {
                     cache.picked(c.reading.as_deref().unwrap_or(reading), &c.text)
                 });
                 if !picked {
@@ -507,7 +507,7 @@ impl InputMethodEngine {
     }
 
     fn lookup_learning(&self, reading: &str, pending: &str, max: usize) -> Vec<Candidate> {
-        let Some(cache) = &self.learning else {
+        let Some(cache) = self.learning_cache() else {
             return vec![];
         };
         let constraint = self.tail_constraint(pending);
@@ -606,7 +606,7 @@ impl InputMethodEngine {
     /// the single-kanji rows are ranked (`Rewriter::is_catalog`), so ﾀｶ
     /// and the symbols stay where the chain puts them.
     fn rank_by_use(&self, variants: &mut [RewriteOutput]) {
-        let Some(learning) = &self.learning else {
+        let Some(learning) = self.learning_cache() else {
             return;
         };
         let scores = learning.surface_scores(variants.iter().map(|(text, _)| text.as_str()));
@@ -991,7 +991,7 @@ impl InputMethodEngine {
                 .collect(),
             _ => Vec::new(),
         };
-        let removed = self.learning.as_mut().is_some_and(|cache| {
+        let removed = self.learning_cache().is_some_and(|mut cache| {
             let mut removed = cache.remove_suggestion(&reading, &surface);
             for r in &rewrites {
                 removed |= cache.remove_suggestion(&r.reading, &r.text);

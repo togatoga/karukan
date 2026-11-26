@@ -218,7 +218,10 @@ impl InputMethodEngine {
         if self.mode.current() == InputMode::Emoji {
             return;
         }
-        if let Some(cache) = &mut self.learning {
+        if let Some(shared) = self.learning.clone() {
+            let mut cache = shared
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             for l in lessons {
                 // Saved first, so a Backspace right after can take it back.
                 self.learning_undo
@@ -325,7 +328,7 @@ impl InputMethodEngine {
         if self.mode.current() != InputMode::Hiragana {
             return (converted, Vec::new());
         }
-        let Some(cache) = &self.learning else {
+        let Some(cache) = self.learning_cache() else {
             return (converted, Vec::new());
         };
         // Most chunks have nothing learned in them: found without cutting.
@@ -334,6 +337,7 @@ impl InputMethodEngine {
             (i + 2..=chars.len())
                 .any(|j| cache.contains_reading(&chars[i..j].iter().collect::<String>()))
         });
+        drop(cache);
         if !learned_inside {
             return (converted, Vec::new());
         }
@@ -411,7 +415,7 @@ impl InputMethodEngine {
     /// [`REWRITE_MARGIN`]). Never for a single char of reading, where one
     /// kana is too little to tell words apart by.
     fn preferred(&self, reading: &str, text: &str, preceding: &str) -> Option<String> {
-        let cache = self.learning.as_ref()?;
+        let cache = self.learning_cache()?;
         if reading.chars().count() < 2 {
             return None;
         }
@@ -535,7 +539,7 @@ impl InputMethodEngine {
     /// summed over the segments it cuts into.
     fn history_score(&mut self, reading: &str, text: &str, preceding: &str) -> f64 {
         let pieces = self.align(reading, text);
-        let Some(cache) = &self.learning else {
+        let Some(cache) = self.learning_cache() else {
             return 0.0;
         };
         let mut read = String::new();

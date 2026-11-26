@@ -88,8 +88,7 @@ fn kana_forms_are_learned_alphanumerics_are_not() {
     assert_eq!(committed(&result), Some("kai"));
     assert!(
         engine
-            .learning
-            .as_ref()
+            .learning_cache()
             .unwrap()
             .lookup("かい", "")
             .is_empty()
@@ -201,7 +200,9 @@ fn shared_surface_takes_the_pressed_forms_source() {
     // Direct input reads the same as kana and alphanumeric: the row F10
     // selects must still be the non-learnable alphanumeric one.
     let mut engine = InputMethodEngine::new();
-    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(
+        LearningCache::new(LearningConfig::default()),
+    )));
     engine.process_key(&press_shift('L'));
     type_keys(&mut engine, "inux");
     engine.process_key(&press_key(Keysym::F10));
@@ -215,8 +216,7 @@ fn shared_surface_takes_the_pressed_forms_source() {
     engine.process_key(&press_key(Keysym::RETURN));
     assert!(
         engine
-            .learning
-            .as_ref()
+            .learning_cache()
             .unwrap()
             .lookup("Linux", "")
             .is_empty()

@@ -398,8 +398,7 @@ fn test_learning_filter_shows_full_history() {
     let mut engine = engine_with_learned("あい", "愛");
     for surface in ["藍", "相", "合い", "間"] {
         engine
-            .learning
-            .as_mut()
+            .learning_cache()
             .unwrap()
             .record("あい", surface, "", Evidence::Chosen, 1.0);
     }
@@ -423,8 +422,7 @@ fn test_learning_delete_keeps_the_filter() {
     // last one leaves an empty 「候補なし」 view, still filtered.
     let mut engine = engine_with_learned("あい", "愛");
     engine
-        .learning
-        .as_mut()
+        .learning_cache()
         .unwrap()
         .record("あい", "藍", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
@@ -500,13 +498,11 @@ fn test_delete_keeps_cursor_position() {
     // consecutive deletes chew through the list without jumping to the top.
     let mut engine = engine_with_learned("あい", "愛");
     engine
-        .learning
-        .as_mut()
+        .learning_cache()
         .unwrap()
         .record("あい", "藍", "", Evidence::Chosen, 1.0);
     engine
-        .learning
-        .as_mut()
+        .learning_cache()
         .unwrap()
         .record("あい", "相", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
@@ -561,8 +557,7 @@ fn test_pending_tail_narrows_the_learning_view() {
     // reach stays.
     let mut engine = engine_with_learned("あい", "愛");
     engine
-        .learning
-        .as_mut()
+        .learning_cache()
         .unwrap()
         .record("あいか", "愛香", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));

@@ -167,8 +167,9 @@ pub struct InputMethodEngine {
     shown_suggestions: CandidateList,
     /// Dictionaries (system, user)
     dicts: Dictionaries,
-    /// Learning cache (user conversion history)
-    learning: Option<LearningCache>,
+    /// Learning cache (user conversion history), shared with the other
+    /// engines of the process (`init::shared_learning`)
+    learning: Option<init::SharedLearning>,
     /// What the last commit taught, as the units stood before it, so a
     /// Backspace right after the commit can take it back. Kept only until
     /// the next key: see `dispatch_key`.
@@ -784,9 +785,19 @@ impl InputMethodEngine {
             .with_action(EngineAction::HideAuxText)
     }
 
+    /// The learning cache, locked for this use; None when learning is off.
+    fn learning_cache(&self) -> Option<std::sync::MutexGuard<'_, LearningCache>> {
+        let shared = self.learning.as_ref()?;
+        Some(
+            shared
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
     /// Save the learning cache to disk if it has unsaved changes.
     pub fn save_learning(&mut self) {
-        if let Some(cache) = &mut self.learning
+        if let Some(mut cache) = self.learning_cache()
             && cache.is_dirty()
             && let Some(path) = Settings::learning_file()
         {

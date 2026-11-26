@@ -42,8 +42,7 @@ fn committed(result: &EngineResult) -> Option<String> {
 
 fn score(engine: &InputMethodEngine, reading: &str, surface: &str, preceding: &str) -> f64 {
     engine
-        .learning
-        .as_ref()
+        .learning_cache()
         .unwrap()
         .score(reading, surface, preceding)
 }
@@ -114,12 +113,13 @@ fn enter_on_the_live_conversion_accepts_the_whole_and_makes_no_chunk_units() {
     );
     // The chunks are the model's output: committing them as shown makes
     // no unit of them.
-    let cache = engine.learning.as_ref().unwrap();
+    let cache = engine.learning_cache().unwrap();
     assert!(!cache.contains_reading("きょうは"));
     assert!(!cache.contains_reading("いしゃにいく"));
+    drop(cache);
 
     // A chunk that is learned already is kept fresh, in its context.
-    engine.learning.as_mut().unwrap().record(
+    engine.learning_cache().unwrap().record(
         "いしゃにいく",
         "医者に行く",
         "きょうは",
@@ -178,12 +178,11 @@ fn a_split_conversion_teaches_the_segments_that_were_focused() {
     // Never focused: a guess, and nothing learned.
     assert!(
         !engine
-            .learning
-            .as_ref()
+            .learning_cache()
             .unwrap()
             .contains_reading("きょうは")
     );
-    assert!(!engine.learning.as_ref().unwrap().contains_reading("いく"));
+    assert!(!engine.learning_cache().unwrap().contains_reading("いく"));
     // The whole against what the conversion opened with.
     let whole = "きょうはいしゃにいく";
     assert_near(base(&engine, whole, "今日は慰謝に行く"), 1.0);
@@ -219,9 +218,10 @@ fn list_texts(engine: &InputMethodEngine) -> Vec<String> {
 fn the_history_is_read_in_the_context_typed_in() {
     for (before, expected) in [("質問へ", "回答"), ("試験の", "解答")] {
         let mut engine = engine_with_learned("__none__", "__none__");
-        let cache = engine.learning.as_mut().unwrap();
+        let mut cache = engine.learning_cache().unwrap();
         cache.record("かいとう", "解答", "試験の", Evidence::Chosen, 1.0);
         cache.record("かいとう", "回答", "質問へ", Evidence::Chosen, 1.0);
+        drop(cache);
         engine.set_surrounding_context(before, "");
         type_keys(&mut engine, "kaitou");
         engine.process_key(&press_key(Keysym::SPACE));
@@ -232,9 +232,10 @@ fn the_history_is_read_in_the_context_typed_in() {
 #[test]
 fn a_surface_replaced_more_than_picked_is_not_offered_from_the_history() {
     let mut engine = engine_with_learned("__none__", "__none__");
-    let cache = engine.learning.as_mut().unwrap();
+    let mut cache = engine.learning_cache().unwrap();
     cache.record("きのう", "機能", "", Evidence::Chosen, 1.0);
     cache.record("きのう", "機能", "", Evidence::Displaced, 2.0);
+    drop(cache);
     type_keys(&mut engine, "kinou");
     engine.process_key(&press_key(Keysym::SPACE));
     let list = engine.candidates().unwrap();
@@ -254,9 +255,10 @@ fn the_model_alternatives_are_ordered_by_their_segments_history() {
         "",
         &["今日は医者に行く", "今日は医者に逝く", "今日は慰謝に行く"],
     );
-    let cache = engine.learning.as_mut().unwrap();
     // Too little to rewrite the live conversion, enough to order by.
+    let mut cache = engine.learning_cache().unwrap();
     cache.record("いしゃに", "慰謝に", "", Evidence::Chosen, 0.25);
+    drop(cache);
     type_keys(&mut engine, "kyouhaishaniiku");
     engine.process_key(&press_key(Keysym::SPACE));
     // The head is what was on screen; the alternatives follow the history.

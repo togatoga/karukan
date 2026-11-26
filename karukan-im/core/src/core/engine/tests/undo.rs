@@ -7,21 +7,22 @@ use super::*;
 fn learning_engine() -> InputMethodEngine {
     let mut engine = InputMethodEngine::new();
     engine.converters.kanji = None;
-    engine.learning = Some(LearningCache::new(LearningConfig::default()));
+    engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(
+        LearningCache::new(LearningConfig::default()),
+    )));
     engine
 }
 
 /// The score with no context matching.
 fn base(engine: &InputMethodEngine, reading: &str, surface: &str) -> f64 {
     engine
-        .learning
-        .as_ref()
+        .learning_cache()
         .unwrap()
         .score(reading, surface, "〓〓")
 }
 
 fn learned_at_all(engine: &InputMethodEngine, reading: &str) -> bool {
-    engine.learning.as_ref().unwrap().contains_reading(reading)
+    engine.learning_cache().unwrap().contains_reading(reading)
 }
 
 /// Type `あい` and commit it with Enter.
@@ -87,8 +88,9 @@ fn backspace_takes_back_what_a_rewrite_was_given() {
         ]"#,
     )));
     seed_model_cache(&mut engine, "ハシデ", "", &["橋で"]);
-    let cache = engine.learning.as_mut().unwrap();
+    let mut cache = engine.learning_cache().unwrap();
     cache.record("はし", "箸", "", Evidence::Chosen, 1.0);
+    drop(cache);
     let before = base(&engine, "はし", "箸");
 
     type_keys(&mut engine, "hashide");
