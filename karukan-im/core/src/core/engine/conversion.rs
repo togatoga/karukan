@@ -192,6 +192,7 @@ impl InputMethodEngine {
         let preedit = Preedit::with_text_highlighted(&selected_text);
 
         self.segment_cut = None;
+        self.segment_ways = None;
         self.state = InputState::Conversion {
             preedit: preedit.clone(),
             candidates: candidates.clone(),

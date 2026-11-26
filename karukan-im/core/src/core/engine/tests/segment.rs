@@ -620,6 +620,26 @@ fn ctrl_s_again_cuts_the_next_way_and_round() {
 }
 
 #[test]
+fn ctrl_s_works_the_ways_out_once_per_text() {
+    let mut engine = converted_programming();
+    engine.process_key(&press_ctrl_s());
+    // With the dictionary gone the ways would come out differently: the
+    // next presses step through the ones already found.
+    engine.dicts.system = None;
+    engine.process_key(&press_ctrl_s());
+    engine.process_key(&press_ctrl_s());
+    assert_eq!(
+        segment_texts(&engine),
+        ["競技", "プログラミング", "を", "学ぶ"]
+    );
+
+    // A new conversion starts over.
+    engine.process_key(&press_key(Keysym::ESCAPE));
+    engine.process_key(&press_key(Keysym::SPACE));
+    assert!(engine.segment_ways.is_none());
+}
+
+#[test]
 fn ctrl_s_names_no_way_of_cutting_when_there_is_one() {
     let mut engine = converted_tower();
     engine.config.verbose = true;

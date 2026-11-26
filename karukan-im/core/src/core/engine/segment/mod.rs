@@ -22,6 +22,14 @@ use crate::core::state::Segment;
 
 use super::*;
 
+/// The ways to cut one text ([`InputMethodEngine::ways`]): each with its
+/// name for the aux line, in the order Ctrl+S steps through them.
+pub(super) struct Ways {
+    reading: String,
+    text: String,
+    cuts: Vec<(&'static str, Vec<Piece>)>,
+}
+
 /// Where the focus goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Focus {
@@ -113,25 +121,7 @@ impl InputMethodEngine {
                 segments.iter().map(Segment::text).collect(),
             ),
         };
-        let candidates = {
-            let words = self.word_lookup(&text);
-            let lexicon = Lexicon {
-                words: &words,
-                readings: &karukan_engine::single_kanji_readings,
-            };
-            [
-                ("辞書(最長)", self.cut(&reading, &text)),
-                ("字種", script_cut(&reading, &text, lexicon)),
-                ("辞書(最短)", finest_cut(&reading, &text, lexicon)),
-            ]
-        };
-        let mut ways: Vec<(&'static str, Vec<Piece>)> = Vec::new();
-        for (name, cut) in candidates {
-            // A way that cuts nothing, or as an earlier one does, is none.
-            if cut.len() > 1 && ways.iter().all(|(_, earlier)| *earlier != cut) {
-                ways.push((name, cut));
-            }
-        }
+        let ways = self.ways(&reading, &text);
         // From the whole, the first way; from one of them, the next, and
         // from the last the whole again; and the first from segments that
         // are none of them (one was resized).
@@ -142,23 +132,61 @@ impl InputMethodEngine {
                     .map(|p| p.reading.as_str())
                     .eq(segments.iter().map(|s| s.reading.as_str()))
         });
+        let count = ways.len();
         let next = match shown {
-            Some(at) if at + 1 == ways.len() => {
-                // Back to one segment over everything, with what is on
-                // screen at the head of its list.
-                self.put_segments(vec![Segment::unbuilt(reading, Some(text))], 0);
-                self.segment_cut = None;
-                return self.render_conversion();
-            }
-            Some(at) => at + 1,
-            None if ways.is_empty() => return EngineResult::consumed(),
-            None => 0,
+            Some(at) if at + 1 == count => None,
+            Some(at) => ways.get(at + 1).cloned(),
+            None => ways.first().cloned(),
         };
-        let (name, pieces) = ways[next].clone();
+        let Some((name, pieces)) = next else {
+            if shown.is_none() {
+                return EngineResult::consumed();
+            }
+            // Back to one segment over everything, with what is on screen
+            // at the head of its list.
+            self.put_segments(vec![Segment::unbuilt(reading, Some(text))], 0);
+            self.segment_cut = None;
+            return self.render_conversion();
+        };
         self.put_segments(pieces.into_iter().map(Segment::from).collect(), 0);
         // Named only when there is another way to switch to.
-        self.segment_cut = (ways.len() > 1).then_some(name);
+        self.segment_cut = (count > 1).then_some(name);
         self.render_conversion()
+    }
+
+    /// The ways to cut `text`, the conversion of `reading`, that cut it and
+    /// differ from one another. Kept for the conversion, so only the first
+    /// Ctrl+S on a text searches.
+    fn ways(&mut self, reading: &str, text: &str) -> &[(&'static str, Vec<Piece>)] {
+        let kept = |ways: &Ways| ways.reading == reading && ways.text == text;
+        if !self.segment_ways.as_ref().is_some_and(kept) {
+            let candidates = {
+                let words = self.word_lookup(text);
+                let lexicon = Lexicon {
+                    words: &words,
+                    readings: &karukan_engine::single_kanji_readings,
+                };
+                [
+                    ("辞書(最長)", self.cut(reading, text)),
+                    ("字種", script_cut(reading, text, lexicon)),
+                    ("辞書(最短)", finest_cut(reading, text, lexicon)),
+                ]
+            };
+            let mut cuts: Vec<(&'static str, Vec<Piece>)> = Vec::new();
+            for (name, cut) in candidates {
+                // A way that cuts nothing, or as an earlier one does, is
+                // none.
+                if cut.len() > 1 && cuts.iter().all(|(_, earlier)| *earlier != cut) {
+                    cuts.push((name, cut));
+                }
+            }
+            self.segment_ways = Some(Ways {
+                reading: reading.to_string(),
+                text: text.to_string(),
+                cuts,
+            });
+        }
+        self.segment_ways.as_ref().map_or(&[], |ways| &ways.cuts)
     }
 
     /// `text`, the conversion of `reading`, cut into segments: the

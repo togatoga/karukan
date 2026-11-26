@@ -176,6 +176,10 @@ pub struct InputMethodEngine {
     /// once the segments are no longer that cut (a new conversion, a
     /// resize).
     segment_cut: Option<&'static str>,
+    /// The ways Ctrl+S cuts the conversion it was last pressed in, so
+    /// stepping through them works each out once. Dropped with the
+    /// conversion.
+    segment_ways: Option<segment::Ways>,
 }
 
 impl InputMethodEngine {
@@ -206,6 +210,7 @@ impl InputMethodEngine {
             learning: None,
             model_loading: None,
             segment_cut: None,
+            segment_ways: None,
         }
     }
 
