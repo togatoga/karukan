@@ -141,10 +141,15 @@ fn starts_segment(text: &[char], i: usize, step: Step) -> bool {
         Step::Word | Step::Unknown => true,
         // So does a run of katakana or alphanumerics the dictionary did
         // not cover, at its first char. Hiragana and marks never do: they
-        // belong to the word before them.
+        // belong to the word before them. `ー` inside the run does not end
+        // it (コンピュータ).
         Step::Pin => {
             let is_word_char = |c: char| Script::of(c).is_word_char();
-            is_word_char(text[i]) && !is_word_char(text[i - 1])
+            let before = text[..i]
+                .iter()
+                .rev()
+                .find(|&&c| Script::of(c) != Script::ProlongedMark);
+            is_word_char(text[i]) && !before.is_some_and(|&c| is_word_char(c))
         }
     }
 }
@@ -612,6 +617,27 @@ mod tests {
         assert_eq!(
             split("これはくろーどです", "これはClaudeです"),
             "これは=これは|くろーどです=Claudeです"
+        );
+    }
+
+    #[test]
+    fn the_long_vowel_does_not_end_a_katakana_word() {
+        assert_eq!(
+            split("こんぴゅーたをつかう", "コンピュータを使う"),
+            "こんぴゅーたを=コンピュータを|つかう=使う"
+        );
+        assert_eq!(
+            split("らーめんをたべる", "ラーメンを食べる"),
+            "らーめんを=ラーメンを|たべる=食べる"
+        );
+        assert_eq!(
+            split("さーばーにつなぐ", "サーバーに繋ぐ"),
+            "さーばーに=サーバーに|つなぐ=繋ぐ"
+        );
+        // After hiragana it prolongs no word, and katakana starts one.
+        assert_eq!(
+            split("らーめんをたべる", "らーメンを食べる"),
+            "らー=らー|めんを=メンを|たべる=食べる"
         );
     }
 
