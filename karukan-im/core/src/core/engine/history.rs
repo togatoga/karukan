@@ -208,6 +208,51 @@ impl InputMethodEngine {
         lessons
     }
 
+    /// The text before what is being converted, for the history's
+    /// contexts: the segments before the focused one when split.
+    pub(super) fn learning_context(&self) -> String {
+        if self.state.is_segmented() {
+            self.segment_ctx(false)
+        } else {
+            self.truncate_context_for_api()
+        }
+    }
+
+    /// Order the model's alternatives by what the history says of their
+    /// pieces: each is cut against `reading` and the scores of its
+    /// segments summed, each after the text before it. The head stays: it
+    /// is what the live conversion showed.
+    pub(super) fn rank_model_candidates(&mut self, reading: &str, candidates: &mut [String]) {
+        if candidates.len() < 3 || self.learning.is_none() {
+            return;
+        }
+        let ctx = self.learning_context();
+        let mut scored: Vec<(f64, String)> = candidates[1..]
+            .iter()
+            .map(|text| (self.history_score(reading, text, &ctx), text.clone()))
+            .collect();
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (slot, (_, text)) in candidates[1..].iter_mut().zip(scored) {
+            *slot = text;
+        }
+    }
+
+    /// The history's score of `text` for `reading` after `preceding`,
+    /// summed over the segments it cuts into.
+    fn history_score(&mut self, reading: &str, text: &str, preceding: &str) -> f64 {
+        let pieces = self.align(reading, text);
+        let Some(cache) = &self.learning else {
+            return 0.0;
+        };
+        let mut before = preceding.to_string();
+        let mut total = 0.0;
+        for piece in pieces.iter() {
+            total += cache.score(&piece.reading, &piece.text, &before);
+            before.push_str(&piece.text);
+        }
+        total
+    }
+
     /// The composition committed as shown: the whole, and each chunk the
     /// model converted, `accepted`.
     pub(super) fn live_lessons(&self, reading: &str, text: &str) -> Vec<Lesson> {

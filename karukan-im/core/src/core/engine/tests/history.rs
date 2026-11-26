@@ -179,3 +179,63 @@ fn a_segment_kept_as_cut_is_confirmed() {
         0.4,
     );
 }
+
+fn list_texts(engine: &InputMethodEngine) -> Vec<String> {
+    engine
+        .candidates()
+        .unwrap()
+        .candidates()
+        .iter()
+        .map(|c| c.text.clone())
+        .collect()
+}
+
+#[test]
+fn the_history_is_read_in_the_context_typed_in() {
+    for (before, expected) in [("質問へ", "回答"), ("試験の", "解答")] {
+        let mut engine = engine_with_learned("__none__", "__none__");
+        let cache = engine.learning.as_mut().unwrap();
+        cache.record("かいとう", "解答", "試験の", Evidence::Chosen, 1.0);
+        cache.record("かいとう", "回答", "質問へ", Evidence::Chosen, 1.0);
+        engine.set_surrounding_context(before, "");
+        type_keys(&mut engine, "kaitou");
+        engine.process_key(&press_key(Keysym::SPACE));
+        assert_eq!(list_texts(&engine)[0], expected, "after {before}");
+    }
+}
+
+#[test]
+fn a_surface_replaced_more_than_picked_is_not_offered_from_the_history() {
+    let mut engine = engine_with_learned("__none__", "__none__");
+    let cache = engine.learning.as_mut().unwrap();
+    cache.record("きのう", "機能", "", Evidence::Chosen, 1.0);
+    cache.record("きのう", "機能", "", Evidence::Displaced, 2.0);
+    type_keys(&mut engine, "kinou");
+    engine.process_key(&press_key(Keysym::SPACE));
+    let list = engine.candidates().unwrap();
+    assert!(
+        list.candidates()
+            .iter()
+            .all(|c| !(c.text == "機能" && c.source == Some(CandidateSource::Learning)))
+    );
+}
+
+#[test]
+fn the_model_alternatives_are_ordered_by_their_segments_history() {
+    let mut engine = sentence_engine();
+    seed_model_cache(
+        &mut engine,
+        "キョウハイシャニイク",
+        "",
+        &["今日は医者に行く", "今日は医者に逝く", "今日は慰謝に行く"],
+    );
+    let cache = engine.learning.as_mut().unwrap();
+    cache.record("いしゃに", "慰謝に", "", Evidence::Chosen, 1.0);
+    type_keys(&mut engine, "kyouhaishaniiku");
+    engine.process_key(&press_key(Keysym::SPACE));
+    // The head is what was on screen; the alternatives follow the history.
+    assert_eq!(
+        list_texts(&engine)[..3],
+        ["今日は医者に行く", "今日は慰謝に行く", "今日は医者に逝く"]
+    );
+}

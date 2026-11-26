@@ -350,7 +350,8 @@ impl InputMethodEngine {
         // just means no model candidates: symbol-only and early keystrokes
         // still get dictionary/rewriter/fallback candidates. Loading here
         // synchronously would block the key-event thread on the download.
-        let candidates = self.model_candidates(reading, num_candidates);
+        let mut candidates = self.model_candidates(reading, num_candidates);
+        self.rank_model_candidates(reading, &mut candidates);
 
         let hiragana = reading.to_string();
         let katakana = karukan_engine::hiragana_to_katakana(reading);
@@ -496,11 +497,12 @@ impl InputMethodEngine {
         }
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut seen = HashSet::new();
+        let context = self.learning_context();
 
         // Exact match — only when no romaji tail is pending (an exact hit
         // on the base would ignore the typed tail)
         if pending.is_empty() {
-            for (surface, score) in cache.lookup(reading, "") {
+            for (surface, score) in cache.lookup(reading, &context) {
                 // Evidence against a surface (replaced more than picked)
                 // is no reason to offer it.
                 if candidates.len() >= max || score <= 0.0 {
@@ -519,7 +521,7 @@ impl InputMethodEngine {
 
         // Prefix match (predictive), narrowed to the kana the tail can
         // still become — mirrors the dictionary's expanded search
-        for (full_reading, surface, score) in cache.prefix_lookup(reading, "") {
+        for (full_reading, surface, score) in cache.prefix_lookup(reading, &context) {
             if candidates.len() >= max || score <= 0.0 {
                 break;
             }
