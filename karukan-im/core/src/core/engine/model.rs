@@ -385,7 +385,9 @@ impl InputMethodEngine {
         }
         let chars: Vec<char> = reading.chars().collect();
         let span_start = self.beam_span_start(&chars);
-        let prefix = self.convert_on_chunk_grid(&chars[..span_start], base_ctx, reading_before);
+        let span: String = chars[span_start..].iter().collect();
+        let prefix =
+            self.convert_on_chunk_grid(&chars[..span_start], base_ctx, reading_before, &span);
 
         // Nothing to beam (the reading ends outside Japanese): the grid
         // conversion is the only candidate.
@@ -403,7 +405,6 @@ impl InputMethodEngine {
         // that greedy IS the head, no separate pass. ParallelBeam runs it
         // alongside the light beam and puts it first, so the head costs no
         // extra wall time instead of a serial conversion before the beam.
-        let span: String = chars[span_start..].iter().collect();
         let lctx = self.lctx_for(base_ctx, &prefix);
         // An empty beam means the model produced nothing (unavailable, or a
         // conversion error), which is what "no model suggestion" means to
@@ -417,7 +418,8 @@ impl InputMethodEngine {
         if let Some(greedy) = tails.first().cloned() {
             let before: String = chars[..span_start].iter().collect();
             let before = format!("{reading_before}{before}");
-            let (rewritten, rewrites) = self.rewrite_from_history(&span, greedy, &before);
+            let (rewritten, rewrites) =
+                self.convert_with_history(&span, greedy, base_ctx, &prefix, &before, "");
             if !rewrites.is_empty() {
                 tails.insert(0, rewritten);
             }

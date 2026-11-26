@@ -447,7 +447,7 @@ impl InputMethodEngine {
             .map(|s| s.reading.as_str())
             .chain(self.state.reading())
             .collect();
-        let converted = self.convert_on_chunk_grid(rest, &ctx, &before);
+        let converted = self.convert_on_chunk_grid(rest, &ctx, &before, "");
         self.chunk_breaks = breaks;
         let text = self.settle_text(&converted);
         self.cut(&reading, &text)

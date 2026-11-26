@@ -18,7 +18,7 @@ fn base(engine: &InputMethodEngine, reading: &str, surface: &str) -> f64 {
     engine
         .learning_cache()
         .unwrap()
-        .score(reading, surface, "〓〓")
+        .score(reading, surface, "〓〓", "")
 }
 
 fn learned_at_all(engine: &InputMethodEngine, reading: &str) -> bool {
@@ -83,25 +83,27 @@ fn backspace_takes_back_what_a_rewrite_was_given() {
     engine.live.enabled = true;
     engine.dicts.system = Some(std::sync::Arc::new(dict_from_json(
         r#"[
+            {"reading":"ごはん","candidates":[{"surface":"ご飯","score":1.0}]},
+            {"reading":"を","candidates":[{"surface":"を","score":1.0}]},
             {"reading":"はし","candidates":[{"surface":"橋","score":1.0}]},
             {"reading":"で","candidates":[{"surface":"で","score":1.0}]}
         ]"#,
     )));
-    seed_model_cache(&mut engine, "ハシデ", "", &["橋で"]);
+    seed_model_cache(&mut engine, "ゴハンヲハシデ", "", &["ご飯を橋で"]);
     let mut cache = engine.learning_cache().unwrap();
-    cache.record("はし", "箸", "", Evidence::Chosen, 1.0);
+    cache.record("はし", "箸", "ごはんを", "", Evidence::Chosen, 1.0);
     drop(cache);
     let before = base(&engine, "はし", "箸");
 
-    type_keys(&mut engine, "hashide");
-    assert_eq!(engine.preedit().unwrap().text(), "箸で");
+    type_keys(&mut engine, "gohanwohashide");
+    assert_eq!(engine.preedit().unwrap().text(), "ご飯を箸で");
     engine.process_key(&press_key(Keysym::RETURN));
     assert!(base(&engine, "はし", "箸") > before);
-    assert!(learned_at_all(&engine, "はしで"));
+    assert!(learned_at_all(&engine, "ごはんをはしで"));
 
     engine.process_key(&press_key(Keysym::BACKSPACE));
     assert_eq!(base(&engine, "はし", "箸"), before);
-    assert!(!learned_at_all(&engine, "はしで"));
+    assert!(!learned_at_all(&engine, "ごはんをはしで"));
 }
 
 #[test]

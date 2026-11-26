@@ -400,7 +400,7 @@ fn test_learning_filter_shows_full_history() {
         engine
             .learning_cache()
             .unwrap()
-            .record("あい", surface, "", Evidence::Chosen, 1.0);
+            .record("あい", surface, "", "", Evidence::Chosen, 1.0);
     }
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -424,7 +424,7 @@ fn test_learning_delete_keeps_the_filter() {
     engine
         .learning_cache()
         .unwrap()
-        .record("あい", "藍", "", Evidence::Chosen, 1.0);
+        .record("あい", "藍", "", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -500,11 +500,11 @@ fn test_delete_keeps_cursor_position() {
     engine
         .learning_cache()
         .unwrap()
-        .record("あい", "藍", "", Evidence::Chosen, 1.0);
+        .record("あい", "藍", "", "", Evidence::Chosen, 1.0);
     engine
         .learning_cache()
         .unwrap()
-        .record("あい", "相", "", Evidence::Chosen, 1.0);
+        .record("あい", "相", "", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));
@@ -559,7 +559,7 @@ fn test_pending_tail_narrows_the_learning_view() {
     engine
         .learning_cache()
         .unwrap()
-        .record("あいか", "愛香", "", Evidence::Chosen, 1.0);
+        .record("あいか", "愛香", "", "", Evidence::Chosen, 1.0);
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
     engine.process_key(&press_key(Keysym::SPACE));

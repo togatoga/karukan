@@ -44,7 +44,7 @@ fn score(engine: &InputMethodEngine, reading: &str, surface: &str, preceding: &s
     engine
         .learning_cache()
         .unwrap()
-        .score(reading, surface, preceding)
+        .score(reading, surface, preceding, "")
 }
 
 /// The score with no context matching: what holds anywhere.
@@ -76,9 +76,14 @@ fn picking_another_candidate_is_chosen_and_the_default_displaced() {
     assert_near(base(&engine, whole, "今日は医者に行く"), -1.0);
     // The one word that changed is taught too, at half weight, with the
     // reading before it as its context.
-    assert_near(base(&engine, "いしゃに", "慰謝に"), 0.5);
-    assert_near(score(&engine, "いしゃに", "慰謝に", "きょうは"), 1.0);
-    assert_near(base(&engine, "いしゃに", "医者に"), -0.5);
+    // The word that changed, without the に both share, as a rule with
+    // the readings around it.
+    assert_near(base(&engine, "いしゃ", "慰謝"), 1.0);
+    let cache = engine.learning_cache().unwrap();
+    assert_near(cache.score("いしゃ", "慰謝", "きょうは", "にいく"), 2.0);
+    assert_eq!(cache.rules("いしゃ")[0].right, "にいく");
+    drop(cache);
+    assert_near(base(&engine, "いしゃ", "医者"), -1.0);
     assert_eq!(base(&engine, "きょうは", "今日は"), 0.0);
 }
 
@@ -123,6 +128,7 @@ fn enter_on_the_live_conversion_accepts_the_whole_and_makes_no_chunk_units() {
         "いしゃにいく",
         "医者に行く",
         "きょうは",
+        "",
         Evidence::Confirmed,
         1.0,
     );
@@ -171,10 +177,10 @@ fn a_split_conversion_teaches_the_segments_that_were_focused() {
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("今日は慰謝に行く"));
 
-    assert_near(base(&engine, "いしゃに", "慰謝に"), 1.0);
-    assert_near(base(&engine, "いしゃに", "医者に"), -1.0);
+    assert_near(base(&engine, "いしゃ", "慰謝"), 1.0);
+    assert_near(base(&engine, "いしゃ", "医者"), -1.0);
     // In the context of the segment before it, by its reading.
-    assert_near(score(&engine, "いしゃに", "慰謝に", "きょうは"), 2.0);
+    assert_near(score(&engine, "いしゃ", "慰謝", "きょうは"), 2.0);
     // Never focused: a guess, and nothing learned.
     assert!(
         !engine
@@ -219,8 +225,8 @@ fn the_history_is_read_in_the_context_typed_in() {
     for (before, expected) in [("質問へ", "回答"), ("試験の", "解答")] {
         let mut engine = engine_with_learned("__none__", "__none__");
         let mut cache = engine.learning_cache().unwrap();
-        cache.record("かいとう", "解答", "試験の", Evidence::Chosen, 1.0);
-        cache.record("かいとう", "回答", "質問へ", Evidence::Chosen, 1.0);
+        cache.record("かいとう", "解答", "試験の", "", Evidence::Chosen, 1.0);
+        cache.record("かいとう", "回答", "質問へ", "", Evidence::Chosen, 1.0);
         drop(cache);
         engine.set_surrounding_context(before, "");
         type_keys(&mut engine, "kaitou");
@@ -233,8 +239,8 @@ fn the_history_is_read_in_the_context_typed_in() {
 fn a_surface_replaced_more_than_picked_is_not_offered_from_the_history() {
     let mut engine = engine_with_learned("__none__", "__none__");
     let mut cache = engine.learning_cache().unwrap();
-    cache.record("きのう", "機能", "", Evidence::Chosen, 1.0);
-    cache.record("きのう", "機能", "", Evidence::Displaced, 2.0);
+    cache.record("きのう", "機能", "", "", Evidence::Chosen, 1.0);
+    cache.record("きのう", "機能", "", "", Evidence::Displaced, 2.0);
     drop(cache);
     type_keys(&mut engine, "kinou");
     engine.process_key(&press_key(Keysym::SPACE));
@@ -257,7 +263,7 @@ fn the_model_alternatives_are_ordered_by_their_segments_history() {
     );
     // Too little to rewrite the live conversion, enough to order by.
     let mut cache = engine.learning_cache().unwrap();
-    cache.record("いしゃに", "慰謝に", "", Evidence::Chosen, 0.25);
+    cache.record("いしゃに", "慰謝に", "", "", Evidence::Chosen, 0.25);
     drop(cache);
     type_keys(&mut engine, "kyouhaishaniiku");
     engine.process_key(&press_key(Keysym::SPACE));

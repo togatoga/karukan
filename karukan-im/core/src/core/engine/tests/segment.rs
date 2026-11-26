@@ -182,7 +182,8 @@ fn enter_commits_every_segment_and_learns_the_chosen_ones() {
     assert!(engine.state().is_empty());
     // A segment that was focused is learned under its own reading: its
     // text was chosen from a list built for that reading.
-    assert_eq!(learned(&engine, "いしゃに"), ["慰謝に"]);
+    // The stretch that changed, its particle left to the context.
+    assert_eq!(learned(&engine, "いしゃ"), ["慰謝"]);
     // A segment never focused was cut out of the whole conversion: its
     // pairing with the reading is a guess, and teaches nothing.
     assert!(learned(&engine, "きょうは").is_empty());
@@ -424,6 +425,7 @@ fn typed_university_with_history() -> InputMethodEngine {
         cache.record(
             "わせだだいがくにいくよ",
             "早稲田大学に行くよ",
+            "",
             "",
             Evidence::Chosen,
             1.0,

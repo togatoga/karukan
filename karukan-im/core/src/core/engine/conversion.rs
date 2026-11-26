@@ -516,12 +516,12 @@ impl InputMethodEngine {
         }
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut seen = HashSet::new();
-        let context = self.learning_context();
+        let (left, right) = self.learning_context();
 
         // Exact match — only when no romaji tail is pending (an exact hit
         // on the base would ignore the typed tail)
         if pending.is_empty() {
-            for (surface, score) in cache.lookup(reading, &context) {
+            for (surface, score) in cache.lookup(reading, &left, &right) {
                 // Evidence against a surface (replaced more than picked)
                 // is no reason to offer it, nor is having been committed as
                 // shown; a longer reading below may still be predicted.
@@ -544,7 +544,7 @@ impl InputMethodEngine {
 
         // Prefix match (predictive), narrowed to the kana the tail can
         // still become — mirrors the dictionary's expanded search
-        for (full_reading, surface, score) in cache.prefix_lookup(reading, &context) {
+        for (full_reading, surface, score) in cache.prefix_lookup(reading, &left) {
             if candidates.len() >= max || score <= 0.0 {
                 break;
             }

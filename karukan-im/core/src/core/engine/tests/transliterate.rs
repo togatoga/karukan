@@ -90,7 +90,7 @@ fn kana_forms_are_learned_alphanumerics_are_not() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("かい", "")
+            .lookup("かい", "", "")
             .is_empty()
     );
 
@@ -218,7 +218,7 @@ fn shared_surface_takes_the_pressed_forms_source() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("Linux", "")
+            .lookup("Linux", "", "")
             .is_empty()
     );
 }

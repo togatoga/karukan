@@ -44,7 +44,7 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     let mut engine = InputMethodEngine::new();
     engine.converters.kanji = None;
     let mut cache = LearningCache::new(LearningConfig::default());
-    cache.record(reading, surface, "", Evidence::Chosen, 1.0);
+    cache.record(reading, surface, "", "", Evidence::Chosen, 1.0);
     engine.learning = Some(std::sync::Arc::new(std::sync::Mutex::new(cache)));
     engine
 }
@@ -55,7 +55,7 @@ fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
     engine
         .learning_cache()
         .unwrap()
-        .lookup(reading, "")
+        .lookup(reading, "", "")
         .into_iter()
         .filter(|(_, score)| *score > 0.0)
         .map(|(s, _)| s)

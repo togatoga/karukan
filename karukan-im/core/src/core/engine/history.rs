@@ -5,7 +5,11 @@
 //! ([`Shown`]): picking another candidate is `chosen` for it and
 //! `displaced` for the default, keeping the default after looking is
 //! `confirmed`, and committing the live conversion as it stood is only
-//! `accepted`.
+//! `accepted`. Each is recorded with the readings typed around it, and a
+//! pick so recorded is a rule: where those readings come round again, the
+//! picked text stands in for the model's ([`convert_with_history`]).
+//!
+//! [`convert_with_history`]: InputMethodEngine::convert_with_history
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -13,6 +17,9 @@ use std::rc::Rc;
 use karukan_engine::Evidence;
 
 use super::segment::Piece;
+use karukan_engine::Rule;
+use karukan_engine::learning::context_match;
+
 use super::types::{ComposingChunk, Rewrite};
 use super::*;
 use crate::core::candidate::{Candidate, CandidateSource};
@@ -23,16 +30,22 @@ use crate::core::state::{Segment, Shown};
 /// another is not enough to override it.
 const REWRITE_MARGIN: f64 = 0.3;
 
-/// Weight of the word-level evidence drawn out of a sentence-level pick.
-const STRETCH_WEIGHT: f64 = 0.5;
+/// Chars a rule's reading and the readings around it must agree on, all
+/// told, to apply: when the model's answer cuts into segments, which show
+/// where its words start, and when it does not (its kana rewritten, or left
+/// unconverted), where a wrong place is harder to rule out.
+const RULE_CHARS: usize = 4;
+const RULE_CHARS_UNCUT: usize = 6;
 
 /// Something a commit teaches.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Lesson {
     pub reading: String,
     pub text: String,
-    /// The text before it, for its context.
-    pub preceding: String,
+    /// The readings typed before and after it, for its context (the
+    /// editor's text before it when it starts the input).
+    pub left: String,
+    pub right: String,
     pub evidence: Evidence,
     pub weight: f64,
     /// Whether it may make a unit that is not there yet. Committing what
@@ -42,11 +55,12 @@ pub(super) struct Lesson {
 }
 
 impl Lesson {
-    fn new(reading: &str, text: &str, preceding: &str, evidence: Evidence) -> Self {
+    fn new(reading: &str, text: &str, left: &str, right: &str, evidence: Evidence) -> Self {
         Self {
             reading: reading.to_string(),
             text: text.to_string(),
-            preceding: preceding.to_string(),
+            left: left.to_string(),
+            right: right.to_string(),
             evidence,
             weight: 1.0,
             create: true,
@@ -54,12 +68,93 @@ impl Lesson {
     }
 
     /// `accepted` for a unit only if it is already learned.
-    fn reinforce(reading: &str, text: &str, preceding: &str) -> Self {
+    fn reinforce(reading: &str, text: &str, left: &str, right: &str) -> Self {
         Self {
             create: false,
-            ..Self::new(reading, text, preceding, Evidence::Accepted)
+            ..Self::new(reading, text, left, right, Evidence::Accepted)
         }
     }
+}
+
+/// `picked` chosen over `default`, both for `reading` typed between `left`
+/// and `right`. Kana both texts share with the reading at either end are
+/// the reading's own and go to the context, so what is learned is the
+/// stretch that changed: 部が → 分が teaches ぶ → 分 before が.
+fn pick_lessons(
+    reading: &str,
+    picked: &str,
+    default: &str,
+    left: &str,
+    right: &str,
+) -> [Lesson; 2] {
+    let r: Vec<char> = reading.chars().collect();
+    let p: Vec<char> = picked.chars().collect();
+    let d: Vec<char> = default.chars().collect();
+    let shortest = r.len().min(p.len()).min(d.len());
+    let kana = |c: char| matches!(c, '\u{3041}'..='\u{3096}');
+    let lead = (0..shortest.saturating_sub(1))
+        .take_while(|&k| kana(r[k]) && r[k] == p[k] && r[k] == d[k])
+        .count();
+    let tail = (1..shortest.saturating_sub(lead))
+        .take_while(|&k| {
+            let c = r[r.len() - k];
+            kana(c) && c == p[p.len() - k] && c == d[d.len() - k]
+        })
+        .count();
+    let mid = |v: &[char]| v[lead..v.len() - tail].iter().collect::<String>();
+    let left = format!("{left}{}", r[..lead].iter().collect::<String>());
+    let right = format!("{}{right}", r[r.len() - tail..].iter().collect::<String>());
+    let reading = mid(&r);
+    [
+        Lesson::new(&reading, &mid(&p), &left, &right, Evidence::Chosen),
+        Lesson::new(&reading, &mid(&d), &left, &right, Evidence::Displaced),
+    ]
+}
+
+/// A rule found in a chunk's reading: the stretch it covers (chars), the
+/// text it puts there, and how many chars it agrees on with its context.
+struct Hit {
+    start: usize,
+    end: usize,
+    agree: usize,
+    rule: Rule,
+    original: String,
+}
+
+/// The text `pieces` give the stretch `start..end` of their reading, when
+/// `start` is where a piece starts: the pieces up to `end`, and of the last
+/// one only what reads up to `end` when what reads past it is its own kana
+/// (部が for ぶ gives 部). None when the stretch cannot be told apart.
+fn text_of(pieces: &[Piece], start: usize, end: usize) -> Option<String> {
+    let mut at = 0;
+    let mut text = String::new();
+    for piece in pieces {
+        let len = piece.reading.chars().count();
+        let next = at + len;
+        if next <= start {
+            at = next;
+            continue;
+        }
+        if at < start {
+            return None;
+        }
+        if next <= end {
+            text.push_str(&piece.text);
+            if next == end {
+                return Some(text);
+            }
+        } else {
+            let excess: String = piece.reading.chars().skip(end - at).collect();
+            let kept = piece.text.strip_suffix(excess.as_str())?;
+            if kept.is_empty() {
+                return None;
+            }
+            text.push_str(kept);
+            return Some(text);
+        }
+        at = next;
+    }
+    None
 }
 
 /// The one stretch of reading where two cuts of the same reading differ.
@@ -115,52 +210,6 @@ pub(super) fn single_difference(a: &[Piece], b: &[Piece]) -> Option<Stretch> {
         before_reading.push_str(&group.0.reading);
     }
     found.filter(|_| stretches > 1)
-}
-
-/// A run of the conversion the history replaces: the stretch of it that is
-/// replaced, and how many kana after it stay.
-struct RunRewrite {
-    reading: String,
-    original: String,
-    replacement: String,
-    tail: usize,
-}
-
-impl RunRewrite {
-    /// What the run shows: the replacement, then the kana kept from `text`.
-    fn shown(&self, text: &str) -> String {
-        let count = text.chars().count();
-        let kept: String = text.chars().skip(count - self.tail).collect();
-        format!("{}{kept}", self.replacement)
-    }
-
-    fn into_rewrite(self, start: usize, preceding: String) -> Rewrite {
-        Rewrite {
-            start,
-            reading: self.reading,
-            original: self.original,
-            text: self.replacement,
-            preceding,
-        }
-    }
-}
-
-/// How many chars `text` ends in that are hiragana and the end of `reading`
-/// itself, short of all of `text`.
-fn kana_tail(reading: &str, text: &str) -> usize {
-    let matching = reading
-        .chars()
-        .rev()
-        .zip(text.chars().rev())
-        .take_while(|&(r, t)| r == t && matches!(t, '\u{3041}'..='\u{3096}'))
-        .count();
-    matching.min(text.chars().count().saturating_sub(1))
-}
-
-/// `s` without its last `n` chars.
-fn drop_last(s: &str, n: usize) -> String {
-    let count = s.chars().count();
-    s.chars().take(count - n.min(count)).collect()
 }
 
 /// Cuts of `(reading, text)` already worked out: the live conversion asks
@@ -227,9 +276,9 @@ impl InputMethodEngine {
                 self.learning_undo
                     .push(&l.reading, &l.text, cache.snapshot(&l.reading, &l.text));
                 if l.create {
-                    cache.record(&l.reading, &l.text, &l.preceding, l.evidence, l.weight);
+                    cache.record(&l.reading, &l.text, &l.left, &l.right, l.evidence, l.weight);
                 } else {
-                    cache.reinforce(&l.reading, &l.text, &l.preceding);
+                    cache.reinforce(&l.reading, &l.text, &l.left, &l.right);
                 }
             }
         }
@@ -250,42 +299,48 @@ impl InputMethodEngine {
         }
     }
 
-    /// `text` for `reading` was committed where `shown` was the default:
-    /// `confirmed` when it is the default, else `chosen` for it and
-    /// `displaced` for the default. When both read the same and differ in
-    /// one stretch of it, that stretch is taught the same at half weight,
-    /// so a pick made over a sentence teaches the word it changed.
+    /// `text` for `reading` was committed where `shown` was the default,
+    /// after `left`: `confirmed` when it is the default, else `chosen` for
+    /// it and `displaced` for the default, the whole and, when both read the
+    /// same and differ in one stretch of it, that stretch with the readings
+    /// around it, so a pick made over a sentence is a rule for the word it
+    /// changed.
     pub(super) fn choice_lessons(
         &mut self,
         shown: &Shown,
         reading: &str,
         text: &str,
-        preceding: &str,
+        left: &str,
     ) -> Vec<Lesson> {
         if text == shown.text {
-            return vec![Lesson::new(reading, text, preceding, Evidence::Confirmed)];
+            return vec![Lesson::new(reading, text, left, "", Evidence::Confirmed)];
         }
         let mut lessons = vec![
-            Lesson::new(reading, text, preceding, Evidence::Chosen),
-            Lesson::new(&shown.reading, &shown.text, preceding, Evidence::Displaced),
+            Lesson::new(reading, text, left, "", Evidence::Chosen),
+            Lesson::new(&shown.reading, &shown.text, left, "", Evidence::Displaced),
         ];
         // The model's own text picked back over the history's rewrite of
-        // it: each rewritten stretch is taught the other way round.
+        // it: each rule that rewrote is taught the other way round, in its
+        // own context, which cancels it there.
         if let Some((rewritten, original)) = self.rewritten_live()
             && shown.text == rewritten
             && text == original
         {
             for r in self.chunks.iter().flat_map(|c| &c.rewrites) {
-                lessons.push(Lesson::new(
-                    &r.reading,
-                    &r.original,
-                    &r.preceding,
-                    Evidence::Chosen,
-                ));
+                if !r.original.is_empty() {
+                    lessons.push(Lesson::new(
+                        &r.reading,
+                        &r.original,
+                        &r.left,
+                        &r.right,
+                        Evidence::Chosen,
+                    ));
+                }
                 lessons.push(Lesson::new(
                     &r.reading,
                     &r.text,
-                    &r.preceding,
+                    &r.left,
+                    &r.right,
                     Evidence::Displaced,
                 ));
             }
@@ -295,137 +350,195 @@ impl InputMethodEngine {
             let default = self.align(reading, &shown.text);
             let picked = self.align(reading, text);
             if let Some(stretch) = single_difference(&default, &picked) {
-                let before = if stretch.before_reading.is_empty() {
-                    preceding.to_string()
-                } else {
-                    stretch.before_reading
-                };
-                for (text, evidence) in [
-                    (&stretch.texts.1, Evidence::Chosen),
-                    (&stretch.texts.0, Evidence::Displaced),
-                ] {
-                    lessons.push(Lesson {
-                        weight: STRETCH_WEIGHT,
-                        ..Lesson::new(&stretch.reading, text, &before, evidence)
-                    });
-                }
+                let before = self.context_before(&stretch.before_reading);
+                let after: String = reading
+                    .chars()
+                    .skip(stretch.before_reading.chars().count() + stretch.reading.chars().count())
+                    .collect();
+                lessons.extend(pick_lessons(
+                    &stretch.reading,
+                    &stretch.texts.1,
+                    &stretch.texts.0,
+                    &before,
+                    &after,
+                ));
             }
         }
         lessons
     }
 
-    /// The model's `converted` for a chunk's `reading` after `lctx`, with
-    /// what the history prefers put in its place: the whole chunk when the
-    /// history has its reading, else runs of its segments whose reading it
-    /// has, longest first. Only whole segments, so a word is never cut
-    /// into; and nothing after a replacement is converted again.
-    pub(super) fn rewrite_from_history(
+    /// The model's `model` text for a chunk's `reading`, with the rules the
+    /// history holds applied: where a learned reading turns up between
+    /// readings that agree with a rule's context ([`RULE_CHARS`], or
+    /// [`RULE_CHARS_UNCUT`] when the model's text does not show where its
+    /// words start), and the rule outscores what the model wrote there by
+    /// [`REWRITE_MARGIN`], that stretch is the rule's text. The reading is
+    /// cut there rather than the text: what precedes the first rule is the
+    /// model's text for it, and the rest is converted again on the model,
+    /// each part after what is before it, the way chunks are. So it works
+    /// however the model wrote that stretch, its kana rewritten or not
+    /// converted at all.
+    ///
+    /// `base_ctx` and `combined` are the chunk's lctx; `reading_before` and
+    /// `reading_after` what is typed around it in the composition. Only
+    /// what has been typed counts on the right: a rule that needs more
+    /// applies once it is there.
+    pub(super) fn convert_with_history(
         &mut self,
         reading: &str,
-        converted: String,
+        model: String,
+        base_ctx: &str,
+        combined: &str,
         reading_before: &str,
+        reading_after: &str,
     ) -> (String, Vec<Rewrite>) {
         if self.mode.current() != InputMode::Hiragana {
-            return (converted, Vec::new());
+            return (model, Vec::new());
         }
-        let Some(cache) = self.learning_cache() else {
-            return (converted, Vec::new());
-        };
-        // Most chunks have nothing learned in them: found without cutting.
         let chars: Vec<char> = reading.chars().collect();
-        let learned_inside = (0..chars.len()).any(|i| {
-            (i + 2..=chars.len())
-                .any(|j| cache.contains_reading(&chars[i..j].iter().collect::<String>()))
-        });
-        drop(cache);
-        if !learned_inside {
-            return (converted, Vec::new());
-        }
-        let preceding = self.context_before(reading_before);
-        if let Some(found) = self.replace_run(reading, &converted, &preceding) {
-            let text = found.shown(&converted);
-            return (text, vec![found.into_rewrite(0, preceding)]);
+        let found: Vec<(usize, usize, Rule)> = {
+            let Some(cache) = self.learning_cache() else {
+                return (model, Vec::new());
+            };
+            (0..chars.len())
+                .flat_map(|i| (i + 1..=chars.len()).map(move |j| (i, j)))
+                .flat_map(|(i, j)| {
+                    let stretch: String = chars[i..j].iter().collect();
+                    if !cache.contains_reading(&stretch) {
+                        return Vec::new();
+                    }
+                    cache
+                        .rules(&stretch)
+                        .into_iter()
+                        .map(|rule| (i, j, rule))
+                        .collect()
+                })
+                .collect()
+        };
+        if found.is_empty() {
+            return (model, Vec::new());
         }
 
-        let pieces = self.align(reading, &converted);
+        let pieces = self.align(reading, &model);
+        let cut = pieces.len() > 1;
+        let starts: Vec<usize> = pieces
+            .iter()
+            .scan(0, |at, p| {
+                let start = *at;
+                *at += p.reading.chars().count();
+                Some(start)
+            })
+            .collect();
+        let mut hits = Vec::new();
+        for (i, j, rule) in found {
+            if cut && !starts.contains(&i) {
+                continue;
+            }
+            let before: String = reading_before
+                .chars()
+                .chain(chars[..i].iter().copied())
+                .collect();
+            let left = self.context_before(&before);
+            let right: String = chars[j..].iter().collect::<String>() + reading_after;
+            let (l, r) = context_match(&rule.left, &rule.right, &left, &right);
+            let agree = (j - i) + l + r;
+            if agree < if cut { RULE_CHARS } else { RULE_CHARS_UNCUT } {
+                continue;
+            }
+            let original = if cut {
+                text_of(&pieces, i, j).map(|t| self.settle_text(&t))
+            } else {
+                None
+            };
+            if original.as_deref() == Some(rule.surface.as_str()) {
+                continue;
+            }
+            let stretch: String = chars[i..j].iter().collect();
+            let against = original.as_deref().map_or(0.0, |o| {
+                self.learning_cache()
+                    .map_or(0.0, |c| c.context_score(&stretch, o, &left, &right))
+            });
+            if rule.score <= against + REWRITE_MARGIN {
+                continue;
+            }
+            hits.push(Hit {
+                start: i,
+                end: j,
+                agree,
+                rule,
+                original: original.unwrap_or_default(),
+            });
+        }
+        // The rules that agree on the most go first; none overlaps another.
+        hits.sort_by_key(|h| std::cmp::Reverse((h.agree, h.end - h.start)));
+        let mut taken: Vec<Hit> = Vec::new();
+        for hit in hits {
+            if taken
+                .iter()
+                .all(|t| hit.end <= t.start || t.end <= hit.start)
+            {
+                taken.push(hit);
+            }
+        }
+        if taken.is_empty() {
+            return (model, Vec::new());
+        }
+        taken.sort_by_key(|h| h.start);
+
         let mut out = String::new();
         let mut rewrites = Vec::new();
-        let mut i = 0;
-        // Contexts are readings, which the rewrites do not change.
-        let mut read = reading_before.to_string();
-        let mut start = 0;
-        while i < pieces.len() {
-            let before = self.context_before(&read);
-            let found = (i + 1..=pieces.len())
-                .rev()
-                .filter(|&j| j - i < pieces.len())
-                .find_map(|j| {
-                    let run = &pieces[i..j];
-                    let reading: String = run.iter().map(|p| p.reading.as_str()).collect();
-                    let text: String = run.iter().map(|p| p.text.as_str()).collect();
-                    let found = self.replace_run(&reading, &text, &before)?;
-                    Some((j, text, found))
-                });
-            let next = match found {
-                Some((j, text, found)) => {
-                    out.push_str(&found.shown(&text));
-                    rewrites.push(found.into_rewrite(start, before));
-                    j
-                }
-                None => {
-                    out.push_str(&pieces[i].text);
-                    i + 1
-                }
-            };
-            for p in &pieces[i..next] {
-                read.push_str(&p.reading);
-                start += p.reading.chars().count();
+        let mut at = 0;
+        for hit in taken {
+            if at < hit.start {
+                let gap = if at == 0 && cut {
+                    text_of(&pieces, 0, hit.start)
+                } else {
+                    None
+                };
+                let gap = match gap {
+                    Some(text) => text,
+                    None => self.convert_gap(&chars[at..hit.start], base_ctx, combined, &out),
+                };
+                out.push_str(&gap);
             }
-            i = next;
+            out.push_str(&hit.rule.surface);
+            rewrites.push(Rewrite {
+                start: hit.start,
+                reading: chars[hit.start..hit.end].iter().collect(),
+                original: hit.original,
+                text: hit.rule.surface,
+                left: hit.rule.left,
+                right: hit.rule.right,
+            });
+            at = hit.end;
         }
-        if rewrites.is_empty() {
-            return (converted, rewrites);
+        if at < chars.len() {
+            let gap = self.convert_gap(&chars[at..], base_ctx, combined, &out);
+            out.push_str(&gap);
+        }
+        if out == model {
+            return (model, Vec::new());
         }
         (out, rewrites)
     }
 
-    /// The history's text for a run of the conversion, tried as it is and
-    /// then without the kana it ends in. A segment carries its particle
-    /// (アンソロピックの) and a word is learned without one; the kana the text
-    /// ends in are the reading's own, so the word ends before them.
-    fn replace_run(&self, reading: &str, text: &str, before: &str) -> Option<RunRewrite> {
-        let tail = kana_tail(reading, text);
-        std::iter::once(0)
-            .chain((tail > 0).then_some(tail))
-            .find_map(|tail| {
-                let reading = drop_last(reading, tail);
-                let text = drop_last(text, tail);
-                let replacement = self.preferred(&reading, &text, before)?;
-                Some(RunRewrite {
-                    original: self.settle_text(&text),
-                    reading,
-                    replacement,
-                    tail,
-                })
-            })
+    /// A stretch of a chunk between rules, on the model, after the chunk's
+    /// lctx and what the chunk has so far.
+    fn convert_gap(
+        &mut self,
+        gap: &[char],
+        base_ctx: &str,
+        combined: &str,
+        so_far: &str,
+    ) -> String {
+        let reading: String = gap.iter().collect();
+        let lctx = self.lctx_for(base_ctx, &format!("{combined}{so_far}"));
+        self.convert_chunk(&reading, &lctx)
     }
 
-    /// What the history puts in place of `text` for `reading` after
-    /// `preceding` ([`LearningCache::replacement`], by more than
-    /// [`REWRITE_MARGIN`]). Never for a single char of reading, where one
-    /// kana is too little to tell words apart by.
-    fn preferred(&self, reading: &str, text: &str, preceding: &str) -> Option<String> {
-        let cache = self.learning_cache()?;
-        if reading.chars().count() < 2 {
-            return None;
-        }
-        cache.replacement(reading, &self.settle_text(text), preceding, REWRITE_MARGIN)
-    }
-
-    /// What a unit's context is read from: the reading typed before it in
-    /// this composition, which the model and the rewrites leave as it is,
-    /// or the editor's text when it starts the input. Only the left: what
-    /// follows changes with every keystroke while the live conversion runs.
+    /// What a unit's left context is read from: the reading typed before it
+    /// in this composition, which the model and the rewrites leave as it
+    /// is, or the editor's text when it starts the input.
     pub(super) fn context_before(&self, reading_before: &str) -> String {
         if reading_before.is_empty() {
             self.truncate_context_for_api()
@@ -434,17 +547,13 @@ impl InputMethodEngine {
         }
     }
 
-    /// The context of what is being converted: the segments before the
-    /// focused one when split.
-    pub(super) fn learning_context(&self) -> String {
-        let before: String = self
-            .state
-            .neighbours()
-            .0
-            .iter()
-            .map(|s| s.reading.as_str())
-            .collect();
-        self.context_before(&before)
+    /// The context of what is being converted, left and right: the
+    /// segments around the focused one when split.
+    pub(super) fn learning_context(&self) -> (String, String) {
+        let (left, right) = self.state.neighbours();
+        let before: String = left.iter().map(|s| s.reading.as_str()).collect();
+        let after: String = right.iter().map(|s| s.reading.as_str()).collect();
+        (self.context_before(&before), after)
     }
 
     /// The live conversion as the history rewrote it and as the model gave
@@ -505,7 +614,7 @@ impl InputMethodEngine {
         let end = start + reading.chars().count();
         let mut chunk_start = 0;
         for chunk in &self.chunks {
-            for r in &chunk.rewrites {
+            for r in chunk.rewrites.iter().filter(|r| !r.original.is_empty()) {
                 let at = chunk_start + r.start;
                 if at >= start && at + r.reading.chars().count() <= end && text.contains(&r.text) {
                     return Some(text.replacen(&r.text, &r.original, 1));
@@ -524,7 +633,7 @@ impl InputMethodEngine {
         if candidates.len() < 3 || self.learning.is_none() {
             return;
         }
-        let ctx = self.learning_context();
+        let (ctx, _) = self.learning_context();
         let mut scored: Vec<(f64, String)> = candidates[1..]
             .iter()
             .map(|text| (self.history_score(reading, text, &ctx), text.clone()))
@@ -544,9 +653,10 @@ impl InputMethodEngine {
         };
         let mut read = String::new();
         let mut total = 0.0;
-        for piece in pieces.iter() {
+        for (k, piece) in pieces.iter().enumerate() {
             let before = if read.is_empty() { preceding } else { &read };
-            total += cache.score(&piece.reading, &piece.text, before);
+            let after: String = pieces[k + 1..].iter().map(|p| p.reading.as_str()).collect();
+            total += cache.score(&piece.reading, &piece.text, before, &after);
             read.push_str(&piece.reading);
         }
         total
@@ -554,48 +664,57 @@ impl InputMethodEngine {
 
     /// The composition committed as shown: the whole `accepted`, and each
     /// chunk the model converted and each rewritten stretch too when they
-    /// are learned already.
+    /// are learned already, with the readings around them.
     pub(super) fn live_lessons(&self, reading: &str, text: &str) -> Vec<Lesson> {
         let ctx = self.truncate_context_for_api();
-        let mut lessons = vec![Lesson::new(reading, text, &ctx, Evidence::Accepted)];
+        let mut lessons = vec![Lesson::new(reading, text, &ctx, "", Evidence::Accepted)];
         // Only when the live conversion is what was committed.
         let live = self.live_text();
         if live.is_empty() || !text.starts_with(&live) {
             return lessons;
         }
         let mut read = String::new();
-        for chunk in &self.chunks {
-            let preceding = self.context_before(&read);
+        for (k, chunk) in self.chunks.iter().enumerate() {
+            let left = self.context_before(&read);
             read.push_str(&chunk.reading);
             if !chunk.reading.chars().any(chunk::is_japanese) {
                 continue;
             }
             // The chunk itself, when it is not the whole already taught.
             if chunk.reading != reading {
+                let right: String = self.chunks[k + 1..]
+                    .iter()
+                    .map(|c| c.reading.as_str())
+                    .collect();
                 let converted = self.settle_text(&chunk.converted);
-                lessons.push(Lesson::reinforce(&chunk.reading, &converted, &preceding));
+                lessons.push(Lesson::reinforce(&chunk.reading, &converted, &left, &right));
             }
             // A rewritten stretch is accepted as what it was shown as: only
             // the weakest evidence, so a rewrite cannot feed itself.
-            for r in chunk.rewrites.iter().filter(|r| r.reading != chunk.reading) {
-                lessons.push(Lesson::reinforce(&r.reading, &r.text, &r.preceding));
+            for r in &chunk.rewrites {
+                lessons.push(Lesson::reinforce(&r.reading, &r.text, &r.left, &r.right));
             }
         }
         lessons
     }
 
     /// A split conversion committed: each segment whose list was built
-    /// against its own head (the text it was cut as), and the whole against
-    /// what the conversion opened with. A segment never focused teaches
-    /// nothing: its pairing with the reading is a guess.
+    /// against its own head (the text it was cut as), with the readings of
+    /// the segments around it, and the whole against what the conversion
+    /// opened with. A segment never focused teaches nothing: its pairing
+    /// with the reading is a guess.
     pub(super) fn segment_lessons(&mut self, segments: &[Segment]) -> Vec<Lesson> {
         let learnable = |c: &Candidate| c.source.is_none_or(|s| s.is_learnable());
         let ctx = self.truncate_context_for_api();
         let mut lessons = Vec::new();
         let mut read = String::new();
-        for segment in segments {
-            let preceding = self.context_before(&read);
+        for (k, segment) in segments.iter().enumerate() {
+            let left = self.context_before(&read);
             read.push_str(&segment.reading);
+            let right: String = segments[k + 1..]
+                .iter()
+                .map(|s| s.reading.as_str())
+                .collect();
             let (Some(selected), Some(head)) = (
                 segment.candidates.selected(),
                 segment.candidates.candidates().first(),
@@ -610,14 +729,20 @@ impl InputMethodEngine {
                 lessons.push(Lesson::new(
                     r,
                     &selected.text,
-                    &preceding,
+                    &left,
+                    &right,
                     Evidence::Confirmed,
                 ));
-                continue;
-            }
-            lessons.push(Lesson::new(r, &selected.text, &preceding, Evidence::Chosen));
-            if learnable(head) {
-                lessons.push(Lesson::new(r, &head.text, &preceding, Evidence::Displaced));
+            } else if learnable(head) {
+                lessons.extend(pick_lessons(r, &selected.text, &head.text, &left, &right));
+            } else {
+                lessons.push(Lesson::new(
+                    r,
+                    &selected.text,
+                    &left,
+                    &right,
+                    Evidence::Chosen,
+                ));
             }
         }
 
@@ -630,13 +755,14 @@ impl InputMethodEngine {
             let reading: String = segments.iter().map(|s| s.reading.as_str()).collect();
             let text: String = segments.iter().map(Segment::text).collect();
             if text == shown.text {
-                lessons.push(Lesson::new(&reading, &text, &ctx, Evidence::Confirmed));
+                lessons.push(Lesson::new(&reading, &text, &ctx, "", Evidence::Confirmed));
             } else {
-                lessons.push(Lesson::new(&reading, &text, &ctx, Evidence::Chosen));
+                lessons.push(Lesson::new(&reading, &text, &ctx, "", Evidence::Chosen));
                 lessons.push(Lesson::new(
                     &shown.reading,
                     &shown.text,
                     &ctx,
+                    "",
                     Evidence::Displaced,
                 ));
             }
@@ -659,6 +785,43 @@ mod tests {
                 }
             })
             .collect()
+    }
+
+    #[test]
+    fn a_pick_learns_the_stretch_that_changed() {
+        let [chosen, displaced] = pick_lessons("ぶが", "分が", "部が", "しあいは", "わるい");
+        assert_eq!(
+            (
+                chosen.reading.as_str(),
+                chosen.text.as_str(),
+                chosen.right.as_str()
+            ),
+            ("ぶ", "分", "がわるい")
+        );
+        assert_eq!(
+            (displaced.text.as_str(), displaced.left.as_str()),
+            ("部", "しあいは")
+        );
+        // Shared kana at the start go to the left.
+        let [chosen, _] = pick_lessons("おはし", "お箸", "お橋", "", "");
+        assert_eq!(
+            (chosen.reading.as_str(), chosen.left.as_str()),
+            ("はし", "お")
+        );
+        // Never all of it.
+        let [chosen, _] = pick_lessons("は", "は", "ハ", "", "");
+        assert_eq!(chosen.reading, "は");
+    }
+
+    #[test]
+    fn the_text_of_a_stretch_of_the_reading() {
+        let cut = pieces("この=この|しょうぶは=勝負は|ぶが=部が|わるい=悪い");
+        assert_eq!(text_of(&cut, 7, 8).as_deref(), Some("部"));
+        assert_eq!(text_of(&cut, 7, 9).as_deref(), Some("部が"));
+        assert_eq!(text_of(&cut, 0, 7).as_deref(), Some("この勝負は"));
+        // Not from inside a piece, nor past what its own kana allow.
+        assert_eq!(text_of(&cut, 6, 8), None);
+        assert_eq!(text_of(&cut, 9, 10), None);
     }
 
     #[test]

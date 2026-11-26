@@ -56,7 +56,7 @@ fn choosing_it_flips_the_setting_and_inputs_nothing() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("でばっぐもーど", "")
+            .lookup("でばっぐもーど", "", "")
             .is_empty()
     );
 

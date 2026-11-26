@@ -106,7 +106,7 @@ fn ctrl_delete_removes_selected_learning_entry() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
     // ...and the window stays up: the conversion is rebuilt in place,
@@ -152,7 +152,7 @@ fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
     engine
         .learning_cache()
         .unwrap()
-        .record("あいさ", "藍", "", Evidence::Chosen, 1.0);
+        .record("あいさ", "藍", "", "", Evidence::Chosen, 1.0);
 
     engine.process_key(&press('a'));
     engine.process_key(&press('i'));
@@ -174,14 +174,14 @@ fn ctrl_delete_removes_prefix_twins_so_surface_does_not_resurface() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
     assert!(
         engine
             .learning_cache()
             .unwrap()
-            .lookup("あいさ", "")
+            .lookup("あいさ", "", "")
             .is_empty(),
         "the prefix twin (あいさ→藍) must be cleared too, not just the exact entry",
     );
@@ -215,7 +215,7 @@ fn ctrl_delete_keeps_surface_that_another_source_also_produces() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
 
@@ -253,6 +253,7 @@ fn init_learning_cache_applies_configured_surface_cap() {
         "__karukan_seam_test__",
         &"漢".repeat(6),
         "",
+        "",
         Evidence::Chosen,
         1.0,
     );
@@ -281,7 +282,7 @@ fn ctrl_backspace_deletes_learning_entry_like_ctrl_delete() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
     assert!(matches!(engine.state(), InputState::Conversion { .. }));
@@ -320,7 +321,7 @@ fn ctrl_backspace_does_nothing_for_non_learning_candidate() {
         !engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
 }
@@ -343,7 +344,7 @@ fn ctrl_backspace_in_composing_deletes_char_not_history() {
         !engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty(),
         "the learning entry must survive — deletion only works in Conversion",
     );
@@ -375,7 +376,7 @@ fn ctrl_alt_delete_leaves_history_alone() {
         !engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty(),
         "Ctrl+Alt+Delete must not delete the learning entry"
     );
@@ -398,7 +399,7 @@ fn plain_backspace_still_cancels_conversion() {
         !engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
 }
@@ -433,7 +434,7 @@ fn ctrl_delete_ignores_non_learning_candidate() {
         !engine
             .learning_cache()
             .unwrap()
-            .lookup("あい", "")
+            .lookup("あい", "", "")
             .is_empty()
     );
 }
@@ -464,7 +465,7 @@ fn ctrl_delete_removes_prefix_matched_entry_by_full_reading() {
         engine
             .learning_cache()
             .unwrap()
-            .lookup("あいさつ", "")
+            .lookup("あいさつ", "", "")
             .is_empty()
     );
 }
@@ -538,11 +539,11 @@ fn engines_on_one_file_share_one_cache() {
     first
         .learning_cache()
         .unwrap()
-        .record("あい", "藍", "", Evidence::Chosen, 1.0);
+        .record("あい", "藍", "", "", Evidence::Chosen, 1.0);
     second
         .learning_cache()
         .unwrap()
-        .record("かい", "貝", "", Evidence::Chosen, 1.0);
+        .record("かい", "貝", "", "", Evidence::Chosen, 1.0);
     assert!(second.learning_cache().unwrap().contains_reading("あい"));
 
     // Whichever saves, both are kept.

@@ -270,17 +270,19 @@ pub(in crate::core) struct ComposingChunk {
     pub rewrites: Vec<Rewrite>,
 }
 
-/// A stretch of a chunk the history rewrote, and the context it was
-/// rewritten in.
+/// A stretch of a chunk the history rewrote, and the rule that did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(in crate::core) struct Rewrite {
     /// Where it starts in the chunk's reading, in chars.
     pub start: usize,
     pub reading: String,
-    /// The model's text for it, and the history's put in its place.
+    /// The model's text for it (empty when the model's answer did not show
+    /// it), and the history's put in its place.
     pub original: String,
     pub text: String,
-    pub preceding: String,
+    /// The context of the rule that put it there.
+    pub left: String,
+    pub right: String,
 }
 
 /// Live conversion state. The displayed text itself is not stored: it is
