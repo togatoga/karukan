@@ -49,16 +49,15 @@ impl Segment {
     pub fn text(&self) -> &str {
         self.candidates.selected_text().unwrap_or(&self.reading)
     }
+}
 
-    /// The pair committing this segment teaches, if any: only a choice made
-    /// from a list built for this very reading, from a learnable source.
-    pub fn learned(&self) -> Option<(String, String)> {
-        let selected = self.candidates.selected().filter(|_| self.built)?;
-        if !selected.source.is_none_or(|s| s.is_learnable()) {
-            return None;
-        }
-        Some((selected.reading.clone()?, selected.text.clone()))
-    }
+/// What a conversion showed as its default before anything was picked:
+/// the live conversion on screen when Space was pressed, or else the head
+/// of the list. A pick is told apart from it when the commit is learned.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Shown {
+    pub reading: String,
+    pub text: String,
 }
 
 /// The current state of the IME
@@ -93,6 +92,8 @@ pub enum InputState {
         left: Vec<Segment>,
         /// Segments after the focused one
         right: Vec<Segment>,
+        /// The default the whole conversion opened with
+        shown: Shown,
     },
 }
 
@@ -149,6 +150,14 @@ impl InputState {
         match self {
             Self::Conversion { left, right, .. } => (left, right),
             _ => (&[], &[]),
+        }
+    }
+
+    /// The default the conversion opened with.
+    pub fn shown(&self) -> Option<&Shown> {
+        match self {
+            Self::Conversion { shown, .. } => Some(shown),
+            _ => None,
         }
     }
 

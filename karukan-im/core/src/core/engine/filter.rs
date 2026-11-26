@@ -98,10 +98,11 @@ impl InputMethodEngine {
         if reading.is_empty() {
             return false;
         }
+        let shown = self.composing_shown();
         // Left shown, the stale live chunks would survive the commit and
         // render as the next composition's preedit.
         self.live.shown = false;
-        self.enter_conversion_state(&reading, CandidateList::new(Vec::new()));
+        self.enter_conversion_state(&reading, CandidateList::new(Vec::new()), shown);
         true
     }
 

@@ -16,7 +16,8 @@
 //! already had.
 mod split;
 
-use split::{Piece, finest_cut, ranked_cuts, script_cut};
+pub(super) use split::Piece;
+use split::{finest_cut, ranked_cuts, script_cut};
 
 use crate::core::state::Segment;
 
@@ -161,7 +162,7 @@ impl InputMethodEngine {
     /// dictionary's longest match — the fewest segments, but two at least,
     /// so a text the dictionary has as one word is cut into its parts
     /// ([`ranked_cuts`]). One piece when nothing cuts it.
-    fn cut(&self, reading: &str, text: &str) -> Vec<Piece> {
+    pub(super) fn cut(&self, reading: &str, text: &str) -> Vec<Piece> {
         let whole = || {
             vec![Piece {
                 reading: reading.to_string(),
@@ -305,7 +306,7 @@ impl InputMethodEngine {
     /// one. A conversion not yet split is split here, from the text it
     /// shows; when that text does not come apart (one word, a row that is
     /// not this reading's conversion) it is the one segment it was.
-    fn segments(&self) -> (Vec<Segment>, usize) {
+    pub(super) fn segments(&self) -> (Vec<Segment>, usize) {
         let InputState::Conversion {
             candidates,
             reading,
@@ -367,6 +368,7 @@ impl InputMethodEngine {
     fn put_segments(&mut self, mut segments: Vec<Segment>, focus: usize) {
         let right = segments.split_off(focus + 1);
         let focused = segments.pop().expect("focus is in range");
+        let shown = self.state.shown().cloned().unwrap_or_default();
         self.state = InputState::Conversion {
             preedit: Preedit::new(),
             candidates: focused.candidates.clone(),
@@ -374,6 +376,7 @@ impl InputMethodEngine {
             filter: focused.filter,
             left: segments,
             right,
+            shown,
         };
         if !focused.built {
             // After the state is in place: the list is built with the

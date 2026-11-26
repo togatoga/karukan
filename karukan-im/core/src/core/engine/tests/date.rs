@@ -119,6 +119,7 @@ fn committing_a_date_candidate_records_no_learning() {
         filter: None,
         left: Vec::new(),
         right: Vec::new(),
+        shown: Default::default(),
     };
 
     let result = engine.process_key(&press_key(Keysym::RETURN));

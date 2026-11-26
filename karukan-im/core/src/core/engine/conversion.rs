@@ -7,10 +7,11 @@ use std::collections::HashSet;
 use tracing::debug;
 
 use super::filter::source_for_key;
+use super::history::Lesson;
 use super::segment::Focus;
 use super::transliterate::Transliteration;
 use super::*;
-use crate::core::state::Segment;
+use crate::core::state::{Segment, Shown};
 
 /// Maximum number of learning candidates to show
 const MAX_LEARNING_CANDIDATES: usize = 3;
@@ -142,7 +143,7 @@ impl InputMethodEngine {
         {
             candidates.insert(
                 0,
-                AnnotatedCandidate::new(prev_suggest_text, CandidateSource::Model),
+                AnnotatedCandidate::new(prev_suggest_text.clone(), CandidateSource::Model),
             );
         }
 
@@ -154,7 +155,18 @@ impl InputMethodEngine {
         }
 
         let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-        self.enter_conversion_state(&reading, candidate_list)
+        // What was on screen when Space was pressed, or else the list head.
+        let shown = match candidate_list.selected() {
+            Some(head) if prev_suggest_text.is_empty() => Shown {
+                reading: head.reading.clone().unwrap_or_else(|| reading.clone()),
+                text: head.text.clone(),
+            },
+            _ => Shown {
+                reading: reading.clone(),
+                text: prev_suggest_text,
+            },
+        };
+        self.enter_conversion_state(&reading, candidate_list, shown)
     }
 
     /// Map builder output to the public [`CandidateList`] shown in the
@@ -186,6 +198,7 @@ impl InputMethodEngine {
         &mut self,
         reading: &str,
         candidates: CandidateList,
+        shown: Shown,
     ) -> EngineResult {
         let selected_text = candidates.selected_text().unwrap_or(reading).to_string();
 
@@ -201,6 +214,7 @@ impl InputMethodEngine {
             // and as one segment
             left: Vec::new(),
             right: Vec::new(),
+            shown,
         };
 
         // After the state assignment: the aux header reads the active filter.
@@ -486,8 +500,10 @@ impl InputMethodEngine {
         // Exact match — only when no romaji tail is pending (an exact hit
         // on the base would ignore the typed tail)
         if pending.is_empty() {
-            for (surface, _score) in cache.lookup(reading, "") {
-                if candidates.len() >= max {
+            for (surface, score) in cache.lookup(reading, "") {
+                // Evidence against a surface (replaced more than picked)
+                // is no reason to offer it.
+                if candidates.len() >= max || score <= 0.0 {
                     break;
                 }
                 if seen.insert(surface.clone()) {
@@ -503,8 +519,8 @@ impl InputMethodEngine {
 
         // Prefix match (predictive), narrowed to the kana the tail can
         // still become — mirrors the dictionary's expanded search
-        for (full_reading, surface, _score) in cache.prefix_lookup(reading, "") {
-            if candidates.len() >= max {
+        for (full_reading, surface, score) in cache.prefix_lookup(reading, "") {
+            if candidates.len() >= max || score <= 0.0 {
                 break;
             }
             if full_reading == reading {
@@ -861,63 +877,30 @@ impl InputMethodEngine {
         }
     }
 
-    /// Record a selection in the learning cache. No-op in emoji mode — the
-    /// buffer is a `:query`, not a kana reading, and would corrupt the
-    /// kana-keyed cache.
-    pub(super) fn record_learning(&mut self, reading: &str, surface: &str) {
-        if self.mode.current() == InputMode::Emoji {
-            return;
-        }
-        if let Some(cache) = &mut self.learning {
-            cache.record(reading, surface, "", Evidence::Chosen, 1.0);
-        }
-    }
-
-    /// What committing the conversion types, and the `(reading, text)`
-    /// pairs it teaches: every segment's text in order; one pair per
-    /// segment whose text was chosen from a list built for its reading;
-    /// and, when the conversion was split, the whole reading with the
-    /// whole text — the pair an unsplit commit has always taught, which is
-    /// right however the segments were cut, since the readings add up to
-    /// what was typed and the texts to what was committed.
-    pub(super) fn conversion_commit(&self) -> Option<(String, Vec<(String, String)>)> {
+    /// What committing the conversion types, and what it teaches: told
+    /// apart from the default the conversion opened with, and when split,
+    /// segment by segment ([`Self::segment_lessons`]).
+    pub(super) fn conversion_commit(&mut self) -> Option<(String, Vec<Lesson>)> {
         let (focused, reading) = self.selected_conversion_info()?;
-        let (left, right) = self.state.neighbours();
-        let mut text: String = left.iter().map(Segment::text).collect();
-        let mut learned: Vec<_> = left.iter().filter_map(Segment::learned).collect();
-        text.push_str(&focused);
-        learned.extend(reading.map(|reading| (reading, focused)));
-        text.extend(right.iter().map(Segment::text));
-        learned.extend(right.iter().filter_map(Segment::learned));
-
-        if self.state.is_segmented() {
-            // Not when a segment holds something that must not be learned
-            // (a date is stale tomorrow): the sentence would carry it.
-            let learnable = |list: &CandidateList| {
-                list.selected()
-                    .is_none_or(|c| c.source.is_none_or(|s| s.is_learnable()))
+        if !self.state.is_segmented() {
+            let lessons = match (reading, self.state.shown().cloned()) {
+                (Some(reading), Some(shown)) => {
+                    let ctx = self.truncate_context_for_api();
+                    self.choice_lessons(&shown, &reading, &focused, &ctx)
+                }
+                _ => Vec::new(),
             };
-            let all_learnable = self.state.candidates().is_some_and(learnable)
-                && left.iter().chain(right).all(|s| learnable(&s.candidates));
-            if all_learnable {
-                let whole: String = left
-                    .iter()
-                    .map(|s| s.reading.as_str())
-                    .chain(self.state.reading())
-                    .chain(right.iter().map(|s| s.reading.as_str()))
-                    .collect();
-                learned.push((whole, text.clone()));
-            }
+            return Some((focused, lessons));
         }
-        Some((text, learned))
+        let (segments, _) = self.segments();
+        let text = segments.iter().map(Segment::text).collect();
+        Some((text, self.segment_lessons(&segments)))
     }
 
     /// Record the committed conversion in the learning cache and end the
     /// composition.
-    pub(super) fn finish_conversion(&mut self, learned: &[(String, String)]) {
-        for (reading, text) in learned {
-            self.record_learning(reading, text);
-        }
+    pub(super) fn finish_conversion(&mut self, lessons: &[Lesson]) {
+        self.learn(lessons);
         self.end_composition();
     }
 
@@ -999,7 +982,8 @@ impl InputMethodEngine {
                 return self.cancel_conversion();
             }
             let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
-            self.enter_conversion_state(&reading, candidate_list)
+            let shown = self.state.shown().cloned().unwrap_or_default();
+            self.enter_conversion_state(&reading, candidate_list, shown)
         };
 
         if let Some(source) = prev_filter {

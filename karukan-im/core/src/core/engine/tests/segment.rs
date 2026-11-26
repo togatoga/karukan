@@ -61,15 +61,6 @@ fn committed(result: &EngineResult) -> Option<String> {
     })
 }
 
-fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
-    let cache = engine.learning.as_ref().unwrap();
-    cache
-        .lookup(reading, "")
-        .into_iter()
-        .map(|(s, _)| s)
-        .collect()
-}
-
 #[test]
 fn a_conversion_opens_whole() {
     // Space shows what it always did: the list for the whole reading.

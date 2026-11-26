@@ -99,15 +99,7 @@ fn kana_forms_are_learned_alphanumerics_are_not() {
     engine.process_key(&press_key(Keysym::F7));
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result), Some("カイ"));
-    let learned: Vec<String> = engine
-        .learning
-        .as_ref()
-        .unwrap()
-        .lookup("かい", "")
-        .into_iter()
-        .map(|(surface, _)| surface)
-        .collect();
-    assert_eq!(learned, ["カイ"]);
+    assert_eq!(learned(&engine, "かい"), ["カイ"]);
 }
 
 #[test]

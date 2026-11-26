@@ -11,6 +11,7 @@ mod cursor;
 mod display;
 mod filter;
 mod guard;
+mod history;
 mod init;
 mod input;
 mod input_buffer;
@@ -33,8 +34,8 @@ use input_buffer::InputBuffer;
 mod tests;
 
 use karukan_engine::{
-    DateRewriter, Dictionary, EmojiRewriter, Evidence, KanaKanjiConverter, LearningCache,
-    LearningConfig, RewriteOutput, Rewriter, RewriterChain, RomajiConverter,
+    DateRewriter, Dictionary, EmojiRewriter, KanaKanjiConverter, LearningCache, LearningConfig,
+    RewriteOutput, Rewriter, RewriterChain, RomajiConverter,
 };
 use tracing::{debug, trace};
 
@@ -176,6 +177,9 @@ pub struct InputMethodEngine {
     /// once the segments are no longer that cut (a new conversion, a
     /// resize).
     segment_cut: Option<&'static str>,
+    /// Cuts of converted text against its reading, kept for the next
+    /// keystroke
+    alignments: history::Alignments,
 }
 
 impl InputMethodEngine {
@@ -206,6 +210,7 @@ impl InputMethodEngine {
             learning: None,
             model_loading: None,
             segment_cut: None,
+            alignments: Default::default(),
         }
     }
 
@@ -349,29 +354,32 @@ impl InputMethodEngine {
         if self.state.is_segmented() {
             return self.after_segment_pick();
         }
-        let Some(candidates) = self.shown_candidates_mut() else {
-            return EngineResult::consumed();
+        let (text, lessons) = if matches!(self.state, InputState::Conversion { .. }) {
+            let Some(commit) = self.conversion_commit() else {
+                return EngineResult::consumed();
+            };
+            commit
+        } else {
+            let Some(selected) = self.shown_suggestions.selected().cloned() else {
+                return EngineResult::consumed();
+            };
+            // A non-learnable source (a date is stale tomorrow) records
+            // nothing; the default it is told apart from is the live
+            // conversion on screen.
+            let lessons = if selected.source.is_none_or(|s| s.is_learnable()) {
+                let reading = selected.reading.unwrap_or_else(|| self.input_buf.reading());
+                let shown = self.composing_shown();
+                let ctx = self.truncate_context_for_api();
+                self.choice_lessons(&shown, &reading, &selected.text, &ctx)
+            } else {
+                Vec::new()
+            };
+            (selected.text, lessons)
         };
-        let Some(selected) = candidates.selected() else {
-            return EngineResult::consumed();
-        };
-        let text = selected.text.clone();
-        let reading = selected.reading.clone();
-        let source = selected.source;
         if text.is_empty() {
             return EngineResult::consumed();
         }
-
-        // A suggestion always carries its reading; fall back to the buffer
-        // so a candidate built without one still records under a key. A
-        // non-learnable source (a date is stale tomorrow) records nothing.
-        let reading = if source.is_none_or(|s| s.is_learnable()) {
-            reading.or_else(|| Some(self.input_buf.reading()))
-        } else {
-            None
-        };
-        let learned: Vec<_> = reading.map(|r| (r, text.clone())).into_iter().collect();
-        self.finish_conversion(&learned);
+        self.finish_conversion(&lessons);
 
         EngineResult::consumed()
             .with_action(EngineAction::Commit(text))
@@ -713,7 +721,8 @@ impl InputMethodEngine {
             InputState::Empty => String::new(),
             InputState::Composing { .. } => {
                 let (reading, text) = self.resolve_composing_commit();
-                self.record_learning(&reading, &text);
+                let lessons = self.live_lessons(&reading, &text);
+                self.learn(&lessons);
                 self.end_composition();
                 text
             }

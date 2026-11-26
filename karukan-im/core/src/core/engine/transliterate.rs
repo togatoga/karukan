@@ -192,12 +192,18 @@ impl InputMethodEngine {
         {
             candidates.set_cursor(index);
         }
+        // The default a pick here is told apart from: the conversion's own
+        // when one is open, else what the composition showed.
+        let shown = match self.state.shown() {
+            Some(shown) => shown.clone(),
+            None => self.composing_shown(),
+        };
         // Like Space: the list replaces the live display, so cancelling
         // returns to the kana, not to the live conversion.
         self.live.shown = false;
         if segmented {
             return self.replace_focused_candidates(candidates);
         }
-        self.enter_conversion_state(&reading, candidates)
+        self.enter_conversion_state(&reading, candidates, shown)
     }
 }

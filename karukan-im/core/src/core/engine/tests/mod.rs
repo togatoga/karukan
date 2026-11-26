@@ -15,6 +15,7 @@ mod conversion;
 mod cursor;
 mod date;
 mod emoji;
+mod history;
 mod katakana;
 mod learning;
 mod live_conversion;
@@ -44,6 +45,20 @@ fn engine_with_learned(reading: &str, surface: &str) -> InputMethodEngine {
     cache.record(reading, surface, "", Evidence::Chosen, 1.0);
     engine.learning = Some(cache);
     engine
+}
+
+/// The surfaces the history offers for `reading`, best first: those with
+/// more evidence for than against.
+fn learned(engine: &InputMethodEngine, reading: &str) -> Vec<String> {
+    engine
+        .learning
+        .as_ref()
+        .unwrap()
+        .lookup(reading, "")
+        .into_iter()
+        .filter(|(_, score)| *score > 0.0)
+        .map(|(s, _)| s)
+        .collect()
 }
 
 /// Seed the conversion cache so a main-model greedy call for `katakana`

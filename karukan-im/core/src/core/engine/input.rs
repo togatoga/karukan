@@ -401,7 +401,8 @@ impl InputMethodEngine {
                 .with_action(EngineAction::HideAuxText);
         }
 
-        self.record_learning(&reading, &text);
+        let lessons = self.live_lessons(&reading, &text);
+        self.learn(&lessons);
         self.end_composition();
 
         // HideCandidates is required here: the auto-suggest/live-conversion
