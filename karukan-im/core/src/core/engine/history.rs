@@ -117,6 +117,34 @@ pub(super) fn single_difference(a: &[Piece], b: &[Piece]) -> Option<Stretch> {
     found.filter(|_| stretches > 1)
 }
 
+/// A run of the conversion the history replaces: the stretch of it that is
+/// replaced, and how many kana after it stay.
+struct RunRewrite {
+    reading: String,
+    original: String,
+    replacement: String,
+    tail: usize,
+}
+
+impl RunRewrite {
+    /// What the run shows: the replacement, then the kana kept from `text`.
+    fn shown(&self, text: &str) -> String {
+        let count = text.chars().count();
+        let kept: String = text.chars().skip(count - self.tail).collect();
+        format!("{}{kept}", self.replacement)
+    }
+
+    fn into_rewrite(self, start: usize, preceding: String) -> Rewrite {
+        Rewrite {
+            start,
+            reading: self.reading,
+            original: self.original,
+            text: self.replacement,
+            preceding,
+        }
+    }
+}
+
 /// How many chars `text` ends in that are hiragana and the end of `reading`
 /// itself, short of all of `text`.
 fn kana_tail(reading: &str, text: &str) -> usize {
@@ -184,14 +212,17 @@ impl InputMethodEngine {
         pieces
     }
 
-    /// Record `lessons`. Nothing in emoji mode: the buffer is a `:query`,
-    /// not a kana reading.
+    /// Record `lessons`, revertibly (`undo.rs`). Nothing in emoji mode: the
+    /// buffer is a `:query`, not a kana reading.
     pub(super) fn learn(&mut self, lessons: &[Lesson]) {
         if self.mode.current() == InputMode::Emoji {
             return;
         }
         if let Some(cache) = &mut self.learning {
             for l in lessons {
+                // Saved first, so a Backspace right after can take it back.
+                self.learning_undo
+                    .push(&l.reading, &l.text, cache.snapshot(&l.reading, &l.text));
                 if l.create {
                     cache.record(&l.reading, &l.text, &l.preceding, l.evidence, l.weight);
                 } else {
@@ -307,15 +338,9 @@ impl InputMethodEngine {
             return (converted, Vec::new());
         }
         let preceding = self.context_before(reading_before);
-        if let Some(text) = self.preferred(reading, &converted, &preceding) {
-            let rewrite = Rewrite {
-                start: 0,
-                reading: reading.to_string(),
-                original: self.settle_text(&converted),
-                text: text.clone(),
-                preceding,
-            };
-            return (text, vec![rewrite]);
+        if let Some(found) = self.replace_run(reading, &converted, &preceding) {
+            let text = found.shown(&converted);
+            return (text, vec![found.into_rewrite(0, preceding)]);
         }
 
         let pieces = self.align(reading, &converted);
@@ -334,38 +359,20 @@ impl InputMethodEngine {
                     let run = &pieces[i..j];
                     let reading: String = run.iter().map(|p| p.reading.as_str()).collect();
                     let text: String = run.iter().map(|p| p.text.as_str()).collect();
-                    // A segment carries its particle (アンソロピックの), and
-                    // a word is learned without one: the kana the text ends
-                    // in are the reading's own, so the word ends before them.
-                    let tail = kana_tail(&reading, &text);
-                    std::iter::once(0)
-                        .chain((tail > 0).then_some(tail))
-                        .find_map(|tail| {
-                            let reading: String = drop_last(&reading, tail);
-                            let text: String = drop_last(&text, tail);
-                            let preferred = self.preferred(&reading, &text, &before)?;
-                            Some((j, reading, self.settle_text(&text), preferred, tail))
-                        })
+                    let found = self.replace_run(&reading, &text, &before)?;
+                    Some((j, text, found))
                 });
-            let (next, text) = match found {
-                Some((j, reading, original, text, tail)) => {
-                    out.push_str(&text);
-                    let kana: String = pieces[j - 1].text.chars().rev().take(tail).collect();
-                    out.extend(kana.chars().rev());
-                    rewrites.push(Rewrite {
-                        start,
-                        reading,
-                        original,
-                        text,
-                        preceding: before,
-                    });
-                    (j, None)
+            let next = match found {
+                Some((j, text, found)) => {
+                    out.push_str(&found.shown(&text));
+                    rewrites.push(found.into_rewrite(start, before));
+                    j
                 }
-                None => (i + 1, Some(&pieces[i].text)),
+                None => {
+                    out.push_str(&pieces[i].text);
+                    i + 1
+                }
             };
-            if let Some(text) = text {
-                out.push_str(text);
-            }
             for p in &pieces[i..next] {
                 read.push_str(&p.reading);
                 start += p.reading.chars().count();
@@ -376,6 +383,27 @@ impl InputMethodEngine {
             return (converted, rewrites);
         }
         (out, rewrites)
+    }
+
+    /// The history's text for a run of the conversion, tried as it is and
+    /// then without the kana it ends in. A segment carries its particle
+    /// (アンソロピックの) and a word is learned without one; the kana the text
+    /// ends in are the reading's own, so the word ends before them.
+    fn replace_run(&self, reading: &str, text: &str, before: &str) -> Option<RunRewrite> {
+        let tail = kana_tail(reading, text);
+        std::iter::once(0)
+            .chain((tail > 0).then_some(tail))
+            .find_map(|tail| {
+                let reading = drop_last(reading, tail);
+                let text = drop_last(text, tail);
+                let replacement = self.preferred(&reading, &text, before)?;
+                Some(RunRewrite {
+                    original: self.settle_text(&text),
+                    reading,
+                    replacement,
+                    tail,
+                })
+            })
     }
 
     /// What the history puts in place of `text` for `reading` after

@@ -70,6 +70,7 @@ karukan は、変換したときに何が起きたかを覚えて、次の変換
 - 保存先: `~/.local/share/karukan-im/learning.tsv`（macOS: `~/Library/Application Support/com.karukan.karukan-im/learning.tsv`）
 - IME の切り替えやウィンドウの切り替えのときに保存します（確定のたびには保存しません）
 - 組の数が `max_entries`（既定 10,000）を超えたら、証拠の少ないものから消します
+- 確定した直後に `Backspace`（macOS では delete）を押すと、その確定で学習した分がすべて取り消されます（選んだ表記、差し替えた既定、文の中の語、置き換えた範囲に足した分も）。キーはそのままアプリに渡るので、文字も普段どおり 1 文字消えます。取り消せるのは確定の直後に押したキーだけで、ほかのキー（Shift などの修飾キーは除く）を押したり、フォーカスやカーソルが移ったりすると取り消せなくなります。`Ctrl+Backspace` など修飾キー付きの Backspace はアプリのショートカットなので対象外です
 - 変換中に学習候補（📝）を選んで `Ctrl+Backspace`（macOS では Ctrl+delete、`Ctrl+Delete` でも可）を押すと、その組を履歴から消せます
 - 履歴をすべて消すには `learning.tsv` を削除します
 

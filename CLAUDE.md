@@ -149,6 +149,7 @@ cargo clippy --workspace  # Lint all crates
   - `chunk/split.rs` — Where the chunk boundaries fall, engine-free: every char is classified into a `Token`, and `group_chunks` walks them once, packing them into chunks under `ChunkLimits`. Pure functions, unit-tested in place
   - `chunk/mod.rs` — What the engine does with the chunks: `chunked_auto_suggest`, the chunk-grid conversion, and the manual breaks
   - `history.rs` — What a commit teaches (`Lesson`, told apart from the conversion's default `Shown`), the alignment LRU (`align`), ranking by history, and the live-conversion rewrite (`rewrite_from_history`)
+  - `undo.rs` — Taking back the last commit's learning: `learn` saves a `LearningSnapshot` of every unit a lesson touches (all evidence kinds and context tallies, or absence) before recording it (`LearningUndo`), and a plain Backspace as the very next key in the Empty state restores them newest first and passes through. Any other key press, a click selection (`select_candidate_on_page`), `reset` and a focus-out `commit()` close the window; modifier presses and releases do not
   - `cache.rs` — LRU conversion cache keyed by the computation: (katakana reading, lctx, model role, beam width)
   - `cursor.rs` — Cursor movement
   - `display.rs` — Preedit text display

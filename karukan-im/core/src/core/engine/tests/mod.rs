@@ -33,6 +33,7 @@ mod source_filter;
 mod strategy;
 mod surrounding;
 mod transliterate;
+mod undo;
 mod version;
 mod width;
 

@@ -1107,6 +1107,9 @@ impl InputMethodEngine {
     pub fn select_candidate_on_page(&mut self, page_index: usize) -> EngineResult {
         let start = std::time::Instant::now();
         self.metrics.conversion_ms = 0;
+        // A click is an input like a key: it closes the previous commit's
+        // revert window, and what this commit teaches opens the next.
+        self.learning_undo.clear();
         let result = self.select_shown_candidate(page_index + 1);
         self.metrics.process_key_ms = start.elapsed().as_millis() as u64;
         result

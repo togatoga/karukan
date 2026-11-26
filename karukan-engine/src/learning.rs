@@ -163,6 +163,11 @@ impl Unit {
     }
 }
 
+/// A unit as it stood, for putting it back ([`LearningCache::snapshot`]):
+/// every kind of evidence and every context, or no unit at all.
+#[derive(Debug, Clone)]
+pub struct LearningSnapshot(Option<Unit>);
+
 /// A place in a reading where the user moved a segment edge to, as a
 /// decaying count.
 #[derive(Debug, Clone)]
@@ -369,6 +374,36 @@ impl LearningCache {
             }
         }
         best.map(|(_, s)| s.to_string())
+    }
+
+    /// `(reading, surface)` as it stands now, for [`restore`](Self::restore)
+    /// to take back what is recorded after it.
+    pub fn snapshot(&self, reading: &str, surface: &str) -> LearningSnapshot {
+        LearningSnapshot(
+            self.entries
+                .get(reading)
+                .and_then(|units| units.iter().find(|u| u.surface == surface))
+                .cloned(),
+        )
+    }
+
+    /// Put `(reading, surface)` back as `snapshot` had it: removed when it
+    /// did not exist then. Nothing else is touched.
+    pub fn restore(&mut self, reading: &str, surface: &str, snapshot: LearningSnapshot) {
+        let units = self.entries.entry(reading.to_string()).or_default();
+        let at = units.iter().position(|u| u.surface == surface);
+        match (at, snapshot.0) {
+            (Some(i), Some(unit)) => units[i] = unit,
+            (Some(i), None) => {
+                units.remove(i);
+            }
+            (None, Some(unit)) => units.push(unit),
+            (None, None) => {}
+        }
+        if units.is_empty() {
+            self.entries.remove(reading);
+        }
+        self.dirty = true;
     }
 
     /// Whether anything is learned under `reading`.
@@ -998,6 +1033,21 @@ mod tests {
         assert!(cache.picked("きょう", "今日"));
         cache.record("あした", "明日", "", Evidence::Accepted, 1.0);
         assert!(!cache.picked("あした", "明日"));
+    }
+
+    #[test]
+    fn a_snapshot_puts_back_every_kind_and_context() {
+        let mut cache = cache_with(100);
+        cache.record("はし", "箸", "ごはんを", Evidence::Chosen, 1.0);
+        let before = cache.snapshot("はし", "箸");
+        let missing = cache.snapshot("はし", "橋");
+        cache.record("はし", "箸", "かかる", Evidence::Displaced, 1.0);
+        cache.record("はし", "橋", "かかる", Evidence::Chosen, 1.0);
+        cache.restore("はし", "橋", missing);
+        cache.restore("はし", "箸", before);
+        assert!((cache.score("はし", "箸", "ごはんを") - 2.0).abs() < 1e-6);
+        assert!((cache.score("はし", "箸", "かかる") - 1.0).abs() < 1e-6);
+        assert_eq!(cache.entry_count(), 1);
     }
 
     #[test]
