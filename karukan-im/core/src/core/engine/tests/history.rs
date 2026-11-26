@@ -230,7 +230,8 @@ fn the_model_alternatives_are_ordered_by_their_segments_history() {
         &["今日は医者に行く", "今日は医者に逝く", "今日は慰謝に行く"],
     );
     let cache = engine.learning.as_mut().unwrap();
-    cache.record("いしゃに", "慰謝に", "", Evidence::Chosen, 1.0);
+    // Too little to rewrite the live conversion, enough to order by.
+    cache.record("いしゃに", "慰謝に", "", Evidence::Chosen, 0.25);
     type_keys(&mut engine, "kyouhaishaniiku");
     engine.process_key(&press_key(Keysym::SPACE));
     // The head is what was on screen; the alternatives follow the history.

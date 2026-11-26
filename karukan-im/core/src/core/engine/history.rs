@@ -13,8 +13,14 @@ use std::rc::Rc;
 use karukan_engine::Evidence;
 
 use super::segment::Piece;
+use super::types::Rewrite;
 use super::*;
 use crate::core::state::{Segment, Shown};
+
+/// How far the history must outscore the model's text before it is
+/// replaced: the model's answer is the default, and a little evidence for
+/// another is not enough to override it.
+const REWRITE_MARGIN: f64 = 0.3;
 
 /// Weight of the word-level evidence drawn out of a sentence-level pick.
 const STRETCH_WEIGHT: f64 = 0.5;
@@ -91,6 +97,24 @@ pub(super) fn single_difference(a: &[Piece], b: &[Piece]) -> Option<Stretch> {
         before.push_str(&group.0.text);
     }
     found.filter(|_| stretches > 1)
+}
+
+/// How many chars `text` ends in that are hiragana and the end of `reading`
+/// itself, short of all of `text`.
+fn kana_tail(reading: &str, text: &str) -> usize {
+    let matching = reading
+        .chars()
+        .rev()
+        .zip(text.chars().rev())
+        .take_while(|&(r, t)| r == t && matches!(t, '\u{3041}'..='\u{3096}'))
+        .count();
+    matching.min(text.chars().count().saturating_sub(1))
+}
+
+/// `s` without its last `n` chars.
+fn drop_last(s: &str, n: usize) -> String {
+    let count = s.chars().count();
+    s.chars().take(count - n.min(count)).collect()
 }
 
 /// Cuts of `(reading, text)` already worked out: the live conversion asks
@@ -208,6 +232,106 @@ impl InputMethodEngine {
         lessons
     }
 
+    /// The model's `converted` for a chunk's `reading` after `lctx`, with
+    /// what the history prefers put in its place: the whole chunk when the
+    /// history has its reading, else runs of its segments whose reading it
+    /// has, longest first. Only whole segments, so a word is never cut
+    /// into; and nothing after a replacement is converted again.
+    pub(super) fn rewrite_from_history(
+        &mut self,
+        reading: &str,
+        converted: String,
+        lctx: &str,
+    ) -> (String, Vec<Rewrite>) {
+        if self.mode.current() != InputMode::Hiragana {
+            return (converted, Vec::new());
+        }
+        let Some(cache) = &self.learning else {
+            return (converted, Vec::new());
+        };
+        // Most chunks have nothing learned in them: found without cutting.
+        let chars: Vec<char> = reading.chars().collect();
+        let learned_inside = (0..chars.len()).any(|i| {
+            (i + 2..=chars.len())
+                .any(|j| cache.contains_reading(&chars[i..j].iter().collect::<String>()))
+        });
+        if !learned_inside {
+            return (converted, Vec::new());
+        }
+        if let Some(text) = self.preferred(reading, &converted, lctx) {
+            let rewrite = Rewrite {
+                reading: reading.to_string(),
+                text: text.clone(),
+                preceding: lctx.to_string(),
+            };
+            return (text, vec![rewrite]);
+        }
+
+        let pieces = self.align(reading, &converted);
+        let mut out = String::new();
+        let mut rewrites = Vec::new();
+        let mut i = 0;
+        while i < pieces.len() {
+            let before = format!("{lctx}{out}");
+            let found = (i + 1..=pieces.len())
+                .rev()
+                .filter(|&j| j - i < pieces.len())
+                .find_map(|j| {
+                    let run = &pieces[i..j];
+                    let reading: String = run.iter().map(|p| p.reading.as_str()).collect();
+                    let text: String = run.iter().map(|p| p.text.as_str()).collect();
+                    // A segment carries its particle (アンソロピックの), and
+                    // a word is learned without one: the kana the text ends
+                    // in are the reading's own, so the word ends before them.
+                    let tail = kana_tail(&reading, &text);
+                    std::iter::once(0)
+                        .chain((tail > 0).then_some(tail))
+                        .find_map(|tail| {
+                            let reading: String = drop_last(&reading, tail);
+                            let text: String = drop_last(&text, tail);
+                            let preferred = self.preferred(&reading, &text, &before)?;
+                            Some((j, reading, preferred, tail))
+                        })
+                });
+            match found {
+                Some((j, reading, text, tail)) => {
+                    out.push_str(&text);
+                    let kana: String = pieces[j - 1].text.chars().rev().take(tail).collect();
+                    out.extend(kana.chars().rev());
+                    rewrites.push(Rewrite {
+                        reading,
+                        text,
+                        preceding: before,
+                    });
+                    i = j;
+                }
+                None => {
+                    out.push_str(&pieces[i].text);
+                    i += 1;
+                }
+            }
+        }
+        if rewrites.is_empty() {
+            return (converted, rewrites);
+        }
+        (out, rewrites)
+    }
+
+    /// What the history prefers to `text` for `reading` after `preceding`:
+    /// its best surface, when that outscores `text` by
+    /// [`REWRITE_MARGIN`]. Never for a single char of reading, where one
+    /// kana is too little to tell words apart by.
+    fn preferred(&self, reading: &str, text: &str, preceding: &str) -> Option<String> {
+        let cache = self.learning.as_ref()?;
+        if reading.chars().count() < 2 || !cache.contains_reading(reading) {
+            return None;
+        }
+        let text = self.settle_text(text);
+        let (best, score) = cache.lookup(reading, preceding).into_iter().next()?;
+        (best != text && score > cache.score(reading, &text, preceding) + REWRITE_MARGIN)
+            .then_some(best)
+    }
+
     /// The text before what is being converted, for the history's
     /// contexts: the segments before the focused one when split.
     pub(super) fn learning_context(&self) -> String {
@@ -264,17 +388,30 @@ impl InputMethodEngine {
             return lessons;
         }
         for (i, chunk) in self.chunks.iter().enumerate() {
-            if chunk.reading == reading || !chunk.reading.chars().any(chunk::is_japanese) {
+            if !chunk.reading.chars().any(chunk::is_japanese) {
                 continue;
             }
-            let converted = self.settle_text(&chunk.converted);
-            let lctx = self.chunk_lctx(i);
-            lessons.push(Lesson::new(
-                &chunk.reading,
-                &converted,
-                &lctx,
-                Evidence::Accepted,
-            ));
+            // The chunk itself, when it is not the whole already taught.
+            if chunk.reading != reading {
+                let converted = self.settle_text(&chunk.converted);
+                let lctx = self.chunk_lctx(i);
+                lessons.push(Lesson::new(
+                    &chunk.reading,
+                    &converted,
+                    &lctx,
+                    Evidence::Accepted,
+                ));
+            }
+            // A rewritten stretch is accepted as what it was shown as: only
+            // the weakest evidence, so a rewrite cannot feed itself.
+            for r in chunk.rewrites.iter().filter(|r| r.reading != chunk.reading) {
+                lessons.push(Lesson::new(
+                    &r.reading,
+                    &r.text,
+                    &r.preceding,
+                    Evidence::Accepted,
+                ));
+            }
         }
         lessons
     }

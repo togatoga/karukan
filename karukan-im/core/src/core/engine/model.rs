@@ -401,7 +401,17 @@ impl InputMethodEngine {
         // the callers. A beam that returns the reading unchanged is a real
         // answer — words that stay in kana (きゃりーぱみゅぱみゅ) convert to
         // themselves — so it rides like any other candidate.
-        self.run_kana_kanji_conversion(&span, &lctx, num_candidates, Budget::Space)
+        let mut tails = self.run_kana_kanji_conversion(&span, &lctx, num_candidates, Budget::Space);
+        // The head is what the live conversion showed, so it is rewritten by
+        // the history as the live conversion was; the model's own text stays
+        // in the list right after it, for picking it back.
+        if let Some(greedy) = tails.first().cloned() {
+            let (rewritten, rewrites) = self.rewrite_from_history(&span, greedy, &lctx);
+            if !rewrites.is_empty() {
+                tails.insert(0, rewritten);
+            }
+        }
+        tails
             .into_iter()
             .map(|tail| format!("{prefix}{tail}"))
             .collect()

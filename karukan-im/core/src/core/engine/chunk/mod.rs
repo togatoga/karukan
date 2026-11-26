@@ -118,21 +118,32 @@ impl InputMethodEngine {
 
     /// Build one converted chunk: a reading containing any Japanese goes to
     /// the model with `base_ctx` + `combined` as its left context (absorbed
-    /// marks included); a purely non-Japanese one passes through verbatim,
-    /// so digit and symbol runs stay exact.
+    /// marks included), and the history rewrites what it gives; a purely
+    /// non-Japanese one passes through verbatim, so digit and symbol runs
+    /// stay exact.
     fn convert_new_chunk(
         &mut self,
         reading: String,
         base_ctx: &str,
         combined: &str,
     ) -> ComposingChunk {
-        let converted = if reading.chars().any(is_japanese) {
-            let lctx = self.lctx_for(base_ctx, combined);
-            self.convert_chunk(&reading, &lctx)
-        } else {
-            reading.clone()
-        };
-        ComposingChunk { reading, converted }
+        if !reading.chars().any(is_japanese) {
+            return ComposingChunk {
+                converted: reading.clone(),
+                reading,
+                rewrites: Vec::new(),
+            };
+        }
+        let lctx = self.lctx_for(base_ctx, combined);
+        let model = self.convert_chunk(&reading, &lctx);
+        // The cache holds the model's answer; the history is applied to it
+        // afresh on every call.
+        let (converted, rewrites) = self.rewrite_from_history(&reading, model, &lctx);
+        ComposingChunk {
+            reading,
+            converted,
+            rewrites,
+        }
     }
 
     /// Configured maximum chunk length in chars, clamped to at least 1.
