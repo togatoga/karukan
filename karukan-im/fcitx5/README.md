@@ -50,6 +50,11 @@ fcitx5 -r
 > `cmake -B build -DKARUKAN_NATIVE=OFF ...` を指定してください。自前の `RUSTFLAGS` を
 > 設定している場合はそちらが優先されます。手元で `cargo build --release` を直接叩くと
 > フラグの差でリビルドが走る点だけ注意してください。
+>
+> `KARUKAN_NATIVE=OFF` でビルドしたバイナリ(`cargo build` を直接叩いた場合も同じ)は、
+> llama.cpp の既定で AVX2・FMA・F16C を使うため、これらを持たない CPU(Intel の Haswell より前の世代など)
+> では `Illegal instruction` で落ちます。そうした CPU では既定の `ON` のまま、
+> 動かすマシンでビルドしてください。
 
 ### Build & Install (ユーザーローカル)
 
