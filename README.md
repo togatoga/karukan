@@ -21,6 +21,7 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 - [karukan-im/](karukan-im/) — IME本体
   - [core/](karukan-im/core/) — 共有IMEエンジン(crate: `karukan-im`) — ステートマシン、ローマ字変換、karukan-imserver(macOS向けJSON-RPCサーバー)
   - [fcitx5/](karukan-im/fcitx5/) — Linux向けフロントエンド(crate: `karukan-fcitx5`) — fcitx5アドオン + C FFI
+  - [ibus/](karukan-im/ibus/) — Linux向けフロントエンド(crate: `karukan-ibus`、試作) — IBus エンジン
   - [macos/](karukan-im/macos/) — macOS向けフロントエンド — Swift/InputMethodKit
 - [karukan-engine/](karukan-engine/) — コアライブラリ — ローマ字→ひらがな変換 + llama.cppによるニューラルかな漢字変換
 - [karukan-cli/](karukan-cli/) — CLIツール・サーバー — 辞書ビルド、Sudachi辞書生成、辞書ビューア、AJIMEE-Bench、HTTPサーバー
@@ -42,6 +43,7 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 ## インストール
 
 - **Linux (fcitx5)**: [karukan-fcitx5 の README](karukan-im/fcitx5/README.md#install) を参照
+- **Linux (IBus、試作)**: [IBus で使う](docs/ibus.md) を参照
 - **macOS**: [karukan-macos の README](karukan-im/macos/README.md) を参照
 
 ## バージョンの確認
@@ -65,6 +67,7 @@ IME本体(コアエンジン + 各プラットフォームのフロントエン�
 - [記号・半角全角](docs/symbols.md) — 句読点や括弧の種類、記号・数字・英字の幅、スペースの設定
 - [単漢字変換](docs/single-kanji.md) — 読みを漢字1文字ずつに変換する候補と、そのデータの編集方法
 - [ローマ字テーブル](docs/romaji-table.md) — azooKey / hazkey 形式のテーブルで独自のローマ字配列を使う方法
+- [IBus で使う（試作）](docs/ibus.md) — GNOME などで fcitx5 を使わずに IBus のエンジンとして動かす方法、fcitx5 との切り替え
 
 ## ライセンス
 

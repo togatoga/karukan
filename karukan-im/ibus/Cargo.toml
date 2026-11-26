@@ -1,0 +1,22 @@
+[package]
+name = "karukan-ibus"
+version.workspace = true
+edition.workspace = true
+description = "IBus engine for the Karukan Japanese IME (Linux)"
+license.workspace = true
+authors = ["togatoga"]
+repository.workspace = true
+homepage.workspace = true
+keywords = ["japanese", "ime", "ibus", "input-method"]
+categories = ["text-processing", "internationalization"]
+
+[dependencies]
+karukan-engine.workspace = true
+karukan-im.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+zbus = "6"
+serde.workspace = true
+futures-channel = "0.3"
+signal-hook = "0.3"

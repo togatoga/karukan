@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component>
+  <name>org.freedesktop.IBus.Karukan</name>
+  <description>Karukan Japanese Input Method</description>
+  <exec>/usr/libexec/karukan-ibus --ibus</exec>
+  <version>0.1.0</version>
+  <license>MIT OR Apache-2.0</license>
+  <author>togatoga</author>
+  <homepage>https://github.com/togatoga/karukan</homepage>
+  <engines>
+    <engine>
+      <name>karukan</name>
+      <longname>Karukan</longname>
+      <description>Karukan Japanese Input Method</description>
+      <language>ja</language>
+      <license>MIT OR Apache-2.0</license>
+      <author>togatoga</author>
+      <layout>default</layout>
+      <rank>0</rank>
+      <symbol>あ</symbol>
+      <version>0.1.0</version>
+    </engine>
+  </engines>
+</component>
