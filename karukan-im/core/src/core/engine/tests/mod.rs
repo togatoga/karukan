@@ -184,6 +184,7 @@ fn set_live_text(engine: &mut InputMethodEngine, converted: &str) {
     engine.chunks = vec![ComposingChunk {
         reading: engine.input_buf.reading(),
         converted: converted.to_string(),
+        model: converted.to_string(),
         rewrites: Vec::new(),
     }];
     engine.live.shown = true;

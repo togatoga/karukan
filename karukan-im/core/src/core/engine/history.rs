@@ -13,8 +13,9 @@ use std::rc::Rc;
 use karukan_engine::Evidence;
 
 use super::segment::Piece;
-use super::types::Rewrite;
+use super::types::{ComposingChunk, Rewrite};
 use super::*;
+use crate::core::candidate::{Candidate, CandidateSource};
 use crate::core::state::{Segment, Shown};
 
 /// How far the history must outscore the model's text before it is
@@ -34,6 +35,10 @@ pub(super) struct Lesson {
     pub preceding: String,
     pub evidence: Evidence,
     pub weight: f64,
+    /// Whether it may make a unit that is not there yet. Committing what
+    /// was shown only keeps existing units fresh, or the model's output
+    /// would become history of its own.
+    pub create: bool,
 }
 
 impl Lesson {
@@ -44,6 +49,15 @@ impl Lesson {
             preceding: preceding.to_string(),
             evidence,
             weight: 1.0,
+            create: true,
+        }
+    }
+
+    /// `accepted` for a unit only if it is already learned.
+    fn reinforce(reading: &str, text: &str, preceding: &str) -> Self {
+        Self {
+            create: false,
+            ..Self::new(reading, text, preceding, Evidence::Accepted)
         }
     }
 }
@@ -54,8 +68,9 @@ pub(super) struct Stretch {
     pub reading: String,
     /// Its text in the first cut and in the second.
     pub texts: (String, String),
-    /// The text before it, the same in both.
+    /// The text before it, the same in both, and its reading.
     pub before: String,
+    pub before_reading: String,
 }
 
 /// Where `a` and `b`, two cuts of one reading, differ, when that is one
@@ -63,6 +78,7 @@ pub(super) struct Stretch {
 pub(super) fn single_difference(a: &[Piece], b: &[Piece]) -> Option<Stretch> {
     let (mut i, mut j) = (0, 0);
     let mut before = String::new();
+    let mut before_reading = String::new();
     let mut found = None;
     let mut stretches = 0;
     while i < a.len() && j < b.len() {
@@ -89,12 +105,14 @@ pub(super) fn single_difference(a: &[Piece], b: &[Piece]) -> Option<Stretch> {
                 return None;
             }
             found = Some(Stretch {
-                reading: group.0.reading,
+                reading: group.0.reading.clone(),
                 texts: (group.0.text.clone(), group.1),
                 before: before.clone(),
+                before_reading: before_reading.clone(),
             });
         }
         before.push_str(&group.0.text);
+        before_reading.push_str(&group.0.reading);
     }
     found.filter(|_| stretches > 1)
 }
@@ -174,7 +192,11 @@ impl InputMethodEngine {
         }
         if let Some(cache) = &mut self.learning {
             for l in lessons {
-                cache.record(&l.reading, &l.text, &l.preceding, l.evidence, l.weight);
+                if l.create {
+                    cache.record(&l.reading, &l.text, &l.preceding, l.evidence, l.weight);
+                } else {
+                    cache.reinforce(&l.reading, &l.text, &l.preceding);
+                }
             }
         }
     }
@@ -213,11 +235,37 @@ impl InputMethodEngine {
             Lesson::new(reading, text, preceding, Evidence::Chosen),
             Lesson::new(&shown.reading, &shown.text, preceding, Evidence::Displaced),
         ];
+        // The model's own text picked back over the history's rewrite of
+        // it: each rewritten stretch is taught the other way round.
+        if let Some((rewritten, original)) = self.rewritten_live()
+            && shown.text == rewritten
+            && text == original
+        {
+            for r in self.chunks.iter().flat_map(|c| &c.rewrites) {
+                lessons.push(Lesson::new(
+                    &r.reading,
+                    &r.original,
+                    &r.preceding,
+                    Evidence::Chosen,
+                ));
+                lessons.push(Lesson::new(
+                    &r.reading,
+                    &r.text,
+                    &r.preceding,
+                    Evidence::Displaced,
+                ));
+            }
+            return lessons;
+        }
         if shown.reading == reading {
             let default = self.align(reading, &shown.text);
             let picked = self.align(reading, text);
             if let Some(stretch) = single_difference(&default, &picked) {
-                let before = format!("{preceding}{}", stretch.before);
+                let before = if stretch.before_reading.is_empty() {
+                    preceding.to_string()
+                } else {
+                    stretch.before_reading
+                };
                 for (text, evidence) in [
                     (&stretch.texts.1, Evidence::Chosen),
                     (&stretch.texts.0, Evidence::Displaced),
@@ -241,7 +289,7 @@ impl InputMethodEngine {
         &mut self,
         reading: &str,
         converted: String,
-        lctx: &str,
+        reading_before: &str,
     ) -> (String, Vec<Rewrite>) {
         if self.mode.current() != InputMode::Hiragana {
             return (converted, Vec::new());
@@ -258,11 +306,14 @@ impl InputMethodEngine {
         if !learned_inside {
             return (converted, Vec::new());
         }
-        if let Some(text) = self.preferred(reading, &converted, lctx) {
+        let preceding = self.context_before(reading_before);
+        if let Some(text) = self.preferred(reading, &converted, &preceding) {
             let rewrite = Rewrite {
+                start: 0,
                 reading: reading.to_string(),
+                original: self.settle_text(&converted),
                 text: text.clone(),
-                preceding: lctx.to_string(),
+                preceding,
             };
             return (text, vec![rewrite]);
         }
@@ -271,8 +322,11 @@ impl InputMethodEngine {
         let mut out = String::new();
         let mut rewrites = Vec::new();
         let mut i = 0;
+        // Contexts are readings, which the rewrites do not change.
+        let mut read = reading_before.to_string();
+        let mut start = 0;
         while i < pieces.len() {
-            let before = format!("{lctx}{out}");
+            let before = self.context_before(&read);
             let found = (i + 1..=pieces.len())
                 .rev()
                 .filter(|&j| j - i < pieces.len())
@@ -290,26 +344,33 @@ impl InputMethodEngine {
                             let reading: String = drop_last(&reading, tail);
                             let text: String = drop_last(&text, tail);
                             let preferred = self.preferred(&reading, &text, &before)?;
-                            Some((j, reading, preferred, tail))
+                            Some((j, reading, self.settle_text(&text), preferred, tail))
                         })
                 });
-            match found {
-                Some((j, reading, text, tail)) => {
+            let (next, text) = match found {
+                Some((j, reading, original, text, tail)) => {
                     out.push_str(&text);
                     let kana: String = pieces[j - 1].text.chars().rev().take(tail).collect();
                     out.extend(kana.chars().rev());
                     rewrites.push(Rewrite {
+                        start,
                         reading,
+                        original,
                         text,
                         preceding: before,
                     });
-                    i = j;
+                    (j, None)
                 }
-                None => {
-                    out.push_str(&pieces[i].text);
-                    i += 1;
-                }
+                None => (i + 1, Some(&pieces[i].text)),
+            };
+            if let Some(text) = text {
+                out.push_str(text);
             }
+            for p in &pieces[i..next] {
+                read.push_str(&p.reading);
+                start += p.reading.chars().count();
+            }
+            i = next;
         }
         if rewrites.is_empty() {
             return (converted, rewrites);
@@ -317,29 +378,110 @@ impl InputMethodEngine {
         (out, rewrites)
     }
 
-    /// What the history prefers to `text` for `reading` after `preceding`:
-    /// its best surface, when that outscores `text` by
-    /// [`REWRITE_MARGIN`]. Never for a single char of reading, where one
+    /// What the history puts in place of `text` for `reading` after
+    /// `preceding` ([`LearningCache::replacement`], by more than
+    /// [`REWRITE_MARGIN`]). Never for a single char of reading, where one
     /// kana is too little to tell words apart by.
     fn preferred(&self, reading: &str, text: &str, preceding: &str) -> Option<String> {
         let cache = self.learning.as_ref()?;
-        if reading.chars().count() < 2 || !cache.contains_reading(reading) {
+        if reading.chars().count() < 2 {
             return None;
         }
-        let text = self.settle_text(text);
-        let (best, score) = cache.lookup(reading, preceding).into_iter().next()?;
-        (best != text && score > cache.score(reading, &text, preceding) + REWRITE_MARGIN)
-            .then_some(best)
+        cache.replacement(reading, &self.settle_text(text), preceding, REWRITE_MARGIN)
     }
 
-    /// The text before what is being converted, for the history's
-    /// contexts: the segments before the focused one when split.
-    pub(super) fn learning_context(&self) -> String {
-        if self.state.is_segmented() {
-            self.segment_ctx(false)
-        } else {
+    /// What a unit's context is read from: the reading typed before it in
+    /// this composition, which the model and the rewrites leave as it is,
+    /// or the editor's text when it starts the input. Only the left: what
+    /// follows changes with every keystroke while the live conversion runs.
+    pub(super) fn context_before(&self, reading_before: &str) -> String {
+        if reading_before.is_empty() {
             self.truncate_context_for_api()
+        } else {
+            reading_before.to_string()
         }
+    }
+
+    /// The context of what is being converted: the segments before the
+    /// focused one when split.
+    pub(super) fn learning_context(&self) -> String {
+        let before: String = self
+            .state
+            .neighbours()
+            .0
+            .iter()
+            .map(|s| s.reading.as_str())
+            .collect();
+        self.context_before(&before)
+    }
+
+    /// The live conversion as the history rewrote it and as the model gave
+    /// it, when the history rewrote any of it; with the romaji tail as
+    /// `live_text_with_pending` adds it.
+    pub(super) fn rewritten_live(&self) -> Option<(String, String)> {
+        if self.chunks.iter().all(|c| c.rewrites.is_empty())
+            || self.input_buf.cursor() != self.input_buf.char_count()
+        {
+            return None;
+        }
+        let tail = match self.settled_tail() {
+            Some(_) => String::new(),
+            None => self
+                .converters
+                .romaji
+                .convert_flush(&self.input_buf.pending()),
+        };
+        let join = |text: fn(&ComposingChunk) -> &str| {
+            let joined: String = self.chunks.iter().map(text).collect();
+            format!("{}{tail}", self.settle_text(&joined))
+        };
+        Some((join(|c| &c.converted), join(|c| &c.model)))
+    }
+
+    /// Put the live conversion's rewrite first, as the history's, and the
+    /// model's own text second, so a rewrite that missed is one key away.
+    pub(super) fn put_rewrite_first(&self, candidates: &mut Vec<Candidate>, reading: &str) {
+        let Some((rewritten, original)) = self.rewritten_live() else {
+            return;
+        };
+        candidates.retain(|c| c.text != rewritten && c.text != original);
+        for (at, text, source) in [
+            (0, rewritten, CandidateSource::Learning),
+            (1, original, CandidateSource::Model),
+        ] {
+            candidates.insert(
+                at,
+                Candidate {
+                    text,
+                    reading: Some(reading.to_string()),
+                    source: Some(source),
+                    description: None,
+                },
+            );
+        }
+    }
+
+    /// The model's own text for a segment of the rewritten live conversion
+    /// that starts at `start` (reading chars) and shows `text`: a rewrite
+    /// inside it undone. None when no rewrite falls inside it.
+    pub(super) fn segment_original(
+        &self,
+        start: usize,
+        reading: &str,
+        text: &str,
+    ) -> Option<String> {
+        let end = start + reading.chars().count();
+        let mut chunk_start = 0;
+        for chunk in &self.chunks {
+            for r in &chunk.rewrites {
+                let at = chunk_start + r.start;
+                if at >= start && at + r.reading.chars().count() <= end && text.contains(&r.text) {
+                    return Some(text.replacen(&r.text, &r.original, 1));
+                }
+            }
+            chunk_start += chunk.reading.chars().count();
+        }
+        None
     }
 
     /// Order the model's alternatives by what the history says of their
@@ -368,17 +510,19 @@ impl InputMethodEngine {
         let Some(cache) = &self.learning else {
             return 0.0;
         };
-        let mut before = preceding.to_string();
+        let mut read = String::new();
         let mut total = 0.0;
         for piece in pieces.iter() {
-            total += cache.score(&piece.reading, &piece.text, &before);
-            before.push_str(&piece.text);
+            let before = if read.is_empty() { preceding } else { &read };
+            total += cache.score(&piece.reading, &piece.text, before);
+            read.push_str(&piece.reading);
         }
         total
     }
 
-    /// The composition committed as shown: the whole, and each chunk the
-    /// model converted, `accepted`.
+    /// The composition committed as shown: the whole `accepted`, and each
+    /// chunk the model converted and each rewritten stretch too when they
+    /// are learned already.
     pub(super) fn live_lessons(&self, reading: &str, text: &str) -> Vec<Lesson> {
         let ctx = self.truncate_context_for_api();
         let mut lessons = vec![Lesson::new(reading, text, &ctx, Evidence::Accepted)];
@@ -387,30 +531,22 @@ impl InputMethodEngine {
         if live.is_empty() || !text.starts_with(&live) {
             return lessons;
         }
-        for (i, chunk) in self.chunks.iter().enumerate() {
+        let mut read = String::new();
+        for chunk in &self.chunks {
+            let preceding = self.context_before(&read);
+            read.push_str(&chunk.reading);
             if !chunk.reading.chars().any(chunk::is_japanese) {
                 continue;
             }
             // The chunk itself, when it is not the whole already taught.
             if chunk.reading != reading {
                 let converted = self.settle_text(&chunk.converted);
-                let lctx = self.chunk_lctx(i);
-                lessons.push(Lesson::new(
-                    &chunk.reading,
-                    &converted,
-                    &lctx,
-                    Evidence::Accepted,
-                ));
+                lessons.push(Lesson::reinforce(&chunk.reading, &converted, &preceding));
             }
             // A rewritten stretch is accepted as what it was shown as: only
             // the weakest evidence, so a rewrite cannot feed itself.
             for r in chunk.rewrites.iter().filter(|r| r.reading != chunk.reading) {
-                lessons.push(Lesson::new(
-                    &r.reading,
-                    &r.text,
-                    &r.preceding,
-                    Evidence::Accepted,
-                ));
+                lessons.push(Lesson::reinforce(&r.reading, &r.text, &r.preceding));
             }
         }
         lessons
@@ -424,10 +560,10 @@ impl InputMethodEngine {
         let learnable = |c: &Candidate| c.source.is_none_or(|s| s.is_learnable());
         let ctx = self.truncate_context_for_api();
         let mut lessons = Vec::new();
-        let mut before = ctx.clone();
+        let mut read = String::new();
         for segment in segments {
-            let preceding = before.clone();
-            before.push_str(segment.text());
+            let preceding = self.context_before(&read);
+            read.push_str(&segment.reading);
             let (Some(selected), Some(head)) = (
                 segment.candidates.selected(),
                 segment.candidates.candidates().first(),

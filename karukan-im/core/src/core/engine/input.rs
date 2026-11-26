@@ -96,6 +96,7 @@ impl InputMethodEngine {
             .collect();
         append_candidates_dedup(&mut all_candidates, model_candidates);
         append_candidates_dedup(&mut all_candidates, self.lookup_dict_candidates(reading));
+        self.put_rewrite_first(&mut all_candidates, reading);
         let aux = self.format_aux_suggest();
         EngineResult::consumed()
             .with_action(EngineAction::UpdatePreedit(preedit))

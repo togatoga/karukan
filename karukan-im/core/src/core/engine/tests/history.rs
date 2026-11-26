@@ -48,6 +48,11 @@ fn score(engine: &InputMethodEngine, reading: &str, surface: &str, preceding: &s
         .score(reading, surface, preceding)
 }
 
+/// The score with no context matching: what holds anywhere.
+fn base(engine: &InputMethodEngine, reading: &str, surface: &str) -> f64 {
+    score(engine, reading, surface, "〓〓")
+}
+
 fn assert_near(actual: f64, expected: f64) {
     assert!(
         (actual - expected).abs() < 1e-3,
@@ -68,14 +73,14 @@ fn picking_another_candidate_is_chosen_and_the_default_displaced() {
     engine.process_key(&press_key(Keysym::RETURN));
 
     let whole = "きょうはいしゃにいく";
-    assert_near(score(&engine, whole, "今日は慰謝に行く", ""), 1.0);
-    assert_near(score(&engine, whole, "今日は医者に行く", ""), -1.0);
-    // The one word that changed is taught too, at half weight, with what
-    // came before it as its context.
-    assert_near(score(&engine, "いしゃに", "慰謝に", ""), 0.5);
-    assert_near(score(&engine, "いしゃに", "慰謝に", "今日は"), 1.0);
-    assert_near(score(&engine, "いしゃに", "医者に", ""), -0.5);
-    assert_eq!(score(&engine, "きょうは", "今日は", ""), 0.0);
+    assert_near(base(&engine, whole, "今日は慰謝に行く"), 1.0);
+    assert_near(base(&engine, whole, "今日は医者に行く"), -1.0);
+    // The one word that changed is taught too, at half weight, with the
+    // reading before it as its context.
+    assert_near(base(&engine, "いしゃに", "慰謝に"), 0.5);
+    assert_near(score(&engine, "いしゃに", "慰謝に", "きょうは"), 1.0);
+    assert_near(base(&engine, "いしゃに", "医者に"), -0.5);
+    assert_eq!(base(&engine, "きょうは", "今日は"), 0.0);
 }
 
 #[test]
@@ -86,13 +91,13 @@ fn keeping_the_default_after_looking_is_confirmed() {
     engine.process_key(&press_key(Keysym::RETURN));
 
     let whole = "きょうはいしゃにいく";
-    assert_near(score(&engine, whole, "今日は医者に行く", ""), 0.4);
-    assert_eq!(score(&engine, whole, "今日は慰謝に行く", ""), 0.0);
-    assert_eq!(score(&engine, "いしゃに", "医者に", ""), 0.0);
+    assert_near(base(&engine, whole, "今日は医者に行く"), 0.4);
+    assert_eq!(base(&engine, whole, "今日は慰謝に行く"), 0.0);
+    assert_eq!(base(&engine, "いしゃに", "医者に"), 0.0);
 }
 
 #[test]
-fn enter_on_the_live_conversion_accepts_it_and_each_chunk() {
+fn enter_on_the_live_conversion_accepts_the_whole_and_makes_no_chunk_units() {
     let mut engine = sentence_engine();
     seed_model_cache(&mut engine, "キョウハ", "", &["今日は"]);
     seed_model_cache(&mut engine, "イシャニイク", "今日は", &["医者に行く"]);
@@ -102,13 +107,33 @@ fn enter_on_the_live_conversion_accepts_it_and_each_chunk() {
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("今日は医者に行く"));
 
+    // The whole is kept for prediction, as only `accepted`.
     assert_near(
-        score(&engine, "きょうはいしゃにいく", "今日は医者に行く", ""),
+        base(&engine, "きょうはいしゃにいく", "今日は医者に行く"),
         0.1,
     );
-    assert_near(score(&engine, "きょうは", "今日は", ""), 0.1);
-    // Each chunk in the context it was converted in.
-    assert_near(score(&engine, "いしゃにいく", "医者に行く", "今日は"), 0.2);
+    // The chunks are the model's output: committing them as shown makes
+    // no unit of them.
+    let cache = engine.learning.as_ref().unwrap();
+    assert!(!cache.contains_reading("きょうは"));
+    assert!(!cache.contains_reading("いしゃにいく"));
+
+    // A chunk that is learned already is kept fresh, in its context.
+    engine.learning.as_mut().unwrap().record(
+        "いしゃにいく",
+        "医者に行く",
+        "きょうは",
+        Evidence::Confirmed,
+        1.0,
+    );
+    type_keys(&mut engine, "kyouha");
+    engine.process_key(&press_ctrl(Keysym::KEY_J));
+    type_keys(&mut engine, "ishaniiku");
+    engine.process_key(&press_key(Keysym::RETURN));
+    assert_near(
+        score(&engine, "いしゃにいく", "医者に行く", "きょうは"),
+        1.0,
+    );
 }
 
 #[test]
@@ -129,8 +154,8 @@ fn ctrl_digit_while_composing_is_told_apart_from_the_live_conversion() {
     assert_eq!(shown[..2], ["機能", "昨日"]);
 
     engine.process_key(&press_ctrl(Keysym(b'2' as u32)));
-    assert_near(score(&engine, "きのう", "昨日", ""), 1.0);
-    assert_near(score(&engine, "きのう", "機能", ""), -1.0);
+    assert_near(base(&engine, "きのう", "昨日"), 1.0);
+    assert_near(base(&engine, "きのう", "機能"), -1.0);
     assert_eq!(learned(&engine, "きのう"), ["昨日"]);
 }
 
@@ -146,10 +171,10 @@ fn a_split_conversion_teaches_the_segments_that_were_focused() {
     let result = engine.process_key(&press_key(Keysym::RETURN));
     assert_eq!(committed(&result).as_deref(), Some("今日は慰謝に行く"));
 
-    assert_near(score(&engine, "いしゃに", "慰謝に", ""), 1.0);
-    assert_near(score(&engine, "いしゃに", "医者に", ""), -1.0);
-    // In the context of the segment before it.
-    assert_near(score(&engine, "いしゃに", "慰謝に", "今日は"), 2.0);
+    assert_near(base(&engine, "いしゃに", "慰謝に"), 1.0);
+    assert_near(base(&engine, "いしゃに", "医者に"), -1.0);
+    // In the context of the segment before it, by its reading.
+    assert_near(score(&engine, "いしゃに", "慰謝に", "きょうは"), 2.0);
     // Never focused: a guess, and nothing learned.
     assert!(
         !engine
@@ -161,8 +186,8 @@ fn a_split_conversion_teaches_the_segments_that_were_focused() {
     assert!(!engine.learning.as_ref().unwrap().contains_reading("いく"));
     // The whole against what the conversion opened with.
     let whole = "きょうはいしゃにいく";
-    assert_near(score(&engine, whole, "今日は慰謝に行く", ""), 1.0);
-    assert_near(score(&engine, whole, "今日は医者に行く", ""), -1.0);
+    assert_near(base(&engine, whole, "今日は慰謝に行く"), 1.0);
+    assert_near(base(&engine, whole, "今日は医者に行く"), -1.0);
 }
 
 #[test]
@@ -173,9 +198,9 @@ fn a_segment_kept_as_cut_is_confirmed() {
     engine.process_key(&press_key(Keysym::RIGHT));
     engine.process_key(&press_key(Keysym::RETURN));
 
-    assert_near(score(&engine, "いしゃに", "医者に", ""), 0.4);
+    assert_near(base(&engine, "いしゃに", "医者に"), 0.4);
     assert_near(
-        score(&engine, "きょうはいしゃにいく", "今日は医者に行く", ""),
+        base(&engine, "きょうはいしゃにいく", "今日は医者に行く"),
         0.4,
     );
 }

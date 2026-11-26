@@ -141,13 +141,25 @@ struct Unit {
 }
 
 impl Unit {
-    fn score(&self, context: &str, now: u64) -> f64 {
-        let in_context = self
-            .contexts
+    fn in_context(&self, context: Option<&str>) -> Option<&Tally> {
+        let context = context?;
+        self.contexts
             .iter()
-            .find(|(c, _)| !context.is_empty() && c == context)
-            .map_or(0.0, |(_, t)| t.score(now));
+            .find(|(c, _)| c == context)
+            .map(|(_, t)| t)
+    }
+
+    fn score(&self, context: Option<&str>, now: u64) -> f64 {
+        let in_context = self.in_context(context).map_or(0.0, |t| t.score(now));
         self.tally.score(now) + in_context
+    }
+
+    /// How many contexts it was picked in.
+    fn chosen_contexts(&self) -> usize {
+        self.contexts
+            .iter()
+            .filter(|(_, t)| t.values[Evidence::Chosen.index()] > 0.0)
+            .count()
     }
 }
 
@@ -170,19 +182,16 @@ pub struct LearningCache {
     dirty: bool,
 }
 
-/// The key a context is stored under: the tail of the preceding text, or
-/// none when that tail holds a tab or a newline the TSV cannot carry.
-fn context_key(preceding: &str) -> String {
+/// The key a context is stored under: the tail of the preceding text (empty
+/// at the start of the input, which is a context too), or none when that
+/// tail holds a tab or a newline the TSV cannot carry.
+fn context_key(preceding: &str) -> Option<String> {
     let count = preceding.chars().count();
     let key: String = preceding
         .chars()
         .skip(count.saturating_sub(CONTEXT_CHARS))
         .collect();
-    if key.chars().any(char::is_control) {
-        String::new()
-    } else {
-        key
-    }
+    (!key.chars().any(char::is_control)).then_some(key)
 }
 
 impl LearningCache {
@@ -219,8 +228,7 @@ impl LearningCache {
         let now = now_unix();
         let unit = self.unit_mut(reading, surface);
         unit.tally.add(evidence, weight, now);
-        let context = context_key(preceding);
-        if !context.is_empty() {
+        if let Some(context) = context_key(preceding) {
             let at = match unit.contexts.iter().position(|(c, _)| *c == context) {
                 Some(at) => at,
                 None => {
@@ -296,6 +304,73 @@ impl LearningCache {
         removed
     }
 
+    /// Record `accepted` for a unit that already exists, leaving the rest
+    /// alone: committing what was shown keeps a learned unit fresh, and
+    /// would otherwise make the model's own output a unit of its own.
+    pub fn reinforce(&mut self, reading: &str, surface: &str, preceding: &str) {
+        let exists = self
+            .entries
+            .get(reading)
+            .is_some_and(|units| units.iter().any(|u| u.surface == surface));
+        if exists {
+            self.record(reading, surface, preceding, Evidence::Accepted, 1.0);
+        }
+    }
+
+    /// Whether `surface` was ever picked or kept on purpose for `reading`,
+    /// not only committed as shown.
+    pub fn picked(&self, reading: &str, surface: &str) -> bool {
+        let now = now_unix();
+        self.entries
+            .get(reading)
+            .and_then(|units| units.iter().find(|u| u.surface == surface))
+            .is_some_and(|u| {
+                let v = u.tally.at(now);
+                v[Evidence::Chosen.index()] + v[Evidence::Confirmed.index()] > 0.0
+            })
+    }
+
+    /// What to show in place of `surface` for `reading` after `preceding`,
+    /// when the history asks for it by more than `margin`:
+    ///
+    /// - a surface chosen in this very context, compared by what was
+    ///   recorded in it alone;
+    /// - else a surface chosen in two contexts or more, a preference of
+    ///   spelling (子ども) that holds anywhere, compared by all of it;
+    /// - else nothing: evidence from another context only orders lists.
+    pub fn replacement(
+        &self,
+        reading: &str,
+        surface: &str,
+        preceding: &str,
+        margin: f64,
+    ) -> Option<String> {
+        let units = self.entries.get(reading)?;
+        let context = context_key(preceding);
+        let context = context.as_deref();
+        let now = now_unix();
+        let current = units.iter().find(|u| u.surface == surface);
+        let mut best: Option<(f64, &str)> = None;
+        for unit in units.iter().filter(|u| u.surface != surface) {
+            let chosen_here = unit
+                .in_context(context)
+                .is_some_and(|t| t.values[Evidence::Chosen.index()] > 0.0);
+            let (score, against) = if chosen_here {
+                let here = |u: &Unit| u.in_context(context).map_or(0.0, |t| t.score(now));
+                (here(unit), current.map_or(0.0, here))
+            } else if unit.chosen_contexts() >= 2 {
+                let all = |u: &Unit| u.tally.score(now);
+                (all(unit), current.map_or(0.0, all))
+            } else {
+                continue;
+            };
+            if score > against + margin && best.is_none_or(|(b, _)| score > b) {
+                best = Some((score, &unit.surface));
+            }
+        }
+        best.map(|(_, s)| s.to_string())
+    }
+
     /// Whether anything is learned under `reading`.
     pub fn contains_reading(&self, reading: &str) -> bool {
         self.entries.contains_key(reading)
@@ -309,7 +384,7 @@ impl LearningCache {
         self.entries
             .get(reading)
             .and_then(|units| units.iter().find(|u| u.surface == surface))
-            .map_or(0.0, |u| u.score(&context, now))
+            .map_or(0.0, |u| u.score(context.as_deref(), now))
     }
 
     /// Every surface learned under `reading` with its score after
@@ -322,7 +397,7 @@ impl LearningCache {
         };
         let mut scored: Vec<(String, f64)> = units
             .iter()
-            .map(|u| (u.surface.clone(), u.score(&context, now)))
+            .map(|u| (u.surface.clone(), u.score(context.as_deref(), now)))
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1));
         scored
@@ -340,7 +415,7 @@ impl LearningCache {
         let mut scores = HashMap::new();
         for unit in self.entries.values().flatten() {
             if wanted.contains(unit.surface.as_str()) {
-                *scores.entry(unit.surface.clone()).or_insert(0.0) += unit.score("", now);
+                *scores.entry(unit.surface.clone()).or_insert(0.0) += unit.score(None, now);
             }
         }
         scores
@@ -358,7 +433,7 @@ impl LearningCache {
                     results.push((
                         reading.clone(),
                         unit.surface.clone(),
-                        unit.score(&context, now),
+                        unit.score(context.as_deref(), now),
                     ));
                 }
             }
@@ -869,6 +944,60 @@ mod tests {
         // Only the surface is capped, not the reading.
         chose(&mut cache, &"あ".repeat(30), "短い");
         assert_eq!(cache.entry_count(), 2);
+    }
+
+    #[test]
+    fn a_replacement_needs_the_context_or_two_of_them() {
+        let mut cache = cache_with(100);
+        cache.record("はし", "箸", "ごはんを", Evidence::Chosen, 1.0);
+        // Chosen in this context.
+        assert_eq!(
+            cache.replacement("はし", "橋", "ごはんを", 0.3).as_deref(),
+            Some("箸")
+        );
+        // Another context only orders lists.
+        assert_eq!(cache.replacement("はし", "橋", "かかる", 0.3), None);
+        assert!(cache.score("はし", "箸", "かかる") > 0.0);
+
+        // Chosen in two contexts: a preference that holds anywhere.
+        cache.record("こども", "子ども", "うちの", Evidence::Chosen, 1.0);
+        assert_eq!(cache.replacement("こども", "子供", "あの", 0.3), None);
+        cache.record("こども", "子ども", "", Evidence::Chosen, 1.0);
+        assert_eq!(
+            cache.replacement("こども", "子供", "あの", 0.3).as_deref(),
+            Some("子ども")
+        );
+        // Never the surface itself.
+        assert_eq!(cache.replacement("こども", "子ども", "あの", 0.3), None);
+    }
+
+    #[test]
+    fn opposite_picks_cancel_out() {
+        let mut cache = cache_with(100);
+        cache.record("はし", "箸", "を", Evidence::Chosen, 1.0);
+        cache.record("はし", "橋", "を", Evidence::Displaced, 1.0);
+        assert_eq!(
+            cache.replacement("はし", "橋", "を", 0.3).as_deref(),
+            Some("箸")
+        );
+        cache.record("はし", "橋", "を", Evidence::Chosen, 1.0);
+        cache.record("はし", "箸", "を", Evidence::Displaced, 1.0);
+        // Even: the model's own text stands, either way round.
+        assert_eq!(cache.replacement("はし", "橋", "を", 0.3), None);
+        assert_eq!(cache.replacement("はし", "箸", "を", 0.3), None);
+    }
+
+    #[test]
+    fn reinforcing_keeps_units_fresh_and_makes_none() {
+        let mut cache = cache_with(100);
+        cache.reinforce("きょう", "今日", "");
+        assert_eq!(cache.entry_count(), 0);
+        cache.record("きょう", "今日", "", Evidence::Confirmed, 1.0);
+        cache.reinforce("きょう", "今日", "");
+        assert!((cache.score("きょう", "今日", "") - 1.0).abs() < 1e-6);
+        assert!(cache.picked("きょう", "今日"));
+        cache.record("あした", "明日", "", Evidence::Accepted, 1.0);
+        assert!(!cache.picked("あした", "明日"));
     }
 
     #[test]

@@ -382,7 +382,32 @@ impl InputMethodEngine {
             // After the state is in place: the list is built with the
             // segments before this one as its context.
             let head = focused.candidates.selected_text().map(str::to_string);
-            let list = self.build_segment_list(&focused.reading, head.as_deref());
+            let mut list = self.build_segment_list(&focused.reading, head.as_deref());
+            // A segment the history rewrote offers the model's own text too.
+            let start = self
+                .state
+                .neighbours()
+                .0
+                .iter()
+                .map(|s| s.reading.chars().count())
+                .sum();
+            if let Some(original) = head
+                .as_deref()
+                .and_then(|h| self.segment_original(start, &focused.reading, h))
+                && list.candidates().iter().all(|c| c.text != original)
+            {
+                let mut rows = list.candidates().to_vec();
+                rows.insert(
+                    rows.len().min(1),
+                    Candidate {
+                        text: original,
+                        reading: Some(focused.reading.clone()),
+                        source: Some(CandidateSource::Model),
+                        description: None,
+                    },
+                );
+                list = self.settle_candidates(rows);
+            }
             if let Some(candidates) = self.state.candidates_mut() {
                 *candidates = list;
             }
@@ -416,7 +441,13 @@ impl InputMethodEngine {
         // reading; they mean nothing inside this stretch of it.
         let breaks = std::mem::take(&mut self.chunk_breaks);
         let ctx = self.segment_ctx(true);
-        let converted = self.convert_on_chunk_grid(rest, &ctx);
+        let (left, _) = self.state.neighbours();
+        let before: String = left
+            .iter()
+            .map(|s| s.reading.as_str())
+            .chain(self.state.reading())
+            .collect();
+        let converted = self.convert_on_chunk_grid(rest, &ctx, &before);
         self.chunk_breaks = breaks;
         let text = self.settle_text(&converted);
         self.cut(&reading, &text)

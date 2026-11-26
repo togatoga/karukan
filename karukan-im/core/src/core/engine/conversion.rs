@@ -154,7 +154,18 @@ impl InputMethodEngine {
             return EngineResult::consumed().with_action(EngineAction::UpdatePreedit(preedit));
         }
 
-        let candidate_list = self.to_conversion_candidate_list(candidates, &reading);
+        let mut candidate_list = self.to_conversion_candidate_list(candidates, &reading);
+        // A rewrite on screen heads the list as the history's, the model's
+        // own text right after it. Not for Tab, which asks for no history.
+        if learning == LearningLookup::Use
+            && self
+                .rewritten_live()
+                .is_some_and(|(rewritten, _)| rewritten == prev_suggest_text)
+        {
+            let mut rows = candidate_list.candidates().to_vec();
+            self.put_rewrite_first(&mut rows, &reading);
+            candidate_list = self.settle_candidates(rows);
+        }
         // What was on screen when Space was pressed, or else the list head.
         let shown = match candidate_list.selected() {
             Some(head) if prev_suggest_text.is_empty() => Shown {
@@ -369,6 +380,14 @@ impl InputMethodEngine {
                 if segmented && c.reading.as_deref() != Some(reading) {
                     continue;
                 }
+                // Only what was picked heads the list: what was merely
+                // committed as shown is the model's output again.
+                let picked = self.learning.as_ref().is_some_and(|cache| {
+                    cache.picked(c.reading.as_deref().unwrap_or(reading), &c.text)
+                });
+                if !picked {
+                    continue;
+                }
                 // Exact matches have reading == input reading; use None to avoid redundancy
                 let cand_reading = c.reading.filter(|r| r != reading);
                 builder.push_force(
@@ -504,9 +523,13 @@ impl InputMethodEngine {
         if pending.is_empty() {
             for (surface, score) in cache.lookup(reading, &context) {
                 // Evidence against a surface (replaced more than picked)
-                // is no reason to offer it.
+                // is no reason to offer it, nor is having been committed as
+                // shown; a longer reading below may still be predicted.
                 if candidates.len() >= max || score <= 0.0 {
                     break;
+                }
+                if !cache.picked(reading, &surface) {
+                    continue;
                 }
                 if seen.insert(surface.clone()) {
                     candidates.push(Candidate {
@@ -955,10 +978,26 @@ impl InputMethodEngine {
         let Some(reading) = self.state.reading().map(str::to_string) else {
             return EngineResult::consumed();
         };
-        let removed = self
-            .learning
-            .as_mut()
-            .is_some_and(|cache| cache.remove_suggestion(&reading, &surface));
+        // The live conversion's rewrite goes with the units it came from,
+        // and the chunks show the model's own text again.
+        let rewrites: Vec<_> = match self.rewritten_live() {
+            Some((rewritten, _)) if rewritten == surface => self
+                .chunks
+                .iter_mut()
+                .flat_map(|c| {
+                    c.converted = c.model.clone();
+                    std::mem::take(&mut c.rewrites)
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let removed = self.learning.as_mut().is_some_and(|cache| {
+            let mut removed = cache.remove_suggestion(&reading, &surface);
+            for r in &rewrites {
+                removed |= cache.remove_suggestion(&r.reading, &r.text);
+            }
+            removed
+        });
         if !removed {
             return EngineResult::consumed();
         }
